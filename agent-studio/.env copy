@@ -1,0 +1,13 @@
+# API Base URL - Set this to your deployed backend API URL
+#REACT_APP_API_BASE_URL=https://alchemist-backend-851487020021.us-central1.run.app
+REACT_APP_API_BASE_URL=https://alchemist-backend-851487020021.us-central1.run.app
+REACT_APP_USER_AGENT_URL=https://standalone-agent-851487020021.us-central1.run.app
+REACT_APP_KNOWLEDGE_BASE_URL=https://knowledge-base-service-b3hpe34qdq-uc.a.run.app
+REACT_APP_MCP_MANAGER_URL=https://mcp-manager-851487020021.us-central1.run.app
+
+REACT_APP_FIREBASE_API_KEY=AIzaSyC9MLh9IiFIcH5RJRVLJlrTXNI5s03r4AE
+REACT_APP_FIREBASE_AUTH_DOMAIN=alchemist-e69bb.firebaseapp.com
+REACT_APP_FIREBASE_PROJECT_ID=alchemist-e69bb
+REACT_APP_FIREBASE_STORAGE_BUCKET=alchemist-e69bb.appspot.com
+REACT_APP_FIREBASE_MESSAGING_SENDER_ID=103214520240448237488
+REACT_APP_FIREBASE_APP_ID=1:851487020021:web:527efbdbe1ded9aa2686bc

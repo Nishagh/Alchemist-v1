@@ -1,0 +1,324 @@
+# Alchemist Deployment Configuration
+# This file contains environment-specific settings for the unified deployment system
+
+# Global deployment settings
+global:
+  version: "2.0.0"
+  timeout: "3600s"
+  log_level: "INFO"
+
+# Environment configurations
+environments:
+  development:
+    project_id: "alchemist-dev"
+    region: "us-central1"
+    use_emulator: true
+    min_instances: 0
+    max_instances: 3
+    memory_limit: "512Mi"
+    cpu_limit: "1"
+    
+  staging:
+    project_id: "alchemist-staging"
+    region: "us-central1"
+    min_instances: 0
+    max_instances: 5
+    memory_limit: "1Gi"
+    cpu_limit: "1"
+    
+  production:
+    project_id: "alchemist-e69bb"
+    region: "us-central1"
+    min_instances: 1
+    max_instances: 10
+    memory_limit: "2Gi"
+    cpu_limit: "2"
+
+# Service-specific configurations
+services:
+  # Tier 1: Core Infrastructure
+  knowledge-vault:
+    tier: 1
+    critical: true
+    memory: "2Gi"
+    cpu: "2"
+    max_instances: 5
+    concurrency: 40
+    health_path: "/health"
+    environment_variables:
+      - "FIREBASE_PROJECT_ID"
+      - "FIREBASE_STORAGE_BUCKET"
+      - "OPENAI_API_KEY"
+    secrets:
+      - "openai-api-key"
+    
+  agent-engine:
+    tier: 1
+    critical: true
+    memory: "1Gi"
+    cpu: "1"
+    max_instances: 10
+    concurrency: 80
+    health_path: "/health"
+    environment_variables:
+      - "FIREBASE_PROJECT_ID"
+      - "KNOWLEDGE_VAULT_URL"
+      - "AGENT_BRIDGE_URL"
+      - "AGENT_LAUNCHER_URL"
+      - "TOOL_FORGE_URL"
+    secrets:
+      - "openai-api-key"
+    dependencies:
+      - "knowledge-vault"
+
+  # Tier 2: Integration Services
+  agent-bridge:
+    tier: 2
+    critical: true
+    memory: "512Mi"
+    cpu: "1"
+    max_instances: 3
+    concurrency: 100
+    health_path: "/health"
+    environment_variables:
+      - "FIREBASE_PROJECT_ID"
+      - "CORS_ORIGINS"
+    dependencies:
+      - "agent-engine"
+    
+  tool-forge:
+    tier: 2
+    critical: false
+    memory: "512Mi"
+    cpu: "1"
+    max_instances: 3
+    concurrency: 50
+    health_path: "/health"
+    environment_variables:
+      - "FIREBASE_STORAGE_BUCKET"
+      - "GOOGLE_CLOUD_PROJECT"
+    cloud_run_name: "mcp-manager"
+    
+  mcp-config-generator:
+    tier: 2
+    critical: false
+    memory: "512Mi"
+    cpu: "1"
+    max_instances: 2
+    concurrency: 30
+    health_path: "/health"
+    directory: "mcp_config_generator"
+    environment_variables:
+      - "FIREBASE_STORAGE_BUCKET"
+      - "GOOGLE_CLOUD_PROJECT"
+    
+  alchemist-monitor-service:
+    tier: 2
+    critical: true
+    memory: "1Gi"
+    cpu: "1"
+    max_instances: 10
+    min_instances: 1
+    concurrency: 100
+    health_path: "/health"
+    environment_variables:
+      - "FIREBASE_PROJECT_ID"
+      - "ENVIRONMENT"
+      - "GOOGLE_APPLICATION_CREDENTIALS"
+    secrets:
+      - "firebase-service-account"
+    dependencies:
+      - "agent-engine"
+      - "knowledge-vault"
+
+  # Tier 3: Application Services
+  agent-launcher:
+    tier: 3
+    critical: false
+    memory: "1Gi"
+    cpu: "1"
+    max_instances: 3
+    concurrency: 10
+    health_path: "/health"
+    environment_variables:
+      - "FIREBASE_PROJECT_ID"
+      - "DOCKER_HOST"
+    dependencies:
+      - "agent-engine"
+      - "tool-forge"
+    
+  prompt-engine:
+    tier: 3
+    critical: false
+    memory: "512Mi"
+    cpu: "1"
+    max_instances: 3
+    concurrency: 50
+    health_path: "/health"
+    environment_variables:
+      - "FIREBASE_PROJECT_ID"
+    secrets:
+      - "openai-api-key"
+    
+  sandbox-console:
+    tier: 3
+    critical: false
+    memory: "1Gi"
+    cpu: "1"
+    max_instances: 5
+    concurrency: 20
+    health_path: "/health"
+    environment_variables:
+      - "FIREBASE_PROJECT_ID"
+      - "KNOWLEDGE_BASE_URL"
+    secrets:
+      - "openai-api-key"
+    dependencies:
+      - "knowledge-vault"
+      - "agent-engine"
+
+  # Tier 4: External Services
+  banking-api-service:
+    tier: 4
+    critical: false
+    memory: "512Mi"
+    cpu: "1"
+    max_instances: 3
+    concurrency: 50
+    health_path: "/health"
+    environment_variables:
+      - "BANKING_API_KEY"
+    
+  agent-studio:
+    tier: 4
+    critical: true
+    memory: "512Mi"
+    cpu: "1"
+    max_instances: 5
+    concurrency: 100
+    health_path: "/"
+    port: 8080
+    build_args:
+      - "REACT_APP_FIREBASE_PROJECT_ID"
+      - "REACT_APP_API_BASE_URL"
+      - "REACT_APP_KNOWLEDGE_BASE_URL"
+      - "REACT_APP_WHATSAPP_SERVICE_URL"
+      - "REACT_APP_AGENT_DEPLOYMENT_URL"
+      - "REACT_APP_TOOL_FORGE_URL"
+    dependencies:
+      - "agent-engine"
+      - "knowledge-vault"
+      - "agent-bridge"
+      - "agent-launcher"
+    
+  admin-dashboard:
+    tier: 4
+    critical: false
+    memory: "512Mi"
+    cpu: "1"
+    max_instances: 5
+    concurrency: 100
+    port: 8080
+    health_path: "/health"
+    environment_variables:
+      - "NODE_ENV"
+
+# Required Google Cloud APIs
+required_apis:
+  - "run.googleapis.com"
+  - "cloudbuild.googleapis.com"
+  - "firestore.googleapis.com"
+  - "secretmanager.googleapis.com"
+  - "storage.googleapis.com"
+  - "artifactregistry.googleapis.com"
+  - "firebase.googleapis.com"
+  - "containerregistry.googleapis.com"
+
+# Secret management configuration
+secrets:
+  openai-api-key:
+    description: "OpenAI API key for AI services"
+    required_for:
+      - "agent-engine"
+      - "knowledge-vault" 
+      - "prompt-engine"
+      - "sandbox-console"
+  
+  banking-api-key:
+    description: "Banking API authentication key"
+    required_for:
+      - "banking-api-service"
+    default_value: "banking-api-key-2025"
+  
+  firebase-service-account:
+    description: "Firebase service account credentials for monitoring service"
+    required_for:
+      - "alchemist-monitor-service"
+
+# Health check configuration
+health_checks:
+  timeout: 30
+  interval: 30
+  retries: 3
+  startup_grace_period: 120
+
+# Monitoring and logging
+monitoring:
+  enable_logging: true
+  log_retention_days: 30
+  enable_metrics: true
+  enable_tracing: false
+  
+  alerts:
+    error_rate_threshold: 5
+    latency_threshold: 2000
+    availability_threshold: 99.5
+
+# Rollback configuration
+rollback:
+  enable_automatic: false
+  health_check_timeout: 300
+  traffic_split_percentage: 10
+  
+# CI/CD integration
+cicd:
+  github_actions:
+    trigger_on:
+      - "push"
+      - "pull_request"
+    environments:
+      - "staging"
+      - "production"
+  
+  deployment_strategy: "rolling"
+  approval_required: true
+  
+# Network configuration
+network:
+  cors:
+    allowed_origins:
+      - "https://*.alchemist.dev"
+      - "https://*.run.app"
+    allowed_methods:
+      - "GET"
+      - "POST"
+      - "PUT"
+      - "DELETE"
+      - "OPTIONS"
+    
+  load_balancer:
+    enable: false
+    ssl_certificate: ""
+    domain: ""
+
+# Backup and disaster recovery
+backup:
+  firestore_backup_schedule: "0 2 * * *"  # Daily at 2 AM
+  storage_backup_enabled: true
+  retention_days: 30
+  
+disaster_recovery:
+  multi_region: false
+  backup_region: "us-west1"
+  rto_minutes: 60  # Recovery Time Objective
+  rpo_minutes: 15  # Recovery Point Objective

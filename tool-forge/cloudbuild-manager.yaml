@@ -1,0 +1,55 @@
+steps:
+  # Build the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-f'
+      - 'Dockerfile.manager'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/mcp-manager:latest'
+      - '.'
+
+  # Push the image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/mcp-manager:latest'
+
+  # Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'mcp-manager'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/mcp-manager:latest'
+      - '--region'
+      - '$_REGION'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--set-env-vars'
+      - 'GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_REGION=$_REGION,FIREBASE_STORAGE_BUCKET=$_FIREBASE_STORAGE_BUCKET'
+      - '--min-instances'
+      - '1'
+      - '--max-instances'
+      - '10'
+      - '--memory'
+      - '1Gi'
+      - '--cpu'
+      - '1'
+      - '--timeout'
+      - '3600'
+
+# Substitutions
+substitutions:
+  _REGION: us-central1
+  _FIREBASE_STORAGE_BUCKET: alchemist-e69bb.firebasestorage.app
+
+# Images to be pushed to Container Registry
+images:
+  - 'gcr.io/$PROJECT_ID/mcp-manager:latest'
+
+# Configure timeout
+timeout: 1200s 

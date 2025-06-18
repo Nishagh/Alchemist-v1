@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+gunicorn
+python-dotenv
+firebase-admin
+langchain
+langchain-openai
+openai
+pydantic
+httpx

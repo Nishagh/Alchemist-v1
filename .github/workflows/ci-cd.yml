@@ -1,0 +1,304 @@
+name: Alchemist CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  PROJECT_ID: alchemist-e69bb
+  REGION: us-central1
+
+jobs:
+  # Detect changes in different services
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      shared: ${{ steps.changes.outputs.shared }}
+      agent-engine: ${{ steps.changes.outputs.agent-engine }}
+      knowledge-vault: ${{ steps.changes.outputs.knowledge-vault }}
+      agent-bridge: ${{ steps.changes.outputs.agent-bridge }}
+      agent-studio: ${{ steps.changes.outputs.agent-studio }}
+      agent-launcher: ${{ steps.changes.outputs.agent-launcher }}
+      tool-forge: ${{ steps.changes.outputs.tool-forge }}
+      sandbox-console: ${{ steps.changes.outputs.sandbox-console }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      
+      - uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            shared:
+              - 'shared/**'
+            agent-engine:
+              - 'agent-engine/**'
+              - 'shared/**'
+            knowledge-vault:
+              - 'knowledge-vault/**'
+              - 'shared/**'
+            agent-bridge:
+              - 'agent-bridge/**'
+              - 'shared/**'
+            agent-studio:
+              - 'agent-studio/**'
+            agent-launcher:
+              - 'agent-launcher/**'
+              - 'shared/**'
+            tool-forge:
+              - 'tool-forge/**'
+              - 'shared/**'
+            sandbox-console:
+              - 'sandbox-console/**'
+              - 'shared/**'
+
+  # Test shared libraries
+  test-shared:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.shared == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+      
+      - name: Install shared dependencies
+        run: |
+          cd shared
+          pip install -e .
+          pip install pytest pytest-cov
+      
+      - name: Run shared library tests
+        run: |
+          cd shared
+          python -m pytest tests/ -v --cov=alchemist_shared --cov-report=xml || true
+      
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: shared/coverage.xml
+          flags: shared
+
+  # Test agent-engine service
+  test-agent-engine:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.agent-engine == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+      
+      - name: Install dependencies
+        run: |
+          cd shared && pip install -e .
+          cd ../agent-engine && pip install -r requirements.txt
+          pip install pytest pytest-cov
+      
+      - name: Run agent-engine tests
+        run: |
+          cd agent-engine
+          python -m pytest tests/ -v --cov=. --cov-report=xml || true
+
+  # Test knowledge-vault service
+  test-knowledge-vault:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.knowledge-vault == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+      
+      - name: Install dependencies
+        run: |
+          cd shared && pip install -e .
+          cd ../knowledge-vault && pip install -r requirements.txt
+          pip install pytest pytest-cov
+      
+      - name: Run knowledge-vault tests
+        run: |
+          cd knowledge-vault
+          python -m pytest tests/ -v --cov=app --cov-report=xml || true
+
+  # Test agent-bridge service
+  test-agent-bridge:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.agent-bridge == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+      
+      - name: Install dependencies
+        run: |
+          cd shared && pip install -e .
+          cd ../agent-bridge && pip install -r requirements.txt
+          pip install pytest pytest-cov
+      
+      - name: Run agent-bridge tests
+        run: |
+          cd agent-bridge
+          python -m pytest tests/ -v --cov=. --cov-report=xml || true
+
+  # Test agent-studio
+  test-agent-studio:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.agent-studio == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: agent-studio/package-lock.json
+      
+      - name: Install dependencies
+        run: |
+          cd agent-studio
+          npm ci
+      
+      - name: Run agent-studio tests
+        run: |
+          cd agent-studio
+          npm test -- --coverage --watchAll=false
+      
+      - name: Run agent-studio linting
+        run: |
+          cd agent-studio
+          npm run lint
+
+  # Code quality checks
+  quality-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+      
+      - name: Install quality tools
+        run: |
+          pip install black flake8 mypy
+      
+      - name: Run code formatting check
+        run: |
+          black --check shared/alchemist_shared agent-engine knowledge-vault agent-bridge
+      
+      - name: Run linting
+        run: |
+          flake8 shared/alchemist_shared agent-engine knowledge-vault agent-bridge
+
+  # Deploy to staging (develop branch)
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: [detect-changes, test-shared, test-agent-engine, test-knowledge-vault, test-agent-bridge, test-agent-studio, quality-checks]
+    if: |
+      github.ref == 'refs/heads/develop' && 
+      (needs.detect-changes.outputs.agent-engine == 'true' || 
+       needs.detect-changes.outputs.knowledge-vault == 'true' || 
+       needs.detect-changes.outputs.agent-bridge == 'true' || 
+       needs.detect-changes.outputs.agent-studio == 'true' ||
+       needs.detect-changes.outputs.agent-launcher == 'true' ||
+       needs.detect-changes.outputs.tool-forge == 'true')
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          export_default_credentials: true
+      
+      - name: Deploy changed services to staging
+        run: |
+          if [ "${{ needs.detect-changes.outputs.agent-engine }}" == "true" ]; then
+            ./deployment/scripts/deploy-service.sh agent-engine staging
+          fi
+          if [ "${{ needs.detect-changes.outputs.knowledge-vault }}" == "true" ]; then
+            ./deployment/scripts/deploy-service.sh knowledge-vault staging
+          fi
+          if [ "${{ needs.detect-changes.outputs.agent-bridge }}" == "true" ]; then
+            ./deployment/scripts/deploy-service.sh agent-bridge staging
+          fi
+          if [ "${{ needs.detect-changes.outputs.agent-studio }}" == "true" ]; then
+            ./deployment/scripts/deploy-service.sh agent-studio staging
+          fi
+          if [ "${{ needs.detect-changes.outputs.agent-launcher }}" == "true" ]; then
+            ./deployment/scripts/deploy-service.sh agent-launcher staging
+          fi
+          if [ "${{ needs.detect-changes.outputs.tool-forge }}" == "true" ]; then
+            ./deployment/scripts/deploy-service.sh tool-forge staging
+          fi
+
+  # Deploy to production (main branch)
+  deploy-production:
+    runs-on: ubuntu-latest
+    needs: [detect-changes, test-shared, test-agent-engine, test-knowledge-vault, test-agent-bridge, test-agent-studio, quality-checks]
+    if: |
+      github.ref == 'refs/heads/main' && 
+      (needs.detect-changes.outputs.agent-engine == 'true' || 
+       needs.detect-changes.outputs.knowledge-vault == 'true' || 
+       needs.detect-changes.outputs.agent-bridge == 'true' || 
+       needs.detect-changes.outputs.agent-studio == 'true' ||
+       needs.detect-changes.outputs.agent-launcher == 'true' ||
+       needs.detect-changes.outputs.tool-forge == 'true')
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          export_default_credentials: true
+      
+      - name: Deploy changed services to production
+        run: |
+          if [ "${{ needs.detect-changes.outputs.agent-engine }}" == "true" ]; then
+            ./deployment/scripts/deploy-service.sh agent-engine production
+          fi
+          if [ "${{ needs.detect-changes.outputs.knowledge-vault }}" == "true" ]; then
+            ./deployment/scripts/deploy-service.sh knowledge-vault production
+          fi
+          if [ "${{ needs.detect-changes.outputs.agent-bridge }}" == "true" ]; then
+            ./deployment/scripts/deploy-service.sh agent-bridge production
+          fi
+          if [ "${{ needs.detect-changes.outputs.agent-studio }}" == "true" ]; then
+            ./deployment/scripts/deploy-service.sh agent-studio production
+          fi
+          if [ "${{ needs.detect-changes.outputs.agent-launcher }}" == "true" ]; then
+            ./deployment/scripts/deploy-service.sh agent-launcher production
+          fi
+          if [ "${{ needs.detect-changes.outputs.tool-forge }}" == "true" ]; then
+            ./deployment/scripts/deploy-service.sh tool-forge production
+          fi
+      
+      - name: Verify production deployments
+        run: |
+          echo "Production deployment completed. Verifying services..."
+          # Add any post-deployment verification steps here

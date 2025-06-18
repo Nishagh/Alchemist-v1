@@ -1,0 +1,71 @@
+server:
+  name: openapi-server
+  securitySchemes:
+    - id: ApiKeyHeaderAuth
+      type: apiKey
+      in: header
+      name: X-API-KEY
+    - id: ApiKeyQueryAuth
+      type: apiKey
+      in: query
+      name: api_key
+    - id: BasicAuth
+      type: http
+      scheme: basic
+    - id: BearerAuth
+      type: http
+      scheme: bearer
+tools:
+  - name: getApiKeyHeaderResource
+    description: Resource requiring API Key in Header
+    args: []
+    requestTemplate:
+      url: http://localhost:8080/v1/apikey_header_resource
+      method: GET
+      security:
+        - id: ApiKeyHeaderAuth
+    responseTemplate: {}
+  - name: getApiKeyQueryResource
+    description: Resource requiring API Key in Query
+    args: []
+    requestTemplate:
+      url: http://localhost:8080/v1/apikey_query_resource
+      method: GET
+      security:
+        - id: ApiKeyQueryAuth
+    responseTemplate: {}
+  - name: getBasicAuthResource
+    description: Resource requiring Basic Auth
+    args: []
+    requestTemplate:
+      url: http://localhost:8080/v1/basic_auth_resource
+      method: GET
+      security:
+        - id: BasicAuth
+    responseTemplate: {}
+  - name: getBearerAuthResource
+    description: Resource requiring Bearer Auth
+    args: []
+    requestTemplate:
+      url: http://localhost:8080/v1/bearer_auth_resource
+      method: GET
+      security:
+        - id: BearerAuth
+    responseTemplate: {}
+  - name: getMultiAuthResource
+    description: Resource allowing multiple auth types (Bearer OR ApiKeyHeader)
+    args: []
+    requestTemplate:
+      url: http://localhost:8080/v1/multi_auth_resource
+      method: GET
+      security:
+        - id: BearerAuth
+        - id: ApiKeyHeaderAuth
+    responseTemplate: {}
+  - name: getNoAuthResource
+    description: Resource requiring no authentication
+    args: []
+    requestTemplate:
+      url: http://localhost:8080/v1/no_auth_resource
+      method: GET
+    responseTemplate: {}

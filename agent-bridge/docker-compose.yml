@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  whatsapp-bsp:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      # Firebase Configuration
+      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
+      - FIREBASE_CREDENTIALS_PATH=/app/credentials/firebase-credentials.json
+      
+      # WhatsApp Business API Configuration
+      - WHATSAPP_ACCESS_TOKEN=${WHATSAPP_ACCESS_TOKEN}
+      - WHATSAPP_APP_ID=${WHATSAPP_APP_ID}
+      - WHATSAPP_APP_SECRET=${WHATSAPP_APP_SECRET}
+      - WHATSAPP_API_VERSION=${WHATSAPP_API_VERSION:-v18.0}
+      # Note: WhatsApp numbers are provided per agent during account creation
+      
+      # Webhook Configuration
+      - WEBHOOK_VERIFY_TOKEN=${WEBHOOK_VERIFY_TOKEN:-default_verify_token}
+      - WEBHOOK_BASE_URL=${WEBHOOK_BASE_URL:-http://localhost:8000}
+      
+      # Collection Names
+      - MANAGED_ACCOUNTS_COLLECTION=${MANAGED_ACCOUNTS_COLLECTION:-whatsapp_accounts}
+      - WEBHOOK_LOGS_COLLECTION=${WEBHOOK_LOGS_COLLECTION:-whatsapp_webhook_logs}
+    
+    volumes:
+      # Mount Firebase credentials
+      - ${FIREBASE_CREDENTIALS_PATH:-./credentials}:/app/credentials:ro
+      
+      # Mount logs directory
+      - ./logs:/app/logs
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Optional: Redis for caching and rate limiting
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+volumes:
+  redis_data:
+
+networks:
+  default:
+    name: whatsapp-bsp-network

@@ -1,0 +1,402 @@
+server:
+  name: banking-api
+  securitySchemes:
+    - id: BearerAuth
+      type: http
+      scheme: bearer
+      defaultCredential: "banking-api-key-2025"
+tools:
+  - name: getAccountDetails
+    description: Get Account Details - Get detailed information for a specific account
+    args:
+      - name: account_id
+        description: Account ID (UUID)
+        type: string
+        required: true
+        position: path
+    requestTemplate:
+      url: https://banking-api-service-851487020021.us-central1.run.app/accounts/{account_id}
+      method: GET
+      security:
+        id: BearerAuth
+    responseTemplate:
+      prependBody: |+
+        # API Response Information
+
+        Below is the response from an API call. To help you understand the data, I've provided:
+
+        1. A detailed description of all fields in the response structure
+        2. The complete API response
+
+        ## Response Structure
+
+        > Content-Type: application/json
+
+
+        ## Original Response
+
+  - name: getAccountTypes
+    description: Get Available Account Types - Get a list of all available account types with descriptions
+    args: []
+    requestTemplate:
+      url: https://banking-api-service-851487020021.us-central1.run.app/accounts/types
+      method: GET
+      security:
+        id: BearerAuth
+    responseTemplate:
+      prependBody: |+
+        # API Response Information
+
+        Below is the response from an API call. To help you understand the data, I've provided:
+
+        1. A detailed description of all fields in the response structure
+        2. The complete API response
+
+        ## Response Structure
+
+        > Content-Type: application/json
+
+        - **account_types**:  (Type: array)
+          - **account_types[].description**: Description of the account type (Type: string)
+          - **account_types[].type**: Account type identifier (Type: string)
+
+        ## Original Response
+
+  - name: getAccounts
+    description: Get Customer Accounts - Get all accounts for a specific customer with optional filtering by account type
+    args:
+      - name: account_type
+        description: Filter by account type
+        type: string
+        position: query
+      - name: customer_id
+        description: Customer ID
+        type: string
+        required: true
+        position: query
+    requestTemplate:
+      url: https://banking-api-service-851487020021.us-central1.run.app/accounts
+      method: GET
+      security:
+        id: BearerAuth
+    responseTemplate:
+      prependBody: |+
+        # API Response Information
+
+        Below is the response from an API call. To help you understand the data, I've provided:
+
+        1. A detailed description of all fields in the response structure
+        2. The complete API response
+
+        ## Response Structure
+
+        > Content-Type: application/json
+
+        - **accounts**:  (Type: array)
+          - **accounts[].account_id**: Unique identifier for the account (Type: string)
+          - **accounts[].account_number**: Account number displayed to the customer (Type: string)
+          - **accounts[].account_type**: Type of account (e.g., checking, savings, credit_card) (Type: string)
+          - **accounts[].balance**: Current balance (Type: number)
+          - **accounts[].currency**: Currency of the account (Type: string)
+          - **accounts[].last_updated**: Date when account was last updated (Type: string)
+          - **accounts[].opened_date**: Date when account was opened (Type: string)
+          - **accounts[].status**: Current status of the account (Type: string)
+        - **count**: Number of accounts (Type: integer)
+        - **customer_id**: ID of the customer (Type: string)
+
+        ## Original Response
+
+  - name: getAllCustomers
+    description: Get All Customers - Get a list of all customers with summary information
+    args: []
+    requestTemplate:
+      url: https://banking-api-service-851487020021.us-central1.run.app/customers
+      method: GET
+      security:
+        id: BearerAuth
+    responseTemplate:
+      prependBody: |+
+        # API Response Information
+
+        Below is the response from an API call. To help you understand the data, I've provided:
+
+        1. A detailed description of all fields in the response structure
+        2. The complete API response
+
+        ## Response Structure
+
+        > Content-Type: application/json
+
+        - **count**: Total number of customers (Type: integer)
+        - **customers**:  (Type: array)
+          - **customers[].account_types**:  (Type: array)
+            - **customers[].account_types[]**: Items of type string
+          - **customers[].customer_id**:  (Type: string)
+          - **customers[].email**:  (Type: string)
+          - **customers[].name**:  (Type: string)
+          - **customers[].phone**:  (Type: string)
+
+        ## Original Response
+
+  - name: getApiInfo
+    description: API Root - API root endpoint that shows available endpoints
+    args: []
+    requestTemplate:
+      url: https://banking-api-service-851487020021.us-central1.run.app/
+      method: GET
+    responseTemplate:
+      prependBody: |+
+        # API Response Information
+
+        Below is the response from an API call. To help you understand the data, I've provided:
+
+        1. A detailed description of all fields in the response structure
+        2. The complete API response
+
+        ## Response Structure
+
+        > Content-Type: application/json
+
+        - **description**:  (Type: string)
+        - **endpoints**:  (Type: array)
+          - **endpoints[]**: Items of type string
+        - **name**:  (Type: string)
+        - **version**:  (Type: string)
+
+        ## Original Response
+
+  - name: getBalance
+    description: Get Account Balance - Get balance for a specific account
+    args:
+      - name: account_id
+        description: Account ID (UUID)
+        type: string
+        required: true
+        position: path
+    requestTemplate:
+      url: https://banking-api-service-851487020021.us-central1.run.app/accounts/{account_id}/balance
+      method: GET
+      security:
+        id: BearerAuth
+    responseTemplate:
+      prependBody: |+
+        # API Response Information
+
+        Below is the response from an API call. To help you understand the data, I've provided:
+
+        1. A detailed description of all fields in the response structure
+        2. The complete API response
+
+        ## Response Structure
+
+        > Content-Type: application/json
+
+        - **account_id**:  (Type: string)
+        - **account_number**:  (Type: string)
+        - **account_type**:  (Type: string)
+        - **available_credit**: For credit accounts only (Type: number)
+        - **balance**:  (Type: number)
+        - **credit_limit**: For credit accounts only (Type: number)
+        - **currency**:  (Type: string)
+        - **interest_rate**: Interest rate for savings or loan accounts (Type: number)
+        - **last_updated**:  (Type: string)
+        - **monthly_payment**: For loan accounts only (Type: number)
+        - **original_loan_amount**: For loan accounts only (Type: number)
+
+        ## Original Response
+
+  - name: getCustomerInfo
+    description: Get Customer Information - Get detailed customer information including accounts
+    args:
+      - name: customer_id
+        description: Customer ID
+        type: string
+        required: true
+        position: query
+      - name: include_address
+        description: Whether to include detailed address information
+        type: boolean
+        position: query
+    requestTemplate:
+      url: https://banking-api-service-851487020021.us-central1.run.app/customer/info
+      method: GET
+      security:
+        id: BearerAuth
+    responseTemplate:
+      prependBody: |+
+        # API Response Information
+
+        Below is the response from an API call. To help you understand the data, I've provided:
+
+        1. A detailed description of all fields in the response structure
+        2. The complete API response
+
+        ## Response Structure
+
+        > Content-Type: application/json
+
+        - **accounts**:  (Type: array)
+          - **accounts[].account_id**: Unique identifier for the account (Type: string)
+          - **accounts[].account_number**: Account number displayed to the customer (Type: string)
+          - **accounts[].account_type**: Type of account (e.g., checking, savings, credit_card) (Type: string)
+          - **accounts[].balance**: Current balance (Type: number)
+          - **accounts[].currency**: Currency of the account (Type: string)
+          - **accounts[].last_updated**: Date when account was last updated (Type: string)
+          - **accounts[].opened_date**: Date when account was opened (Type: string)
+          - **accounts[].status**: Current status of the account (Type: string)
+        - **address**:  (Type: string)
+        - **customer_id**:  (Type: string)
+        - **customer_since**:  (Type: string)
+        - **email**:  (Type: string)
+        - **first_name**:  (Type: string)
+        - **last_name**:  (Type: string)
+        - **name**:  (Type: string)
+        - **phone**:  (Type: string)
+        - **preferred_language**:  (Type: string)
+
+        ## Original Response
+
+  - name: getTransactions
+    description: Get Account Transactions - Get transactions for a specific account
+    args:
+      - name: account_id
+        description: Account ID (UUID)
+        type: string
+        required: true
+        position: path
+      - name: category
+        description: Filter by transaction category
+        type: string
+        position: query
+      - name: limit
+        description: Maximum number of transactions to return
+        type: integer
+        position: query
+      - name: period
+        description: Time period
+        type: string
+        enum:
+          - last_week
+          - last_month
+          - last_3_months
+          - last_year
+          - all
+        position: query
+    requestTemplate:
+      url: https://banking-api-service-851487020021.us-central1.run.app/accounts/{account_id}/transactions
+      method: GET
+      security:
+        id: BearerAuth
+    responseTemplate:
+      prependBody: |+
+        # API Response Information
+
+        Below is the response from an API call. To help you understand the data, I've provided:
+
+        1. A detailed description of all fields in the response structure
+        2. The complete API response
+
+        ## Response Structure
+
+        > Content-Type: application/json
+
+        - **account_id**:  (Type: string)
+        - **account_number**:  (Type: string)
+        - **account_type**:  (Type: string)
+        - **count**: Number of transactions returned (Type: integer)
+        - **period**:  (Type: string)
+        - **total_available**: Total number of transactions available (Type: integer)
+        - **transactions**:  (Type: array)
+          - **transactions[].amount**: Transaction amount (negative for debits, positive for credits) (Type: number)
+          - **transactions[].amount_formatted**: Formatted transaction amount (Type: string)
+          - **transactions[].balance_after**: Account balance after transaction (Type: number)
+          - **transactions[].category**: Transaction category (Type: string)
+          - **transactions[].date**: Date of the transaction (Type: string)
+          - **transactions[].description**: Description of the transaction (Type: string)
+          - **transactions[].status**: Status of the transaction (Type: string)
+          - **transactions[].transaction_id**: Unique identifier for the transaction (Type: string)
+
+        ## Original Response
+
+  - name: healthCheck
+    description: Health Check - Health check endpoint
+    args: []
+    requestTemplate:
+      url: https://banking-api-service-851487020021.us-central1.run.app/health
+      method: GET
+    responseTemplate:
+      prependBody: |+
+        # API Response Information
+
+        Below is the response from an API call. To help you understand the data, I've provided:
+
+        1. A detailed description of all fields in the response structure
+        2. The complete API response
+
+        ## Response Structure
+
+        > Content-Type: application/json
+
+        - **status**:  (Type: string)
+        - **timestamp**:  (Type: string)
+
+        ## Original Response
+
+  - name: transferFunds
+    description: Transfer Funds - Transfer funds between accounts
+    args:
+      - name: amount
+        description: Amount to transfer
+        type: number
+        required: true
+        position: body
+      - name: description
+        description: Optional description for the transfer
+        type: string
+        position: body
+      - name: from_account_id
+        description: Source account ID
+        type: string
+        required: true
+        position: body
+      - name: to_account_id
+        description: Destination account ID
+        type: string
+        required: true
+        position: body
+    requestTemplate:
+      url: https://banking-api-service-851487020021.us-central1.run.app/transfers
+      method: POST
+      headers:
+        - key: Content-Type
+          value: application/json
+      security:
+        id: BearerAuth
+    responseTemplate:
+      prependBody: |+
+        # API Response Information
+
+        Below is the response from an API call. To help you understand the data, I've provided:
+
+        1. A detailed description of all fields in the response structure
+        2. The complete API response
+
+        ## Response Structure
+
+        > Content-Type: application/json
+
+        - **amount**:  (Type: number)
+        - **currency**:  (Type: string)
+        - **description**:  (Type: string)
+        - **from_account_id**:  (Type: string)
+        - **from_account_number**:  (Type: string)
+        - **from_account_type**:  (Type: string)
+        - **reference_id**:  (Type: string)
+        - **status**:  (Type: string)
+        - **timestamp**:  (Type: string)
+        - **to_account_id**:  (Type: string)
+        - **to_account_number**:  (Type: string)
+        - **to_account_type**:  (Type: string)
+
+        ## Original Response
+

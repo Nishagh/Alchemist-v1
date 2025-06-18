@@ -1,0 +1,851 @@
+openapi: 3.0.3
+info:
+  title: Banking API Simulation Service
+  description: |
+    A realistic mock banking API service that simulates banking data for testing
+    and integration with the Alchemist banking customer support agent.
+    
+    Features:
+    - Multiple customers with realistic profiles
+    - Multiple accounts per customer of various types
+    - Support for checking, savings, credit cards, loans, and investment accounts
+    - Realistic transaction data with categorization
+    - Account-specific details appropriate to account type
+  version: 1.1.0
+  contact:
+    name: Alchemist Support
+servers:
+  - url: https://banking-api-service-851487020021.us-central1.run.app
+    description: Cloud development server
+  - url: http://localhost:8080
+    description: Local development server
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: API Key
+      description: API key authentication using Bearer token in Authorization header
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+      required:
+        - error
+
+    ApiInfo:
+      type: object
+      properties:
+        name:
+          type: string
+          example: Banking API Simulation Service
+        version:
+          type: string
+          example: 1.1.0
+        description:
+          type: string
+        endpoints:
+          type: array
+          items:
+            type: string
+          example:
+            - "/accounts"
+            - "/accounts/{account_id}"
+            - "/accounts/{account_id}/balance"
+            - "/accounts/{account_id}/transactions"
+            - "/accounts/types"
+            - "/transfers"
+            - "/customer/info"
+            - "/customers"
+            - "/health"
+      required:
+        - name
+        - version
+        - description
+        - endpoints
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: healthy
+        timestamp:
+          type: string
+          format: date-time
+      required:
+        - status
+        - timestamp
+
+    AccountType:
+      type: object
+      properties:
+        type:
+          type: string
+          description: Account type identifier
+        description:
+          type: string
+          description: Description of the account type
+      required:
+        - type
+        - description
+
+    AccountTypeList:
+      type: object
+      properties:
+        account_types:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountType'
+      required:
+        - account_types
+
+    Account:
+      type: object
+      properties:
+        account_id:
+          type: string
+          format: uuid
+          description: Unique identifier for the account
+        account_number:
+          type: string
+          description: Account number displayed to the customer
+        account_type:
+          type: string
+          description: Type of account (e.g., checking, savings, credit_card)
+        balance:
+          type: number
+          format: float
+          description: Current balance
+        currency:
+          type: string
+          example: USD
+          description: Currency of the account
+        status:
+          type: string
+          enum: [active, inactive, closed]
+          description: Current status of the account
+        last_updated:
+          type: string
+          format: date
+          description: Date when account was last updated
+        opened_date:
+          type: string
+          format: date
+          description: Date when account was opened
+      required:
+        - account_id
+        - account_number
+        - account_type
+        - balance
+        - currency
+        - status
+        - last_updated
+
+    CheckingAccount:
+      allOf:
+        - $ref: '#/components/schemas/Account'
+        - type: object
+          properties:
+            is_interest_bearing:
+              type: boolean
+            interest_rate:
+              type: number
+              format: float
+            monthly_fee:
+              type: number
+              format: float
+            minimum_balance:
+              type: number
+              format: float
+            routing_number:
+              type: string
+
+    SavingsAccount:
+      allOf:
+        - $ref: '#/components/schemas/Account'
+        - type: object
+          properties:
+            interest_rate:
+              type: number
+              format: float
+            withdrawal_limit:
+              type: integer
+            monthly_fee:
+              type: number
+              format: float
+
+    CreditCardAccount:
+      allOf:
+        - $ref: '#/components/schemas/Account'
+        - type: object
+          properties:
+            credit_limit:
+              type: number
+              format: float
+            available_credit:
+              type: number
+              format: float
+            interest_rate:
+              type: number
+              format: float
+            minimum_payment:
+              type: number
+              format: float
+            payment_due_date:
+              type: string
+              format: date
+            card:
+              type: object
+              properties:
+                masked:
+                  type: string
+                formatted:
+                  type: string
+                expiry:
+                  type: string
+
+    LoanAccount:
+      allOf:
+        - $ref: '#/components/schemas/Account'
+        - type: object
+          properties:
+            original_loan_amount:
+              type: number
+              format: float
+            interest_rate:
+              type: number
+              format: float
+            term_months:
+              type: integer
+            monthly_payment:
+              type: number
+              format: float
+            next_payment_date:
+              type: string
+              format: date
+
+    AccountList:
+      type: object
+      properties:
+        customer_id:
+          type: string
+          description: ID of the customer
+        count:
+          type: integer
+          description: Number of accounts
+        accounts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Account'
+      required:
+        - customer_id
+        - count
+        - accounts
+
+    BalanceResponse:
+      type: object
+      properties:
+        account_id:
+          type: string
+          format: uuid
+        account_number:
+          type: string
+        account_type:
+          type: string
+        balance:
+          type: number
+          format: float
+        currency:
+          type: string
+          example: USD
+        last_updated:
+          type: string
+          format: date
+        available_credit:
+          type: number
+          format: float
+          description: For credit accounts only
+        credit_limit:
+          type: number
+          format: float
+          description: For credit accounts only
+        original_loan_amount:
+          type: number
+          format: float
+          description: For loan accounts only
+        monthly_payment:
+          type: number
+          format: float
+          description: For loan accounts only
+        interest_rate:
+          type: number
+          format: float
+          description: Interest rate for savings or loan accounts
+      required:
+        - account_id
+        - account_number
+        - account_type
+        - balance
+        - currency
+        - last_updated
+
+    Transaction:
+      type: object
+      properties:
+        transaction_id:
+          type: string
+          description: Unique identifier for the transaction
+        date:
+          type: string
+          format: date
+          description: Date of the transaction
+        description:
+          type: string
+          description: Description of the transaction
+        category:
+          type: string
+          description: Transaction category
+        amount:
+          type: number
+          format: float
+          description: Transaction amount (negative for debits, positive for credits)
+        amount_formatted:
+          type: string
+          description: Formatted transaction amount
+        balance_after:
+          type: number
+          format: float
+          description: Account balance after transaction
+        status:
+          type: string
+          enum: [pending, completed, failed, cancelled]
+          description: Status of the transaction
+      required:
+        - transaction_id
+        - date
+        - description
+        - category
+        - amount
+        - balance_after
+        - status
+
+    TransactionsResponse:
+      type: object
+      properties:
+        account_id:
+          type: string
+          format: uuid
+        account_number:
+          type: string
+        account_type:
+          type: string
+        period:
+          type: string
+          enum: [last_week, last_month, last_3_months, last_year, all]
+        transactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transaction'
+        count:
+          type: integer
+          description: Number of transactions returned
+        total_available:
+          type: integer
+          description: Total number of transactions available
+      required:
+        - account_id
+        - account_number
+        - account_type
+        - period
+        - transactions
+        - count
+
+    TransferRequest:
+      type: object
+      properties:
+        from_account_id:
+          type: string
+          format: uuid
+          description: Source account ID
+        to_account_id:
+          type: string
+          format: uuid
+          description: Destination account ID
+        amount:
+          type: number
+          format: float
+          description: Amount to transfer
+        description:
+          type: string
+          description: Optional description for the transfer
+      required:
+        - from_account_id
+        - to_account_id
+        - amount
+
+    TransferResponse:
+      type: object
+      properties:
+        from_account_id:
+          type: string
+          format: uuid
+        from_account_number:
+          type: string
+        from_account_type:
+          type: string
+        to_account_id:
+          type: string
+          format: uuid
+        to_account_number:
+          type: string
+        to_account_type:
+          type: string
+        amount:
+          type: number
+          format: float
+        currency:
+          type: string
+          example: USD
+        description:
+          type: string
+        reference_id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [completed, pending, failed]
+      required:
+        - from_account_id
+        - from_account_number
+        - from_account_type
+        - to_account_id
+        - to_account_number
+        - to_account_type
+        - amount
+        - currency
+        - reference_id
+        - timestamp
+        - status
+
+    CustomerInfoResponse:
+      type: object
+      properties:
+        customer_id:
+          type: string
+        name:
+          type: string
+        first_name:
+          type: string
+        last_name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        customer_since:
+          type: string
+          format: date
+        address:
+          type: string
+        preferred_language:
+          type: string
+        accounts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Account'
+      required:
+        - customer_id
+        - name
+        - email
+        - phone
+        - customer_since
+
+    CustomerList:
+      type: object
+      properties:
+        count:
+          type: integer
+          description: Total number of customers
+        customers:
+          type: array
+          items:
+            type: object
+            properties:
+              customer_id:
+                type: string
+              name:
+                type: string
+              email:
+                type: string
+              phone:
+                type: string
+              account_types:
+                type: array
+                items:
+                  type: string
+            required:
+              - customer_id
+              - name
+              - email
+              - phone
+              - account_types
+      required:
+        - count
+        - customers
+
+security:
+  - BearerAuth: []
+
+paths:
+  /:
+    get:
+      summary: API Root
+      description: API root endpoint that shows available endpoints
+      operationId: getApiInfo
+      security: []
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiInfo'
+
+  /health:
+    get:
+      summary: Health Check
+      description: Health check endpoint
+      operationId: healthCheck
+      security: []
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /accounts/types:
+    get:
+      summary: Get Available Account Types
+      description: Get a list of all available account types with descriptions
+      operationId: getAccountTypes
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountTypeList'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /accounts:
+    get:
+      summary: Get Customer Accounts
+      description: Get all accounts for a specific customer with optional filtering by account type
+      operationId: getAccounts
+      parameters:
+        - name: customer_id
+          in: query
+          required: true
+          description: Customer ID
+          schema:
+            type: string
+        - name: account_type
+          in: query
+          required: false
+          description: Filter by account type
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountList'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /accounts/{account_id}:
+    get:
+      summary: Get Account Details
+      description: Get detailed information for a specific account
+      operationId: getAccountDetails
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/CheckingAccount'
+                  - $ref: '#/components/schemas/SavingsAccount'
+                  - $ref: '#/components/schemas/CreditCardAccount'
+                  - $ref: '#/components/schemas/LoanAccount'
+                  - $ref: '#/components/schemas/Account'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /accounts/{account_id}/balance:
+    get:
+      summary: Get Account Balance
+      description: Get balance for a specific account
+      operationId: getBalance
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BalanceResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /accounts/{account_id}/transactions:
+    get:
+      summary: Get Account Transactions
+      description: Get transactions for a specific account
+      operationId: getTransactions
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID (UUID)
+          schema:
+            type: string
+            format: uuid
+        - name: period
+          in: query
+          required: false
+          description: Time period
+          schema:
+            type: string
+            enum: [last_week, last_month, last_3_months, last_year, all]
+            default: last_month
+        - name: category
+          in: query
+          required: false
+          description: Filter by transaction category
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of transactions to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 50
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionsResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /transfers:
+    post:
+      summary: Transfer Funds
+      description: Transfer funds between accounts
+      operationId: transferFunds
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferRequest'
+            examples:
+              transfer-example:
+                value:
+                  from_account_id: "123e4567-e89b-12d3-a456-426614174000"
+                  to_account_id: "123e4567-e89b-12d3-a456-426614174001"
+                  amount: 100.50
+                  description: "Monthly rent payment"
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /customer/info:
+    get:
+      summary: Get Customer Information
+      description: Get detailed customer information including accounts
+      operationId: getCustomerInfo
+      parameters:
+        - name: customer_id
+          in: query
+          required: true
+          description: Customer ID
+          schema:
+            type: string
+        - name: include_address
+          in: query
+          required: false
+          description: Whether to include detailed address information
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerInfoResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+                
+  /customers:
+    get:
+      summary: Get All Customers
+      description: Get a list of all customers with summary information
+      operationId: getAllCustomers
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerList'
+              example:
+                count: 8
+                customers:
+                  - customer_id: "123456"
+                    name: "Jane Smith"
+                    email: "jane.smith@example.com"
+                    phone: "+1-555-123-4567"
+                    account_types: ["checking", "savings", "credit_card"]
+                  - customer_id: "234567"
+                    name: "John Davis"
+                    email: "john.davis@example.com"
+                    phone: "+1-555-234-5678"
+                    account_types: ["checking", "mortgage", "auto_loan"]
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'

@@ -1,0 +1,8 @@
+aiohttp==3.9.1
+# Use compatible versions to avoid starlette conflicts
+fastapi>=0.115.3
+pydantic>=2.8.0
+PyYAML==6.0.1
+uvicorn
+# MCP package - use specific version that works with newer FastAPI
+mcp>=1.0.0

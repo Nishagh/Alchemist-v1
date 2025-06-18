@@ -1,0 +1,201 @@
+version: '3.8'
+
+services:
+  # Firebase Firestore Emulator
+  firestore-emulator:
+    image: google/cloud-sdk:latest
+    container_name: alchemist-firestore-emulator
+    command: >
+      bash -c "
+        gcloud config set disable_usage_reporting true &&
+        gcloud beta emulators firestore start 
+          --host-port=0.0.0.0:8080 
+          --project=alchemist-dev
+      "
+    ports:
+      - "8080:8080"
+    environment:
+      - CLOUDSDK_CORE_PROJECT=alchemist-dev
+    networks:
+      - alchemist-network
+
+  # Agent Engine Service
+  agent-engine:
+    build: 
+      context: ../../agent-engine
+      dockerfile: Dockerfile
+    container_name: alchemist-agent-engine
+    ports:
+      - "8000:8080"
+    environment:
+      - ENVIRONMENT=development
+      - FIREBASE_PROJECT_ID=alchemist-dev
+      - FIRESTORE_EMULATOR_HOST=firestore-emulator:8080
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - CORS_ORIGINS=http://localhost:3000
+    volumes:
+      - ../../agent-engine:/app
+      - ../../shared:/shared
+    depends_on:
+      - firestore-emulator
+    networks:
+      - alchemist-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Knowledge Vault Service
+  knowledge-vault:
+    build:
+      context: ../../knowledge-vault
+      dockerfile: Dockerfile
+    container_name: alchemist-knowledge-vault
+    ports:
+      - "8001:8080"
+    environment:
+      - ENVIRONMENT=development
+      - FIREBASE_PROJECT_ID=alchemist-dev
+      - FIRESTORE_EMULATOR_HOST=firestore-emulator:8080
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - CORS_ORIGINS=http://localhost:3000
+    volumes:
+      - ../../knowledge-vault:/app
+      - ../../shared:/shared
+      - kb-data:/app/data
+    depends_on:
+      - firestore-emulator
+    networks:
+      - alchemist-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Agent Bridge Service  
+  agent-bridge:
+    build:
+      context: ../../agent-bridge
+      dockerfile: Dockerfile
+    container_name: alchemist-agent-bridge
+    ports:
+      - "8002:8080"
+    environment:
+      - ENVIRONMENT=development
+      - FIREBASE_PROJECT_ID=alchemist-dev
+      - FIRESTORE_EMULATOR_HOST=firestore-emulator:8080
+      - CORS_ORIGINS=http://localhost:3000
+    volumes:
+      - ../../agent-bridge:/app
+      - ../../shared:/shared
+    depends_on:
+      - firestore-emulator
+    networks:
+      - alchemist-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Agent Launcher Service
+  agent-launcher:
+    build:
+      context: ../../agent-launcher
+      dockerfile: Dockerfile
+    container_name: alchemist-agent-launcher
+    ports:
+      - "8003:8080"
+    environment:
+      - ENVIRONMENT=development
+      - FIREBASE_PROJECT_ID=alchemist-dev
+      - FIRESTORE_EMULATOR_HOST=firestore-emulator:8080
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - ../../agent-launcher:/app
+      - ../../shared:/shared
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - firestore-emulator
+    networks:
+      - alchemist-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Agent Studio Service
+  agent-studio:
+    build:
+      context: ../../agent-studio
+      dockerfile: Dockerfile.dev
+      target: development
+    container_name: alchemist-agent-studio
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_ENVIRONMENT=development
+      - REACT_APP_API_BASE_URL=http://localhost:8000
+      - REACT_APP_KNOWLEDGE_BASE_URL=http://localhost:8001
+      - REACT_APP_WHATSAPP_SERVICE_URL=http://localhost:8002
+      - REACT_APP_AGENT_DEPLOYMENT_URL=http://localhost:8003
+      - REACT_APP_FIREBASE_PROJECT_ID=alchemist-dev
+      - REACT_APP_USE_EMULATOR=true
+    volumes:
+      - ../../agent-studio:/app
+      - /app/node_modules
+    depends_on:
+      - agent-engine
+      - knowledge-vault
+      - agent-bridge
+      - agent-launcher
+    networks:
+      - alchemist-network
+    restart: unless-stopped
+
+  # Redis for caching (optional)
+  redis:
+    image: redis:7-alpine
+    container_name: alchemist-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - alchemist-network
+    restart: unless-stopped
+
+  # Nginx reverse proxy for development
+  nginx:
+    image: nginx:alpine
+    container_name: alchemist-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.dev.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - agent-studio
+      - agent-engine
+      - knowledge-vault
+      - agent-bridge
+      - agent-launcher
+    networks:
+      - alchemist-network
+    restart: unless-stopped
+
+volumes:
+  kb-data:
+    driver: local
+  redis-data:
+    driver: local
+
+networks:
+  alchemist-network:
+    driver: bridge
