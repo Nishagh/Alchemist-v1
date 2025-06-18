@@ -52,9 +52,9 @@ Thumbs.db
 .env.test.local
 .env.production.local
 
-# Firebase
-firebase-credentials.json
+# Firebase - Keep root credentials for development, ignore others
 **/firebase-credentials.json
+!firebase-credentials.json
 
 # Google Cloud
 gcloud-credentials.json
@@ -74,9 +74,14 @@ yarn-debug.log*
 yarn-error.log*
 package-lock.json
 
-# React build
+# Build artifacts
+build/
+dist/
 */build/
 */dist/
+
+# Compiled binaries
+mcp_config_generator/converter
 
 # Go
 *.exe
