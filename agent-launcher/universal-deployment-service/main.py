@@ -341,11 +341,10 @@ async def deploy_agent(request: DeploymentRequest, background_tasks: BackgroundT
     """Deploy a universal agent with LLM-based optimizations"""
     try:
         # Validate required environment variables
-        project_id = os.getenv('PROJECT_ID') or os.getenv('project_id')
+        project_id = "alchemist-e69bb"  # Use hardcoded project ID
         openai_key = os.getenv('OPENAI_API_KEY') or os.getenv('openai_api_key')
         
-        if not project_id:
-            raise HTTPException(status_code=500, detail="PROJECT_ID not configured")
+        # PROJECT_ID validation removed - using hardcoded value
         
         if not openai_key:
             raise HTTPException(status_code=500, detail="OPENAI_API_KEY not configured")
@@ -502,7 +501,7 @@ async def health_check():
     """Health check endpoint for monitoring services"""
     try:
         # Check environment variables
-        project_id = os.getenv('PROJECT_ID') or os.getenv('project_id')
+        project_id = "alchemist-e69bb"  # Use hardcoded project ID
         openai_key = os.getenv('OPENAI_API_KEY') or os.getenv('openai_api_key')
         
         # Check Firebase connection
