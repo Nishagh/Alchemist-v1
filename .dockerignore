@@ -1,0 +1,108 @@
+# Dockerignore for Agent Launcher
+# Only include agent-launcher directory, exclude everything else
+
+# Exclude all other services
+admin-dashboard/
+agent-bridge/
+agent-engine/
+agent-studio/
+agent-tuning-service/
+alchemist-monitor-service/
+banking-api-service/
+knowledge-vault/
+mcp_config_generator/
+prompt-engine/
+sandbox-console/
+tool-forge/
+user-deployment-monitor/
+
+# Exclude documentation and scripts
+docs/
+scripts/
+tools/
+deployment/
+
+# Exclude build artifacts and dependencies
+**/node_modules/
+**/build/
+**/dist/
+**/.next/
+**/coverage/
+
+# Exclude git and version control
+.git/
+.gitignore
+**/.gitkeep
+
+# Exclude temporary and cache files
+**/.cache/
+**/tmp/
+**/temp/
+**/*.tmp
+**/*.log
+**/*.pid
+**/*.seed
+**/*.pid.lock
+
+# Exclude test files and data
+**/tests/
+**/*test*/
+**/test_*/
+**/*.test.js
+**/*.spec.js
+
+# Exclude development files
+**/.env*
+!**/.env.example
+**/.vscode/
+**/.idea/
+**/*.swp
+**/*.swo
+
+# Exclude OS files
+.DS_Store
+Thumbs.db
+**/.DS_Store
+**/Thumbs.db
+
+# Exclude Python cache and virtual environments
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/venv/
+**/env/
+**/.venv/
+**/test_env/
+**/*.egg-info/
+
+# Exclude vector data and large files
+**/vector_data*/
+**/*.bin
+**/*.sqlite3
+**/*.db
+
+# Exclude credentials and config files that shouldn't be in container
+firebase-credentials.json
+**/firebase-credentials.json
+
+# Exclude shared libraries build artifacts
+shared/build/
+shared/dist/
+
+# Include only what we need for agent-launcher
+!agent-launcher/
+!shared/
+
+# Within agent-launcher, exclude test files
+agent-launcher/**/tests/
+agent-launcher/**/*test*
+agent-launcher/**/vector_data*/
+agent-launcher/**/*.bin
+agent-launcher/**/*.sqlite3
+
+# Exclude deployment configs at root
+cloudbuild*.yaml
+deploy*.sh
+docker-compose*.yml
+Makefile

@@ -1,0 +1,62 @@
+# Agent Launcher Specific Dockerignore
+# This assumes Docker context is /agent-launcher/
+
+# Exclude test and development files
+tests/
+**/tests/
+test_*/
+**/*test*
+*.test.py
+*.spec.py
+
+# Exclude Python cache and virtual environments
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+.venv/
+test_env/
+*.egg-info/
+
+# Exclude vector data and large files
+vector_data*/
+**/*.bin
+**/*.sqlite3
+**/*.db
+
+# Exclude credentials
+firebase-credentials.json
+**/firebase-credentials.json
+
+# Exclude temporary and cache files
+.cache/
+tmp/
+temp/
+*.tmp
+*.log
+*.pid
+*.seed
+*.pid.lock
+
+# Exclude development files
+.env*
+!.env.example
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Exclude OS files
+.DS_Store
+Thumbs.db
+
+# Exclude git
+.git/
+.gitignore
+
+# Exclude documentation
+*.md
+!README.md
