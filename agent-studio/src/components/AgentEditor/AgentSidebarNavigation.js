@@ -28,7 +28,6 @@ import {
   Api as ApiIcon,
   BugReport as BugReportIcon,
   CloudUpload as CloudUploadIcon,
-  Analytics as AnalyticsIcon,
   Menu as MenuIcon,
   ChevronLeft as ChevronLeftIcon,
   ExpandLess,
@@ -92,12 +91,6 @@ const navigationItems = [
         description: 'Embed agent on your website'
       }
     ]
-  },
-  {
-    id: 'analytics',
-    label: 'Analytics',
-    icon: AnalyticsIcon,
-    description: 'Monitor usage and performance metrics'
   }
 ];
 

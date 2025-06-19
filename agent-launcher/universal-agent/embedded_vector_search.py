@@ -4,18 +4,19 @@ Embedded Vector Search for Agent
 
 This module provides direct ChromaDB vector search functionality embedded within the agent,
 eliminating the need for API calls to a separate knowledge base service.
-Based on the Knowledge Base Service implementation.
+Uses direct OpenAI embeddings API instead of LangChain.
 """
 
 import os
 import logging
 import json
+import asyncio
 from typing import Dict, Any, List, Optional, Tuple
 from pathlib import Path
 
 import chromadb
-from langchain_openai import OpenAIEmbeddings
-from langchain.tools import Tool
+from services.direct_embeddings_service import DirectEmbeddingsService, create_embeddings_service
+from services.direct_tool_system import ToolRegistry
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -47,9 +48,9 @@ class EmbeddedVectorSearch:
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
         
-        # Initialize OpenAI embeddings
-        self.embeddings = OpenAIEmbeddings(
-            openai_api_key=openai_api_key,
+        # Initialize direct embeddings service
+        self.embeddings_service = create_embeddings_service(
+            api_key=openai_api_key,
             model="text-embedding-3-small",
             dimensions=1536
         )
@@ -432,25 +433,21 @@ class EmbeddedVectorSearch:
             return 0
 
 
-def create_embedded_vector_tools(agent_config: Dict[str, Any]) -> List[Tool]:
+def register_embedded_vector_tools(registry: ToolRegistry, agent_config: Dict[str, Any]) -> None:
     """
-    Create LangChain tools for embedded vector search.
+    Register embedded vector search tools with the tool registry.
     
     Args:
+        registry: Tool registry to register with
         agent_config: Agent configuration containing agent_id and openai_api_key
-        
-    Returns:
-        List of LangChain tools for vector operations
     """
-    tools = []
-    
     try:
         agent_id = agent_config.get('agent_id')
         openai_api_key = agent_config.get('openai_api_key')
         
         if not agent_id or not openai_api_key:
             logger.warning("Missing agent_id or openai_api_key for embedded vector search")
-            return tools
+            return
         
         # Initialize embedded vector search
         vector_search = EmbeddedVectorSearch(
@@ -516,32 +513,39 @@ def create_embedded_vector_tools(agent_config: Dict[str, Any]) -> List[Tool]:
             except Exception as e:
                 return f"Error getting knowledge base statistics: {str(e)}"
         
-        # Create LangChain tools
-        search_tool = Tool(
+        # Register tools with the registry
+        registry.register_tool(
             name="search_embedded_knowledge_base",
-            description="Search the agent's embedded knowledge base for relevant information. Use this when you need to find specific information that might be stored in the agent's knowledge base.",
-            func=search_vectors
+            func=search_vectors,
+            description="Search the agent's embedded knowledge base for relevant information. Use this when you need to find specific information that might be stored in the agent's knowledge base."
         )
         
-        add_tool = Tool(
+        registry.register_tool(
             name="add_to_embedded_knowledge_base",
-            description="Add new information to the agent's embedded knowledge base for future reference. Use this to store important information learned during conversations.",
-            func=add_to_vectors
+            func=add_to_vectors,
+            description="Add new information to the agent's embedded knowledge base for future reference. Use this to store important information learned during conversations."
         )
         
-        stats_tool = Tool(
+        registry.register_tool(
             name="knowledge_base_stats",
-            description="Get statistics about the agent's knowledge base, including the number of stored documents.",
-            func=get_kb_stats
+            func=get_kb_stats,
+            description="Get statistics about the agent's knowledge base, including the number of stored documents."
         )
         
-        tools.extend([search_tool, add_tool, stats_tool])
-        logger.info(f"Created {len(tools)} embedded vector search tools")
+        logger.info("Registered 3 embedded vector search tools with registry")
         
     except Exception as e:
-        logger.error(f"Error creating embedded vector tools: {str(e)}")
-    
-    return tools
+        logger.error(f"Error registering embedded vector tools: {str(e)}")
+
+
+# Backward compatibility function
+def create_embedded_vector_tools(agent_config: Dict[str, Any]) -> List:
+    """
+    Backward compatibility function for creating embedded vector tools.
+    Returns empty list since we now use tool registry.
+    """
+    logger.warning("create_embedded_vector_tools is deprecated. Use register_embedded_vector_tools instead.")
+    return []
 
 
 # Import time for timestamp generation

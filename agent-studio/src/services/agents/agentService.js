@@ -55,6 +55,48 @@ export const updateAgent = async (agentId, agentData) => {
 };
 
 /**
+ * Get an agent by ID
+ */
+export const getAgent = async (agentId) => {
+  try {
+    // Get current user ID
+    const currentUser = auth.currentUser;
+    const userId = currentUser?.uid;
+    
+    if (!userId) {
+      throw new Error('User not authenticated');
+    }
+    
+    // Get agent from Firestore directly since it's more reliable
+    const { db } = await import('../../utils/firebase');
+    const { doc, getDoc } = await import('firebase/firestore');
+    
+    const agentRef = doc(db, 'alchemist_agents', agentId);
+    const agentDoc = await getDoc(agentRef);
+    
+    if (!agentDoc.exists()) {
+      throw new Error('Agent not found');
+    }
+    
+    const agentData = agentDoc.data();
+    
+    // Check if user owns this agent
+    if (agentData.userId !== userId) {
+      throw new Error('Access denied: You do not own this agent');
+    }
+    
+    return {
+      id: agentDoc.id,
+      agent_id: agentDoc.id,
+      ...agentData
+    };
+  } catch (error) {
+    console.error(`Error getting agent ${agentId}:`, error);
+    throw error;
+  }
+};
+
+/**
  * Delete an agent
  */
 export const deleteAgent = async (agentId) => {

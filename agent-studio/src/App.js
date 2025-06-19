@@ -13,6 +13,8 @@ import Layout from './components/Layout';
 // Import pages
 import AgentEditor from './pages/AgentEditor';
 import AgentsList from './pages/AgentsList';
+import AgentTesting from './pages/AgentTesting';
+import AgentAnalytics from './pages/AgentAnalytics';
 import KnowledgeBase from './pages/KnowledgeBase';
 import ApiIntegration from './pages/ApiIntegration';
 import LandingPage from './pages/LandingPage';
@@ -191,6 +193,14 @@ function App() {
     {
       path: '/api-integration/:agentId',
       element: <ProtectedRoute><ApiIntegration /></ProtectedRoute>
+    },
+    {
+      path: '/agent-testing/:agentId',
+      element: <ProtectedRoute><AgentTesting /></ProtectedRoute>
+    },
+    {
+      path: '/agent-analytics/:agentId',
+      element: <ProtectedRoute><AgentAnalytics /></ProtectedRoute>
     },
   ]);
 

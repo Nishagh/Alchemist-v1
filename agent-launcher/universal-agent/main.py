@@ -11,6 +11,7 @@ Key features:
 - Embedded vector search with pre-computed embeddings
 - Enhanced MCP tool integration
 - Universal compatibility for any agent type
+- Direct API integration (no LangChain dependency)
 """
 
 import os
@@ -21,7 +22,7 @@ from datetime import datetime
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
@@ -32,7 +33,12 @@ load_dotenv()
 from config_loader import load_agent_config
 import firebase_admin
 from firebase_admin import credentials, firestore
-from langchain.tools import BaseTool
+
+# Import our direct API services
+from services.direct_llm_service import DirectLLMService, create_llm_service
+from services.direct_tool_system import ToolRegistry, register_tool
+from services.conversation_manager import ConversationManager, create_conversation_manager
+from services.message_types import HumanMessage, AIMessage
 
 # Set up logging
 logging.basicConfig(
@@ -78,6 +84,7 @@ class MessageResponse(BaseModel):
     status: str
     response: str
     conversation_id: str
+    token_usage: Optional[Dict[str, int]] = None
 
 class WebhookNotification(BaseModel):
     event_type: str  # document_added, document_updated, document_deleted
@@ -87,7 +94,9 @@ class WebhookNotification(BaseModel):
     timestamp: str
 
 # Global variables for pre-initialized components
-agent_executor = None
+llm_service = None
+tool_registry = None
+conversation_manager = None
 firebase_service = None
 conversation_repo = None
 embedded_vector_search = None
@@ -97,7 +106,7 @@ whatsapp_webhook_handler = None
 
 async def initialize_agent():
     """Initialize agent components with dynamically loaded configuration"""
-    global agent_executor, firebase_service, conversation_repo, embedded_vector_search, whatsapp_service, whatsapp_webhook_handler, AGENT_CONFIG
+    global llm_service, tool_registry, conversation_manager, firebase_service, conversation_repo, embedded_vector_search, whatsapp_service, whatsapp_webhook_handler, AGENT_CONFIG
     
     try:
         # Get agent ID from environment
@@ -122,8 +131,14 @@ async def initialize_agent():
         # Initialize embedded vector search
         embedded_vector_search = initialize_embedded_vector_search()
         
-        # Initialize LangChain agent with pre-built tools and configuration
-        agent_executor = await initialize_langchain_agent()
+        # Initialize direct LLM service
+        llm_service = initialize_direct_llm_service()
+        
+        # Initialize tool registry and register tools
+        tool_registry = initialize_tool_registry()
+        
+        # Initialize conversation manager
+        conversation_manager = initialize_conversation_manager()
         
         # Initialize WhatsApp service if configured
         whatsapp_service = initialize_whatsapp_service()
@@ -274,15 +289,10 @@ def initialize_conversation_repository(db):
     return ConversationRepository(db)
 
 
-async def initialize_langchain_agent():
-    """Initialize LangChain agent with dynamically loaded configuration"""
+def initialize_direct_llm_service():
+    """Initialize direct LLM service with dynamically loaded configuration"""
     try:
-        from langchain.agents import AgentExecutor, create_openai_tools_agent
-        from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-        from langchain.chat_models import init_chat_model
-        from langchain_core.messages import AIMessage, HumanMessage
-        
-        # Initialize LLM with configuration from Firestore
+        # Get configuration
         model = AGENT_CONFIG.get('model', 'gpt-4')
         openai_key = (AGENT_CONFIG.get('openai_api_key') or 
                      os.getenv('OPENAI_API_KEY') or 
@@ -291,114 +301,112 @@ async def initialize_langchain_agent():
         if not openai_key:
             raise ValueError("OpenAI API key not found. Please check OPENAI_API_KEY environment variable.")
         
-        llm = init_chat_model(
-            model, 
-            model_provider="openai",
-            api_key=openai_key
-        )
+        # Create direct LLM service
+        service = create_llm_service(api_key=openai_key, model=model)
         
-        # Initialize tools with dynamic configuration
-        tools = initialize_agent_tools()
-        
-        # Create prompt template with dynamically loaded system prompt
-        system_prompt = AGENT_CONFIG.get('system_prompt', 'You are a helpful AI assistant.')
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
-            MessagesPlaceholder(variable_name="chat_history"),
-            ("human", "{input}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad"),
-        ])
-        
-        # Create agent
-        agent = create_openai_tools_agent(llm, tools, prompt)
-        
-        # Create agent executor
-        agent_executor = AgentExecutor(
-            agent=agent,
-            tools=tools,
-            verbose=True,
-            max_iterations=25,
-            return_intermediate_steps=True
-        )
-        
-        logger.info(f"LangChain agent initialized with {len(tools)} tools")
-        return agent_executor
+        logger.info(f"Direct LLM service initialized with model: {model}")
+        return service
         
     except Exception as e:
-        logger.error(f"LangChain agent initialization failed: {str(e)}")
+        logger.error(f"Direct LLM service initialization failed: {str(e)}")
         raise
 
 
-def initialize_agent_tools():
-    """Initialize all agent tools with dynamic configuration"""
-    tools = []
-    
+def initialize_tool_registry():
+    """Initialize tool registry and register all available tools"""
     try:
-        # Initialize Knowledge Base tools if configured
+        # Create tool registry
+        registry = ToolRegistry(namespace=AGENT_CONFIG.get('agent_id', 'default'))
+        
+        # Register tools with dynamic configuration
+        register_agent_tools(registry)
+        
+        logger.info(f"Tool registry initialized with {len(registry.list_tools())} tools")
+        return registry
+        
+    except Exception as e:
+        logger.error(f"Tool registry initialization failed: {str(e)}")
+        raise
+
+
+def initialize_conversation_manager():
+    """Initialize conversation manager with LLM service and tools"""
+    try:
+        # Get system prompt
+        system_prompt = AGENT_CONFIG.get('system_prompt', 'You are a helpful AI assistant.')
+        
+        # Create conversation manager
+        manager = create_conversation_manager(
+            llm_service=llm_service,
+            tool_registry=tool_registry,
+            system_prompt=system_prompt,
+            max_turns_per_conversation=50,
+            max_tool_iterations=25
+        )
+        
+        logger.info("Conversation manager initialized successfully")
+        return manager
+        
+    except Exception as e:
+        logger.error(f"Conversation manager initialization failed: {str(e)}")
+        raise
+
+
+def register_agent_tools(registry: ToolRegistry):
+    """Register all agent tools with the tool registry"""
+    try:
+        # Register Knowledge Base tools if configured
         if AGENT_CONFIG.get('knowledge_base_url'):
-            kb_tools = initialize_knowledge_base_tools()
-            tools.extend(kb_tools)
-            logger.info(f"Initialized {len(kb_tools)} knowledge base tools")
+            register_knowledge_base_tools(registry)
+            logger.info("Registered knowledge base tools")
         
-        # Initialize MCP tools if configured  
+        # Register MCP tools if configured  
         if AGENT_CONFIG.get('mcp_server_url'):
-            mcp_tools = initialize_mcp_tools()
-            tools.extend(mcp_tools)
-            logger.info(f"Initialized {len(mcp_tools)} MCP tools")
+            register_mcp_tools(registry)
+            logger.info("Registered MCP tools")
         
-        # Add custom tools
-        custom_tools = initialize_custom_tools()
-        tools.extend(custom_tools)
+        # Register custom tools
+        register_custom_tools(registry)
+        logger.info("Registered custom tools")
         
-        logger.info(f"Total tools initialized: {len(tools)}")
-        return tools
+        logger.info(f"Total tools registered: {len(registry.list_tools())}")
         
     except Exception as e:
-        logger.error(f"Tool initialization failed: {str(e)}")
-        return []
+        logger.error(f"Tool registration failed: {str(e)}")
+        raise
 
 
-def initialize_knowledge_base_tools():
-    """Initialize embedded vector search tools"""
+def register_knowledge_base_tools(registry: ToolRegistry):
+    """Register embedded vector search tools"""
     try:
-        from embedded_vector_search import create_embedded_vector_tools
-        kb_tools = create_embedded_vector_tools(AGENT_CONFIG)
-        logger.info(f"Initialized {len(kb_tools)} embedded vector search tools")
-        return kb_tools
+        from embedded_vector_search import register_embedded_vector_tools
+        register_embedded_vector_tools(registry, AGENT_CONFIG)
+        logger.info("Registered embedded vector search tools")
     except Exception as e:
-        logger.error(f"Failed to initialize embedded vector search tools: {str(e)}")
-        return []
+        logger.error(f"Failed to register embedded vector search tools: {str(e)}")
 
 
-def initialize_mcp_tools():
-    """Initialize MCP tools with dynamic optimizations"""
-    tools = []
+def register_mcp_tools(registry: ToolRegistry):
+    """Register MCP tools with dynamic optimizations"""
     try:
         mcp_server_url = AGENT_CONFIG.get('mcp_server_url')
         if mcp_server_url:
             # Import the MCP tools with optimization support
-            from mcp_tool import get_mcp_tools_sync
+            from mcp_tool import register_mcp_tools_with_registry_sync
             logger.info(f"🔗 Integrating MCP server: {mcp_server_url}")
             
             # Pass optimization config to MCP tools
-            mcp_tools = get_mcp_tools_sync(mcp_server_url, AGENT_CONFIG)
-            tools.extend(mcp_tools)
-            logger.info(f"✅ Successfully integrated {len(mcp_tools)} MCP tools")
+            register_mcp_tools_with_registry_sync(registry, mcp_server_url, AGENT_CONFIG)
+            logger.info(f"✅ Successfully integrated MCP tools")
         else:
             logger.info("No MCP server URL configured")
     except Exception as e:
-        logger.error(f"❌ Failed to integrate MCP server {mcp_server_url}: {str(e)}")
-    
-    return tools
+        logger.error(f"❌ Failed to integrate MCP server: {str(e)}")
 
 
-def initialize_custom_tools():
-    """Initialize custom utility tools"""
-    tools = []
-    
-    try:
-        from langchain.tools import Tool
-        
+def register_custom_tools(registry: ToolRegistry):
+    """Register custom utility tools"""
+    try:        
         def get_current_time() -> str:
             """Get the current date and time"""
             from datetime import datetime
@@ -407,38 +415,37 @@ def initialize_custom_tools():
         def agent_info() -> str:
             """Get information about this AI agent"""
             domain_info = AGENT_CONFIG.get('_domain_info', {})
+            tool_count = len(registry.list_tools()) + 2  # +2 for the tools we're about to add
             return f"""
 Agent Information:
 - Agent ID: {AGENT_CONFIG['agent_id']}
 - Name: {AGENT_CONFIG.get('name', 'Unknown')}
 - Domain: {domain_info.get('detected_domain', 'general')}
 - Model: {AGENT_CONFIG.get('model', 'gpt-4')}
-- Tools Available: {len(initialize_agent_tools())}
+- Tools Available: {tool_count}
 - Knowledge Base: {'Enabled' if AGENT_CONFIG.get('knowledge_base_url') else 'Disabled'}
 - MCP Tools: {'Enabled' if AGENT_CONFIG.get('mcp_server_url') else 'Disabled'}
 - Optimization Applied: {'Yes' if '_domain_info' in AGENT_CONFIG else 'No'}
 """
         
-        # Create custom tools
-        time_tool = Tool(
+        # Register custom tools with the registry
+        registry.register_tool(
             name="get_current_time",
-            description="Get the current date and time",
-            func=get_current_time
+            func=get_current_time,
+            description="Get the current date and time"
         )
         
-        info_tool = Tool(
-            name="agent_info", 
-            description="Get information about this AI agent's capabilities and configuration",
-            func=agent_info
+        registry.register_tool(
+            name="agent_info",
+            func=agent_info,
+            description="Get information about this AI agent's capabilities and configuration"
         )
         
-        tools.extend([time_tool, info_tool])
-        logger.info("Initialized custom utility tools")
+        logger.info("Registered custom utility tools")
         
     except Exception as e:
-        logger.error(f"Failed to initialize custom tools: {str(e)}")
-    
-    return tools
+        logger.error(f"Failed to register custom tools: {str(e)}")
+        raise
 
 
 def initialize_embedded_vector_search():
@@ -650,10 +657,11 @@ async def root():
         "name": AGENT_CONFIG.get('name'),
         "domain": AGENT_CONFIG.get('_domain_info', {}).get('detected_domain', 'general'),
         "model": AGENT_CONFIG.get('model'),
-        "tools_count": len(agent_executor.tools) if agent_executor else 0,
+        "tools_count": len(tool_registry.list_tools()) if tool_registry else 0,
+        "llm_service": "direct_api" if llm_service else "not_initialized",
         "whatsapp_enabled": whatsapp_service.is_enabled() if whatsapp_service else False,
-        "version": "1.0.0",
-        "type": "universal"
+        "version": "2.0.0",
+        "type": "universal_direct_api"
     }
 
 
@@ -675,48 +683,67 @@ async def create_conversation(request: CreateConversationRequest):
 async def process_message(request: ProcessMessageRequest):
     """Process a user message and return agent response"""
     try:
-        # Add user message to conversation
-        conversation_repo.add_message(
-            request.conversation_id, 
-            "user", 
-            request.message
+        # Process message using conversation manager
+        result = await conversation_manager.process_message(
+            conversation_id=request.conversation_id,
+            message=request.message,
+            user_id=request.user_id
         )
         
-        # Get conversation history
-        messages = conversation_repo.get_messages(request.conversation_id)
+        if not result.success:
+            logger.error(f"Message processing failed: {result.error}")
+            raise HTTPException(status_code=500, detail=result.error or "Message processing failed")
         
-        # Convert to LangChain message format
-        from langchain_core.messages import AIMessage, HumanMessage
-        chat_history = []
-        for msg in messages[:-1]:  # Exclude the message we just added
-            if msg['role'] == 'user':
-                chat_history.append(HumanMessage(content=msg['content']))
-            elif msg['role'] == 'assistant':
-                chat_history.append(AIMessage(content=msg['content']))
-        
-        # Process with agent
-        result = await agent_executor.ainvoke({
-            "input": request.message,
-            "chat_history": chat_history
-        })
-        
-        response_text = result.get('output', 'Sorry, I could not process your request.')
-        
-        # Add agent response to conversation
-        conversation_repo.add_message(
-            request.conversation_id,
-            "assistant", 
-            response_text
-        )
+        # Also add to conversation repository for backward compatibility
+        try:
+            conversation_repo.add_message(request.conversation_id, "user", request.message)
+            conversation_repo.add_message(request.conversation_id, "assistant", result.response)
+        except Exception as e:
+            logger.warning(f"Failed to update conversation repository: {str(e)}")
         
         return MessageResponse(
             status="success",
-            response=response_text,
-            conversation_id=request.conversation_id
+            response=result.response,
+            conversation_id=result.conversation_id,
+            token_usage={
+                "prompt_tokens": result.token_usage.prompt_tokens,
+                "completion_tokens": result.token_usage.completion_tokens,
+                "total_tokens": result.token_usage.total_tokens
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error processing message: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/conversation/message/stream")
+async def process_message_stream(request: ProcessMessageRequest):
+    """Process a user message and return streaming response"""
+    try:
+        async def generate():
+            async for chunk in conversation_manager.stream_response(
+                conversation_id=request.conversation_id,
+                message=request.message,
+                user_id=request.user_id
+            ):
+                # Format as Server-Sent Events
+                yield f"data: {chunk}\n\n"
+        
+        return StreamingResponse(
+            generate(),
+            media_type="text/plain",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no"  # Disable nginx buffering
+            }
         )
         
     except Exception as e:
-        logger.error(f"Error processing message: {str(e)}")
+        logger.error(f"Error processing streaming message: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -736,6 +763,56 @@ async def get_conversation_messages(conversation_id: str, limit: int = 50):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/conversation/{conversation_id}/stats")
+async def get_conversation_stats(conversation_id: str):
+    """Get conversation statistics including token usage"""
+    try:
+        stats = conversation_manager.get_conversation_stats(conversation_id)
+        if not stats:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        
+        # Add LLM service token usage
+        llm_usage = llm_service.get_token_usage()
+        stats["llm_total_tokens"] = {
+            "prompt_tokens": llm_usage.prompt_tokens,
+            "completion_tokens": llm_usage.completion_tokens,
+            "total_tokens": llm_usage.total_tokens
+        }
+        
+        return {
+            "status": "success",
+            "stats": stats
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting conversation stats: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/token-usage")
+async def get_token_usage():
+    """Get overall token usage statistics"""
+    try:
+        llm_usage = llm_service.get_token_usage()
+        
+        return {
+            "status": "success",
+            "token_usage": {
+                "prompt_tokens": llm_usage.prompt_tokens,
+                "completion_tokens": llm_usage.completion_tokens,
+                "total_tokens": llm_usage.total_tokens
+            },
+            "model": llm_service.model,
+            "service_type": "direct_api"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting token usage: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # Health check for Cloud Run
 @app.get("/healthz")
 async def health_check():
@@ -745,7 +822,9 @@ async def health_check():
         "timestamp": datetime.now().isoformat(),
         "agent_id": AGENT_CONFIG.get('agent_id', 'unknown'),
         "config_loaded": bool(AGENT_CONFIG),
-        "tools_initialized": agent_executor is not None,
+        "llm_service_ready": llm_service is not None,
+        "conversation_manager_ready": conversation_manager is not None,
+        "tools_count": len(tool_registry.list_tools()) if tool_registry else 0,
         "whatsapp_enabled": whatsapp_service.is_enabled() if whatsapp_service else False
     }
 
@@ -761,7 +840,9 @@ async def get_config():
         "has_mcp_server": bool(AGENT_CONFIG.get('mcp_server_url')),
         "has_knowledge_base": bool(AGENT_CONFIG.get('knowledge_base_url')),
         "model": AGENT_CONFIG.get('model'),
-        "tools_count": len(agent_executor.tools) if agent_executor else 0,
+        "tools_count": len(tool_registry.list_tools()) if tool_registry else 0,
+        "llm_service_model": llm_service.model if llm_service else None,
+        "conversation_manager_ready": conversation_manager is not None,
         "whatsapp_enabled": whatsapp_service.is_enabled() if whatsapp_service else False,
         "whatsapp_phone_id": AGENT_CONFIG.get('whatsapp', {}).get('phone_id') if whatsapp_service and whatsapp_service.is_enabled() else None
     }

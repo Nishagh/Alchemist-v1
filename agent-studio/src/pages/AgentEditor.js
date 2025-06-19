@@ -20,7 +20,6 @@ import KnowledgeBaseManager from '../components/AgentEditor/KnowledgeBase/Knowle
 import ApiIntegrationManager from '../components/AgentEditor/ApiIntegration/ApiIntegrationManager';
 import AgentTestingInterface from '../components/AgentEditor/AgentTesting/AgentTestingInterface';
 import AgentDeploymentManager from '../components/AgentEditor/AgentDeployment/AgentDeploymentManager';
-import AgentAnalyticsManager from '../components/AgentEditor/AgentAnalytics/AgentAnalyticsManager';
 import AgentIntegrationManager from '../components/AgentEditor/AgentIntegration/AgentIntegrationManager';
 
 // Import hooks and services
@@ -246,15 +245,6 @@ const AgentEditor = () => {
             onNotification={handleNotification}
             disabled={saving}
             activeSection={activeSection}
-          />
-        );
-
-      case 'analytics':
-        return (
-          <AgentAnalyticsManager
-            agentId={agentId}
-            onNotification={handleNotification}
-            disabled={saving}
           />
         );
 

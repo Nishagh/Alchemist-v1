@@ -4,6 +4,7 @@ REST-based MCP Integration for Standalone Agent
 
 This module provides integration with REST-based MCP servers, allowing the agent to use
 tools and resources from external MCP servers via HTTP requests.
+Uses direct tool system instead of LangChain.
 """
 import json
 import logging
@@ -11,7 +12,7 @@ import asyncio
 import httpx
 from typing import Dict, Any, List, Optional
 
-from langchain.tools import Tool
+from services.direct_tool_system import ToolRegistry, Tool
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -209,7 +210,97 @@ class RESTMCPClient:
         return self.tools_cache.copy()
 
 
-def create_rest_mcp_tool(tool_info: Dict[str, Any], mcp_client: RESTMCPClient, agent_config: dict = None) -> Tool:
+def register_rest_mcp_tool(registry: ToolRegistry, tool_info: Dict[str, Any], mcp_client: RESTMCPClient, agent_config: dict = None) -> None:
+    """
+    Register a single REST MCP tool with the tool registry.
+    
+    Args:
+        registry: Tool registry to register with
+        tool_info: Tool information from the MCP server
+        mcp_client: The REST MCP client instance
+        agent_config: Optional agent configuration for optimizations
+    """
+    tool_name = tool_info['name']
+    base_description = tool_info['description']
+    
+    # Use dynamic optimizations from agent config if available
+    tool_description = base_description
+    if agent_config and '_tool_optimizations' in agent_config:
+        tool_optimizations = agent_config['_tool_optimizations']
+        if tool_name in tool_optimizations:
+            tool_description = tool_optimizations[tool_name]
+            logger.info(f"🎯 Applied LLM optimization for tool: {tool_name}")
+    
+    # Fallback to static optimizations for banking if no dynamic config
+    if tool_description == base_description:
+        enhanced_descriptions = {
+            'getBalance': 'Get balance for a specific account using account ID (UUID). IMPORTANT: Only use this if you need balance for a specific account ID. NOTE: getCustomerInfo already includes balances for all customer accounts, so use that instead for general balance inquiries.',
+            'getCustomerInfo': 'Get detailed customer information including ALL account balances, account numbers, and account details. This response includes balance information for all accounts, so you typically do NOT need to call getBalance separately.',
+            'getAccounts': 'Get all accounts for a specific customer with optional filtering. Use this to get valid account IDs before calling account-specific tools.',
+            'getAccountDetails': 'Get detailed information for a specific account using account ID (UUID). Must use a valid account ID obtained from getCustomerInfo or getAccounts.',
+            'getTransactions': 'Get transactions for a specific account using account ID (UUID). Must use a valid account ID obtained from getCustomerInfo or getAccounts.',
+            'transferFunds': 'Transfer funds between accounts using valid account IDs (UUIDs). Must use valid account IDs obtained from getCustomerInfo or getAccounts.',
+            'getAllCustomers': 'Get a list of all customers with summary information. Use this to find customers before getting their detailed info.',
+        }
+        tool_description = enhanced_descriptions.get(tool_name, base_description)
+    
+    async def tool_func(**kwargs) -> str:
+        """
+        Tool function that calls the REST MCP server.
+        """
+        try:
+            result = await mcp_client.call_tool_rest(tool_name, kwargs)
+            
+            if result.get('success', False):
+                return result.get('result', 'Tool executed successfully')
+            else:
+                return f"Error executing tool {tool_name}: {result.get('error', 'Unknown error')}"
+                
+        except Exception as e:
+            logger.error(f"Error in REST MCP tool {tool_name}: {str(e)}")
+            return f"Error executing tool {tool_name}: {str(e)}"
+    
+    def sync_tool_func(**kwargs) -> str:
+        """
+        Synchronous wrapper for the async tool function.
+        """
+        try:
+            logger.info(f"🔧 Tool {tool_name} called with kwargs: {kwargs}")
+            
+            # Run the async function in the event loop
+            try:
+                # Try to get the current event loop
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # We're in an async context but need to run async code
+                    # Use asyncio.run in a thread pool executor
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(asyncio.run, tool_func(**kwargs))
+                        return future.result()
+                else:
+                    # We have a loop but it's not running, use it
+                    return loop.run_until_complete(tool_func(**kwargs))
+            except RuntimeError as re:
+                # No event loop in this thread, create a new one
+                if "There is no current event loop" in str(re) or "no running event loop" in str(re):
+                    return asyncio.run(tool_func(**kwargs))
+                else:
+                    # Some other RuntimeError, re-raise
+                    raise
+        except Exception as e:
+            logger.error(f"Error in sync REST MCP tool wrapper for {tool_name}: {str(e)}")
+            return f"Error executing tool {tool_name}: {str(e)}"
+    
+    # Register the tool with the registry
+    registry.register_tool(
+        name=tool_name,
+        func=sync_tool_func,
+        description=tool_description
+    )
+
+
+def create_rest_mcp_tool(tool_info: Dict[str, Any], mcp_client: RESTMCPClient, agent_config: dict = None):
     """
     Create a LangChain tool from REST MCP tool information.
     
@@ -370,16 +461,55 @@ async def get_mcp_tools(server_url: str, agent_config: dict = None) -> List[Tool
         return []
 
 
-def get_mcp_tools_sync(server_url: str, agent_config: dict = None) -> List[Tool]:
+async def register_mcp_tools_with_registry(registry: ToolRegistry, server_url: str, agent_config: dict = None) -> None:
     """
-    Synchronous wrapper to get REST MCP tools with optional configuration.
+    Register REST MCP tools with the tool registry.
     
     Args:
+        registry: Tool registry to register tools with
         server_url: URL of the MCP server
         agent_config: Optional agent configuration for optimizations
+    """
+    try:
+        logger.info(f"🚀 Registering REST MCP tools from server: {server_url}")
         
-    Returns:
-        List of LangChain Tool instances
+        # Initialize the REST MCP client
+        mcp_client = RESTMCPClient(server_url)
+        
+        # Check server health first
+        if not await mcp_client.check_health():
+            logger.error("❌ Server health check failed")
+            return
+        
+        # Discover available tools
+        tool_infos = await mcp_client.discover_tools()
+        
+        if not tool_infos:
+            logger.warning("⚠️ No tools discovered from MCP server")
+            return
+        
+        # Register tools with the registry
+        for tool_info in tool_infos:
+            try:
+                register_rest_mcp_tool(registry, tool_info, mcp_client, agent_config)
+                logger.info(f"✅ Registered tool: {tool_info['name']}")
+            except Exception as e:
+                logger.error(f"❌ Failed to register tool {tool_info['name']}: {str(e)}")
+        
+        logger.info(f"🎉 Successfully registered {len(tool_infos)} REST MCP tools")
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to register REST MCP tools from {server_url}: {str(e)}")
+
+
+def register_mcp_tools_with_registry_sync(registry: ToolRegistry, server_url: str, agent_config: dict = None) -> None:
+    """
+    Synchronous wrapper to register REST MCP tools with registry.
+    
+    Args:
+        registry: Tool registry to register tools with
+        server_url: URL of the MCP server
+        agent_config: Optional agent configuration for optimizations
     """
     try:
         loop = asyncio.get_event_loop()
@@ -387,10 +517,24 @@ def get_mcp_tools_sync(server_url: str, agent_config: dict = None) -> List[Tool]
             # If we're in an async context, use a thread executor
             import concurrent.futures
             with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(asyncio.run, get_mcp_tools(server_url, agent_config))
+                future = executor.submit(asyncio.run, register_mcp_tools_with_registry(registry, server_url, agent_config))
                 return future.result()
         else:
-            return loop.run_until_complete(get_mcp_tools(server_url, agent_config))
+            return loop.run_until_complete(register_mcp_tools_with_registry(registry, server_url, agent_config))
     except Exception as e:
-        logger.error(f"❌ Error in sync REST MCP tools wrapper: {str(e)}")
-        return [] 
+        logger.error(f"❌ Error in sync REST MCP tools registration: {str(e)}")
+
+
+def get_mcp_tools_sync(server_url: str, agent_config: dict = None) -> List:
+    """
+    Backward compatibility function - returns empty list since we now use tool registry.
+    
+    Args:
+        server_url: URL of the MCP server
+        agent_config: Optional agent configuration for optimizations
+        
+    Returns:
+        Empty list (backward compatibility)
+    """
+    logger.warning("get_mcp_tools_sync is deprecated. Use register_mcp_tools_with_registry instead.")
+    return [] 

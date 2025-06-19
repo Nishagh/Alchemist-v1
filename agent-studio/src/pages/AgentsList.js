@@ -38,7 +38,8 @@ import {
   Code as CodeIcon,
   MenuBook as MenuBookIcon,
   TrendingUp as TrendingUpIcon,
-  Speed as SpeedIcon
+  Speed as SpeedIcon,
+  PlayArrow as PlayArrowIcon
 } from '@mui/icons-material';
 import { deleteAgent } from '../services';
 import { useAuth } from '../utils/AuthContext';
@@ -747,6 +748,34 @@ const AgentsList = () => {
                                   }}
                                 >
                                   KB
+                                </Button>
+                                
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  startIcon={<PlayArrowIcon />}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (agent?.agent_id) {
+                                      navigate(`/agent-testing/${agent.agent_id}`);
+                                    }
+                                  }}
+                                  sx={{
+                                    borderRadius: 2,
+                                    textTransform: 'none',
+                                    fontWeight: 'medium',
+                                    fontSize: '0.8rem',
+                                    borderColor: alpha(theme.palette.success.main, 0.8),
+                                    color: theme.palette.success.main,
+                                    '&:hover': {
+                                      borderColor: theme.palette.success.main,
+                                      backgroundColor: alpha(theme.palette.success.main, 0.1),
+                                      transform: 'translateY(-1px)',
+                                      boxShadow: '0 2px 8px rgba(76, 175, 80, 0.2)'
+                                    }
+                                  }}
+                                >
+                                  Test
                                 </Button>
                               </Box>
                               
