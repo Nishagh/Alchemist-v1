@@ -30,9 +30,8 @@ class AgentConfigLoader:
         # Load from .env file first
         load_dotenv()
         
-        self.project_id = os.getenv('PROJECT_ID') or os.getenv('project_id')
-        if not self.project_id:
-            raise ValueError("project_id must be set in .env file")
+        # Use hardcoded project ID
+        self.project_id = "alchemist-e69bb"
         
         self._init_firebase()
         self._optimization_cache = {}

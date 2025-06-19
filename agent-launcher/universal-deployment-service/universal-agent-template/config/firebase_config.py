@@ -33,7 +33,8 @@ class FirebaseSettings:
     
     def __post_init__(self):
         """Initialize settings from environment variables."""
-        self.project_id = os.getenv("GOOGLE_CLOUD_PROJECT", self.project_id)
+        # Use hardcoded project ID
+        self.project_id = "alchemist-e69bb"
         self.credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", self.credentials_path)
         self.storage_bucket = os.getenv("FIREBASE_STORAGE_BUCKET", self.storage_bucket)
         

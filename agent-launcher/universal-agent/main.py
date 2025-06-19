@@ -814,7 +814,7 @@ async def get_token_usage():
 
 
 # Health check for Cloud Run
-@app.get("/healthz")
+@app.get("/health")
 async def health_check():
     """Health check endpoint for Cloud Run"""
     return {

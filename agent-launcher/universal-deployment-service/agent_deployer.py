@@ -50,10 +50,8 @@ class UniversalAgentDeployer:
         from dotenv import load_dotenv
         load_dotenv()
         
-        # Get configuration from .env file
-        self.project_id = os.getenv('PROJECT_ID') or os.getenv('project_id')
-        if not self.project_id:
-            raise ValueError("project_id must be set in .env file")
+        # Use hardcoded project ID
+        self.project_id = "alchemist-e69bb"
         
         self.region = os.getenv('REGION') or os.getenv('region', 'us-central1')
         
