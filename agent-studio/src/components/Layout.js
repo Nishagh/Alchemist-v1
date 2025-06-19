@@ -98,8 +98,26 @@ const Layout = ({ children }) => {
               <Stack direction="row" spacing={1} sx={{ display: { xs: 'none', md: 'flex' }, mr: 2 }}>
                 <Button
                   component={Link}
-                  to="/agents"
+                  to="/dashboard"
                   startIcon={<DashboardIcon />}
+                  color="inherit"
+                  variant={location.pathname === '/dashboard' ? 'contained' : 'text'}
+                  sx={{
+                    borderRadius: 2,
+                    fontWeight: 'bold',
+                    bgcolor: location.pathname === '/dashboard' ? alpha('rgba(255,255,255,0.2)', 0.3) : 'transparent',
+                    '&:hover': {
+                      bgcolor: alpha('rgba(255,255,255,0.1)', 0.2)
+                    }
+                  }}
+                >
+                  Dashboard
+                </Button>
+                
+                <Button
+                  component={Link}
+                  to="/agents"
+                  startIcon={<ListIcon />}
                   color="inherit"
                   variant={location.pathname === '/agents' ? 'contained' : 'text'}
                   sx={{

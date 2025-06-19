@@ -777,6 +777,34 @@ const AgentsList = () => {
                                 >
                                   Test
                                 </Button>
+                                
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  startIcon={<TrendingUpIcon />}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (agent?.agent_id) {
+                                      navigate(`/agent-analytics/${agent.agent_id}`);
+                                    }
+                                  }}
+                                  sx={{
+                                    borderRadius: 2,
+                                    textTransform: 'none',
+                                    fontWeight: 'medium',
+                                    fontSize: '0.8rem',
+                                    borderColor: alpha(theme.palette.info.main, 0.8),
+                                    color: theme.palette.info.main,
+                                    '&:hover': {
+                                      borderColor: theme.palette.info.main,
+                                      backgroundColor: alpha(theme.palette.info.main, 0.1),
+                                      transform: 'translateY(-1px)',
+                                      boxShadow: '0 2px 8px rgba(33, 150, 243, 0.2)'
+                                    }
+                                  }}
+                                >
+                                  Analytics
+                                </Button>
                               </Box>
                               
                               {/* Delete Action */}

@@ -11,6 +11,7 @@ import { debugAuthState } from './utils/AuthDebug';
 import Layout from './components/Layout';
 
 // Import pages
+import Dashboard from './pages/Dashboard';
 import AgentEditor from './pages/AgentEditor';
 import AgentsList from './pages/AgentsList';
 import AgentTesting from './pages/AgentTesting';
@@ -157,6 +158,10 @@ function App() {
     {
       path: '/',
       element: <LandingPage />
+    },
+    {
+      path: '/dashboard',
+      element: <ProtectedRoute><Dashboard /></ProtectedRoute>
     },
     {
       path: '/login',

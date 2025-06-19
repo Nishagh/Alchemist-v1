@@ -244,6 +244,13 @@ const Dashboard = () => {
       action: () => navigate('/agent-editor')
     },
     {
+      title: 'My Agents',
+      description: 'Manage existing agents',
+      icon: <IntegrationIcon />,
+      color: '#8b5cf6',
+      action: () => navigate('/agents')
+    },
+    {
       title: 'WhatsApp Setup',
       description: 'Manage phone numbers',
       icon: <WhatsAppIcon />,
@@ -251,18 +258,11 @@ const Dashboard = () => {
       action: () => navigate('/whatsapp-management')
     },
     {
-      title: 'View Analytics',
-      description: 'Performance insights',
+      title: 'API Documentation',
+      description: 'Integration guides',
       icon: <AnalyticsIcon />,
       color: '#f59e0b',
-      action: () => navigate('/analytics')
-    },
-    {
-      title: 'Integrations',
-      description: 'Connect platforms',
-      icon: <IntegrationIcon />,
-      color: '#8b5cf6',
-      action: () => navigate('/integrations')
+      action: () => window.open('https://docs.example.com', '_blank')
     }
   ];
 
