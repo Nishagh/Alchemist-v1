@@ -56,12 +56,12 @@ class UniversalAgentDeployer:
         self.region = os.getenv('REGION') or os.getenv('region', 'us-central1')
         
         # Check if running in container (Cloud Run) or locally
-        if os.path.exists('/app/universal-agent'):
+        if os.path.exists('/app/universal-agent-template'):
             # Running in Cloud Run container
-            self.template_dir = Path('/app/universal-agent')
+            self.template_dir = Path('/app/universal-agent-template')
         else:
             # Running locally
-            self.template_dir = Path(__file__).parent.parent / 'universal-agent'
+            self.template_dir = Path(__file__).parent / 'universal-agent-template'
         
         # Validate template directory exists
         if not self.template_dir.exists():

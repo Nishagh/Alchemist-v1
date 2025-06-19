@@ -23,7 +23,7 @@ class DeploymentService {
     try {
       const deploymentRequest = {
         agent_id: agentId,
-        project_id: process.env.REACT_APP_GCP_PROJECT_ID || 'alchemist-e69bb',
+        project_id: 'alchemist-e69bb',
         region: options.region || 'us-central1',
         webhook_url: options.webhookUrl,
         priority: options.priority || 5
