@@ -148,3 +148,8 @@ certificates/
 **/logs/
 **/temp/
 **/tmp/
+
+# Vector data files
+**/vector_data_*/
+
+firebase-credentials.json
