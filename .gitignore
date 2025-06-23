@@ -153,3 +153,5 @@ certificates/
 **/vector_data_*/
 
 firebase-credentials.json
+*/firebase-credentials.json
+*/*/firebase-credentials.json
