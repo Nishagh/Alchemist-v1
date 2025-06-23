@@ -21,11 +21,9 @@ The system is already configured with:
 ```bash
 OPENAI_API_KEY=your-openai-api-key
 PROJECT_ID=alchemist-e69bb
-GOOGLE_APPLICATION_CREDENTIALS=firebase-credentials.json
 ```
 
 **Firebase credentials:**
-- `universal-agent/firebase-credentials.json` - Firebase service account key for deployment
 
 *The system supports both uppercase and lowercase variable names and automatically detects Firebase credentials in multiple locations.*
 

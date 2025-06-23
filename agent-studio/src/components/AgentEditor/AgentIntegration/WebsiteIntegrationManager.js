@@ -39,6 +39,7 @@ import {
 } from '@mui/icons-material';
 
 const WebsiteIntegrationManager = ({
+  agentId,
   deployments = [],
   onNotification,
   disabled = false,

@@ -93,23 +93,7 @@ if METRICS_AVAILABLE:
 try:
     firebase_app = firebase_admin.get_app()
 except ValueError:
-    firebase_creds_path = (os.getenv('FIREBASE_CREDENTIALS') or 
-                          os.getenv('firebase_credentials') or 
-                          os.getenv('GOOGLE_APPLICATION_CREDENTIALS') or
-                          'firebase-credentials.json')
-    
-    # Check both local and container paths
-    local_creds = firebase_creds_path
-    container_creds = '/app/firebase-credentials.json'
-    
-    if os.path.exists(local_creds):
-        cred = credentials.Certificate(local_creds)
-        firebase_app = firebase_admin.initialize_app(cred)
-    elif os.path.exists(container_creds):
-        cred = credentials.Certificate(container_creds)
-        firebase_app = firebase_admin.initialize_app(cred)
-    else:
-        firebase_app = firebase_admin.initialize_app()
+    firebase_app = firebase_admin.initialize_app()
 
 db = firestore.client(firebase_app)
 

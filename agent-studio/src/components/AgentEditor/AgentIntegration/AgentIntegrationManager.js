@@ -40,6 +40,7 @@ import WhatsAppIntegrationManager from '../WhatsAppIntegration/WhatsAppIntegrati
 import WebsiteIntegrationManager from './WebsiteIntegrationManager';
 
 const AgentIntegrationManager = ({
+  agentId,
   deployments = [],
   onNotification,
   disabled = false,
@@ -259,6 +260,7 @@ const AgentIntegrationManager = ({
       case 'whatsapp':
         return (
           <WhatsAppIntegrationManager
+            agentId={agentId}
             deployments={deployments}
             onNotification={onNotification}
             disabled={disabled}
@@ -268,6 +270,7 @@ const AgentIntegrationManager = ({
       case 'website':
         return (
           <WebsiteIntegrationManager
+            agentId={agentId}
             deployments={deployments}
             onNotification={onNotification}
             disabled={disabled}

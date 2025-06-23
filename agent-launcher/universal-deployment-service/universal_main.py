@@ -32,7 +32,6 @@ load_dotenv()
 from config_loader import load_agent_config
 import firebase_admin
 from firebase_admin import credentials, firestore
-from langchain.tools import BaseTool
 
 # Set up logging
 logging.basicConfig(
@@ -87,7 +86,7 @@ class WebhookNotification(BaseModel):
     timestamp: str
 
 # Global variables for pre-initialized components
-agent_executor = None
+openai_client = None
 firebase_service = None
 conversation_repo = None
 embedded_vector_search = None
@@ -95,7 +94,7 @@ embedded_vector_search = None
 
 async def initialize_agent():
     """Initialize agent components with dynamically loaded configuration"""
-    global agent_executor, firebase_service, conversation_repo, embedded_vector_search, AGENT_CONFIG
+    global openai_client, firebase_service, conversation_repo, embedded_vector_search, AGENT_CONFIG
     
     try:
         # Get agent ID from environment
@@ -120,8 +119,8 @@ async def initialize_agent():
         # Initialize embedded vector search
         embedded_vector_search = initialize_embedded_vector_search()
         
-        # Initialize LangChain agent with pre-built tools and configuration
-        agent_executor = await initialize_langchain_agent()
+        # Initialize OpenAI client with pre-built tools and configuration
+        openai_client = await initialize_openai_client()
         
         # Initialize vector sync with real-time Firestore listeners
         sync_config = AGENT_CONFIG.get('vector_sync', {})
@@ -152,34 +151,8 @@ def initialize_firebase_service():
         
         # Initialize Firebase app if not already done by config_loader
         if not firebase_admin._apps:
-            # Try multiple paths for Firebase credentials
-            firebase_creds_paths = [
-                'firebase-credentials.json',  # Local/template directory
-                '/app/firebase-credentials.json',  # Container path
-                os.getenv('FIREBASE_CREDENTIALS', ''),
-                os.getenv('firebase_credentials', ''),
-                os.getenv('GOOGLE_APPLICATION_CREDENTIALS', '')
-            ]
-            
-            firebase_initialized = False
-            for creds_path in firebase_creds_paths:
-                if creds_path and os.path.exists(creds_path):
-                    try:
-                        cred = credentials.Certificate(creds_path)
-                        firebase_admin.initialize_app(cred, {
-                            'projectId': AGENT_CONFIG['firebase_project_id']
-                        })
-                        logger.info(f"Firebase initialized with credentials: {creds_path}")
-                        firebase_initialized = True
-                        break
-                    except Exception as e:
-                        logger.warning(f"Failed to initialize Firebase with {creds_path}: {str(e)}")
-                        continue
-            
-            if not firebase_initialized:
-                # Fall back to Application Default Credentials
-                firebase_admin.initialize_app()
-                logger.info("Firebase initialized with Application Default Credentials")
+            firebase_admin.initialize_app()
+            logger.info("Firebase initialized with Application Default Credentials")
         
         db = firestore.client()
         logger.info("Firebase service initialized")
@@ -256,16 +229,12 @@ def initialize_conversation_repository(db):
     return ConversationRepository(db)
 
 
-async def initialize_langchain_agent():
-    """Initialize LangChain agent with dynamically loaded configuration"""
+async def initialize_openai_client():
+    """Initialize OpenAI client with dynamically loaded configuration"""
     try:
-        from langchain.agents import AgentExecutor, create_openai_tools_agent
-        from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-        from langchain.chat_models import init_chat_model
-        from langchain_core.messages import AIMessage, HumanMessage
+        import openai
         
-        # Initialize LLM with configuration from Firestore
-        model = AGENT_CONFIG.get('model', 'gpt-4')
+        # Initialize OpenAI client with configuration from Firestore
         openai_key = (AGENT_CONFIG.get('openai_api_key') or 
                      os.getenv('OPENAI_API_KEY') or 
                      os.getenv('openai_api_key'))
@@ -273,41 +242,17 @@ async def initialize_langchain_agent():
         if not openai_key:
             raise ValueError("OpenAI API key not found. Please check OPENAI_API_KEY environment variable.")
         
-        llm = init_chat_model(
-            model, 
-            model_provider="openai",
-            api_key=openai_key
-        )
+        # Create OpenAI client
+        client = openai.OpenAI(api_key=openai_key)
         
         # Initialize tools with dynamic configuration
         tools = initialize_agent_tools()
         
-        # Create prompt template with dynamically loaded system prompt
-        system_prompt = AGENT_CONFIG.get('system_prompt', 'You are a helpful AI assistant.')
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
-            MessagesPlaceholder(variable_name="chat_history"),
-            ("human", "{input}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad"),
-        ])
-        
-        # Create agent
-        agent = create_openai_tools_agent(llm, tools, prompt)
-        
-        # Create agent executor
-        agent_executor = AgentExecutor(
-            agent=agent,
-            tools=tools,
-            verbose=True,
-            max_iterations=25,
-            return_intermediate_steps=True
-        )
-        
-        logger.info(f"LangChain agent initialized with {len(tools)} tools")
-        return agent_executor
+        logger.info(f"OpenAI client initialized with {len(tools)} tools")
+        return client
         
     except Exception as e:
-        logger.error(f"LangChain agent initialization failed: {str(e)}")
+        logger.error(f"OpenAI client initialization failed: {str(e)}")
         raise
 
 
@@ -379,7 +324,7 @@ def initialize_custom_tools():
     tools = []
     
     try:
-        from langchain.tools import Tool
+        # Using dict-based tools with direct OpenAI integration
         
         def get_current_time() -> str:
             """Get the current date and time"""
@@ -402,17 +347,17 @@ Agent Information:
 """
         
         # Create custom tools
-        time_tool = Tool(
-            name="get_current_time",
-            description="Get the current date and time",
-            func=get_current_time
-        )
+        time_tool = {
+            "name": "get_current_time",
+            "description": "Get the current date and time",
+            "function": get_current_time
+        }
         
-        info_tool = Tool(
-            name="agent_info", 
-            description="Get information about this AI agent's capabilities and configuration",
-            func=agent_info
-        )
+        info_tool = {
+            "name": "agent_info", 
+            "description": "Get information about this AI agent's capabilities and configuration",
+            "function": agent_info
+        }
         
         tools.extend([time_tool, info_tool])
         logger.info("Initialized custom utility tools")
@@ -583,7 +528,7 @@ async def root():
         "name": AGENT_CONFIG.get('name'),
         "domain": AGENT_CONFIG.get('_domain_info', {}).get('detected_domain', 'general'),
         "model": AGENT_CONFIG.get('model'),
-        "tools_count": len(agent_executor.tools) if agent_executor else 0,
+        "tools_count": len(initialize_agent_tools()) if openai_client else 0,
         "version": "1.0.0",
         "type": "universal"
     }
@@ -617,22 +562,30 @@ async def process_message(request: ProcessMessageRequest):
         # Get conversation history
         messages = conversation_repo.get_messages(request.conversation_id)
         
-        # Convert to LangChain message format
-        from langchain_core.messages import AIMessage, HumanMessage
+        # Convert to OpenAI message format
         chat_history = []
         for msg in messages[:-1]:  # Exclude the message we just added
-            if msg['role'] == 'user':
-                chat_history.append(HumanMessage(content=msg['content']))
-            elif msg['role'] == 'assistant':
-                chat_history.append(AIMessage(content=msg['content']))
+            chat_history.append({
+                "role": msg['role'],
+                "content": msg['content']
+            })
         
-        # Process with agent
-        result = await agent_executor.ainvoke({
-            "input": request.message,
-            "chat_history": chat_history
-        })
+        # Add system prompt and process with OpenAI
+        system_prompt = AGENT_CONFIG.get('system_prompt', 'You are a helpful AI assistant.')
+        messages_for_openai = [{"role": "system", "content": system_prompt}] + chat_history + [{"role": "user", "content": request.message}]
         
-        response_text = result.get('output', 'Sorry, I could not process your request.')
+        # Process with OpenAI
+        global openai_client
+        model = AGENT_CONFIG.get('model', 'gpt-4')
+        
+        response = openai_client.chat.completions.create(
+            model=model,
+            messages=messages_for_openai,
+            temperature=0.7,
+            max_tokens=1000
+        )
+        
+        response_text = response.choices[0].message.content
         
         # Add agent response to conversation
         conversation_repo.add_message(
@@ -677,7 +630,7 @@ async def health_check():
         "timestamp": datetime.now().isoformat(),
         "agent_id": AGENT_CONFIG.get('agent_id', 'unknown'),
         "config_loaded": bool(AGENT_CONFIG),
-        "tools_initialized": agent_executor is not None
+        "tools_initialized": openai_client is not None
     }
 
 

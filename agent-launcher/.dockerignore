@@ -27,10 +27,6 @@ vector_data*/
 **/*.sqlite3
 **/*.db
 
-# Exclude credentials
-firebase-credentials.json
-**/firebase-credentials.json
-
 # Exclude temporary and cache files
 .cache/
 tmp/

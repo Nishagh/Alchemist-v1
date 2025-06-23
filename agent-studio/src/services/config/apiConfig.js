@@ -9,6 +9,7 @@ import axios from 'axios';
 export const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
 export const KNOWLEDGE_BASE_URL = process.env.REACT_APP_KNOWLEDGE_BASE_URL;
 export const MCP_MANAGER_URL = process.env.REACT_APP_MCP_MANAGER_URL;
+export const TUNING_SERVICE_URL = process.env.REACT_APP_TUNING_SERVICE_URL;
 
 // Create axios instances with default config
 export const api = axios.create({
@@ -28,6 +29,14 @@ export const kbApi = axios.create({
 // Default axios instance for MCP operations
 export const mcpApi = axios.create({
   baseURL: MCP_MANAGER_URL,
+  headers: {
+    'Content-Type': 'application/json'
+  }
+});
+
+// Tuning service axios instance
+export const tuningApi = axios.create({
+  baseURL: TUNING_SERVICE_URL,
   headers: {
     'Content-Type': 'application/json'
   }
@@ -73,4 +82,30 @@ export const ENDPOINTS = {
   
   // Health check
   HEALTH: '/api/health',
+  
+  // Agent Tuning Service endpoints
+  TUNING_JOBS: '/api/training/jobs',
+  TUNING_DATA: '/api/training/data',
+  TUNING_MODELS: '/api/training/models',
+  TUNING_HEALTH: '/health',
 };
+
+// Get API configuration for services
+export const getApiConfig = () => ({
+  alchemist: {
+    url: API_BASE_URL,
+    timeout: 30000
+  },
+  knowledgeBase: {
+    url: KNOWLEDGE_BASE_URL,
+    timeout: 60000
+  },
+  mcpManager: {
+    url: MCP_MANAGER_URL,
+    timeout: 60000
+  },
+  tuningService: {
+    url: TUNING_SERVICE_URL || 'http://localhost:8080',
+    timeout: 60000
+  }
+});

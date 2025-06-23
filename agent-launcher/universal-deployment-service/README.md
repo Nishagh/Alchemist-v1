@@ -20,7 +20,6 @@ A Cloud Run service that orchestrates universal agent deployments with real-time
 pip install -r requirements.txt
 
 # Copy required files (done automatically by script)
-cp ../universal-agent firebase-credentials.json
 cp ../.env .
 
 # Run locally

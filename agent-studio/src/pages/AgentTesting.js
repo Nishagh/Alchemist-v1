@@ -46,8 +46,10 @@ import { getAgent } from '../services/agents/agentService';
 import { 
   getBillingInfo,
   saveBillingSession,
-  sendMessageToDeployedAgent,
-  sendStreamingMessageToDeployedAgent
+  sendStreamingMessageToDeployedAgent,
+  createDeployedAgentConversation,
+  getTestConversationTemplates,
+  testAgentEndpoint
 } from '../services/conversations/conversationService';
 import deploymentService from '../services/deployment/deploymentService';
 
@@ -68,7 +70,8 @@ const AgentTesting = () => {
   const [currentMessage, setCurrentMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [streamingEnabled, setStreamingEnabled] = useState(true);
+  // Streaming is always enabled for deployed agents - remove toggle
+  const streamingEnabled = true;
   const [conversationId, setConversationId] = useState(null);
 
   // Billing state
@@ -83,7 +86,9 @@ const AgentTesting = () => {
   // Testing controls
   const [testingActive, setTestingActive] = useState(false);
   const [showBillingAlert, setShowBillingAlert] = useState(false);
-  const [testMode, setTestMode] = useState('production'); // 'development' or 'production'
+  const [testMode, setTestMode] = useState('development'); // 'development' or 'production'
+  const [agentHealth, setAgentHealth] = useState(null);
+  const [templateTests, setTemplateTests] = useState([]);
 
   // Load agent and deployment status
   useEffect(() => {
@@ -108,16 +113,39 @@ const AgentTesting = () => {
 
         setAgent(agentData);
 
-        // Check deployment status
-        const deployStatus = await deploymentService.getDeploymentStatus(agentId);
+        // Check deployment status - get the latest deployment for this agent
+        const deploymentsResult = await deploymentService.listDeployments({ 
+          agentId: agentId,
+          limit: 1 
+        });
+        
+        const deployStatus = deploymentsResult.deployments && deploymentsResult.deployments.length > 0 
+          ? deploymentsResult.deployments[0] 
+          : null;
+          
         setDeploymentStatus(deployStatus);
-        setIsDeployed(deployStatus?.status === 'deployed');
+        setIsDeployed(deployStatus?.status === 'completed');
 
         // Load existing billing info
         const billing = await getBillingInfo(agentId);
         setBillingInfo(billing);
 
-        // Create new conversation for testing
+        // Load test templates
+        const templates = getTestConversationTemplates();
+        setTemplateTests(templates);
+
+        // Test agent health if deployed
+        if (deployStatus?.status === 'completed') {
+          try {
+            const health = await testAgentEndpoint(agentId);
+            setAgentHealth(health);
+          } catch (err) {
+            console.warn('Health check failed:', err);
+            setAgentHealth({ available: false, error: err.message });
+          }
+        }
+
+        // Create conversation ID for testing (will be created on first message)
         const newConversationId = `test-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         setConversationId(newConversationId);
 
@@ -139,34 +167,48 @@ const AgentTesting = () => {
       return;
     }
 
-    setTestingActive(true);
-    
-    // Show billing warning for production mode
-    if (testMode === 'production') {
-      setShowBillingAlert(true);
+    try {
+      setTestingActive(true);
+      
+      // Show billing warning for production mode
+      if (testMode === 'production') {
+        setShowBillingAlert(true);
+      }
+
+      // Create a new conversation with the deployed agent
+      const newConversationId = await createDeployedAgentConversation(agentId);
+      setConversationId(newConversationId);
+
+      // Initialize conversation with welcome message
+      const modeText = testMode === 'production' ? 'production test session - billing will apply' : 'development test session - free';
+      const welcomeMessage = {
+        id: `msg-${Date.now()}`,
+        type: 'ai',
+        content: `🤖 Hello! I'm ${agent?.name || 'your AI agent'}. I'm ready to help you. This is a ${modeText} for all interactions.`,
+        timestamp: new Date().toISOString(),
+        tokens: { prompt: 0, completion: 25, total: 25 },
+        cost: testMode === 'production' ? 0.001 : 0
+      };
+
+      setMessages([welcomeMessage]);
+      
+      // Track billing only in production mode
+      if (testMode === 'production') {
+        setBillingInfo(prev => ({
+          ...prev,
+          sessionCost: prev.sessionCost + 0.001,
+          totalTokens: prev.totalTokens + 25,
+          lastBillableAction: new Date().toISOString()
+        }));
+      }
+
+    } catch (err) {
+      console.error('Error starting testing session:', err);
+      setError(`Failed to start testing session: ${err.message}`);
+      setTestingActive(false);
     }
 
-    // Initialize conversation
-    const welcomeMessage = {
-      id: `msg-${Date.now()}`,
-      type: 'ai',
-      content: `🤖 Hello! I'm ${agent?.name || 'your AI agent'}. I'm ready to help you. This is a production test session - billing will apply for all interactions.`,
-      timestamp: new Date().toISOString(),
-      tokens: { prompt: 0, completion: 25, total: 25 },
-      cost: 0.001
-    };
-
-    setMessages([welcomeMessage]);
-    
-    // Track billing
-    setBillingInfo(prev => ({
-      ...prev,
-      sessionCost: prev.sessionCost + 0.001,
-      totalTokens: prev.totalTokens + 25,
-      lastBillableAction: new Date().toISOString()
-    }));
-
-  }, [isDeployed, testMode, agent]);
+  }, [isDeployed, testMode, agent, agentId]);
 
   // Stop testing session
   const stopTesting = useCallback(async () => {
@@ -212,71 +254,45 @@ const AgentTesting = () => {
     setIsSending(true);
 
     try {
-      let response;
       let tokens = { prompt: 0, completion: 0, total: 0 };
       let cost = 0;
 
-      if (streamingEnabled) {
-        // Streaming response
-        setIsStreaming(true);
-        
-        const streamingMessage = {
-          id: `msg-${Date.now() + 1}`,
-          type: 'ai',
-          content: '',
-          timestamp: new Date().toISOString(),
-          streaming: true
-        };
+      // Always use streaming for deployed agents
+      setIsStreaming(true);
+      
+      const streamingMessage = {
+        id: `msg-${Date.now() + 1}`,
+        type: 'ai',
+        content: '',
+        timestamp: new Date().toISOString(),
+        streaming: true
+      };
 
-        setMessages(prev => [...prev, streamingMessage]);
+      setMessages(prev => [...prev, streamingMessage]);
 
-        response = await sendStreamingMessageToDeployedAgent({
-          agentId,
-          conversationId,
-          message: currentMessage.trim(),
-          testMode,
-          onChunk: (chunk) => {
-            setMessages(prev => prev.map(msg => 
-              msg.id === streamingMessage.id 
-                ? { ...msg, content: msg.content + chunk }
-                : msg
-            ));
-          },
-          onComplete: (finalTokens, finalCost) => {
-            tokens = finalTokens;
-            cost = finalCost;
-            setMessages(prev => prev.map(msg => 
-              msg.id === streamingMessage.id 
-                ? { ...msg, streaming: false, tokens, cost }
-                : msg
-            ));
-            setIsStreaming(false);
-          }
-        });
-
-      } else {
-        // Regular response
-        response = await sendMessageToDeployedAgent({
-          agentId,
-          conversationId,
-          message: currentMessage.trim(),
-          testMode
-        });
-
-        tokens = response.tokens || { prompt: 50, completion: 100, total: 150 };
-        cost = response.cost || 0.005;
-
-        const aiMessage = {
-          id: `msg-${Date.now() + 1}`,
-          type: 'ai',
-          content: response.content || response.response,
-          timestamp: new Date().toISOString(),
-          tokens,
-          cost
-        };
-
-        setMessages(prev => [...prev, aiMessage]);
-      }
+      await sendStreamingMessageToDeployedAgent({
+        agentId,
+        conversationId,
+        message: currentMessage.trim(),
+        testMode,
+        onChunk: (chunk) => {
+          setMessages(prev => prev.map(msg => 
+            msg.id === streamingMessage.id 
+              ? { ...msg, content: msg.content + chunk }
+              : msg
+          ));
+        },
+        onComplete: (finalTokens, finalCost) => {
+          tokens = finalTokens;
+          cost = finalCost;
+          setMessages(prev => prev.map(msg => 
+            msg.id === streamingMessage.id 
+              ? { ...msg, streaming: false, tokens, cost }
+              : msg
+          ));
+          setIsStreaming(false);
+        }
+      });
 
       // Update billing info
       setBillingInfo(prev => ({
@@ -290,11 +306,26 @@ const AgentTesting = () => {
 
     } catch (err) {
       console.error('Error sending message:', err);
+      
+      // Extract detailed error message for better debugging
+      let errorContent = 'Unknown error occurred';
+      
+      if (err.message) {
+        errorContent = err.message;
+      } else if (err.response?.data?.detail) {
+        errorContent = err.response.data.detail;
+      } else if (err.response?.statusText) {
+        errorContent = `HTTP Error ${err.response.status}: ${err.response.statusText}`;
+      } else if (typeof err === 'string') {
+        errorContent = err;
+      }
+      
       const errorMessage = {
         id: `msg-${Date.now() + 1}`,
         type: 'error',
-        content: 'Sorry, I encountered an error processing your message. Please try again.',
-        timestamp: new Date().toISOString()
+        content: `❌ Error: ${errorContent}`,
+        timestamp: new Date().toISOString(),
+        isDebugError: true // flag to identify debug errors
       };
       setMessages(prev => [...prev, errorMessage]);
     } finally {
@@ -329,7 +360,18 @@ const AgentTesting = () => {
         <Alert severity="error" sx={{ mb: 2 }}>
           {error}
         </Alert>
-        <Button variant="outlined" onClick={() => navigate('/agents')}>
+        <Button 
+          variant="outlined" 
+          onClick={() => navigate('/agents')}
+          sx={{
+            color: '#6366f1',
+            borderColor: '#6366f1',
+            '&:hover': {
+              bgcolor: '#6366f115',
+              borderColor: '#4f46e5'
+            }
+          }}
+        >
           Back to Agents
         </Button>
       </Container>
@@ -344,7 +386,10 @@ const AgentTesting = () => {
           Test Agent: {agent?.name}
         </Typography>
         <Typography variant="body1" color="text.secondary" gutterBottom>
-          Test your deployed agent and monitor usage costs in real-time
+          {isDeployed 
+            ? "Test your deployed agent and monitor usage costs in real-time"
+            : "Deploy your agent first to test with billing tracking. For free pre-deployment testing, use the Agent Editor interface."
+          }
         </Typography>
         
         {/* Status Cards */}
@@ -366,9 +411,14 @@ const AgentTesting = () => {
                   color={isDeployed ? 'success' : 'error'}
                   size="small"
                 />
-                {deploymentStatus?.url && (
-                  <Typography variant="caption" display="block" sx={{ mt: 1 }}>
-                    {deploymentStatus.url}
+                {deploymentStatus?.service_url && (
+                  <Typography variant="caption" display="block" sx={{ mt: 1 }} noWrap>
+                    {deploymentStatus.service_url}
+                  </Typography>
+                )}
+                {agentHealth && (
+                  <Typography variant="caption" display="block" sx={{ mt: 1, color: agentHealth.available ? 'success.main' : 'error.main' }}>
+                    {agentHealth.available ? '✓ Health check passed' : `⚠ ${agentHealth.error}`}
                   </Typography>
                 )}
               </CardContent>
@@ -431,7 +481,13 @@ const AgentTesting = () => {
                 <Button
                   size="small"
                   startIcon={<AnalyticsIcon />}
-                  sx={{ mt: 1 }}
+                  sx={{ 
+                    mt: 1,
+                    color: '#0ea5e9',
+                    '&:hover': {
+                      bgcolor: '#0ea5e915'
+                    }
+                  }}
                   onClick={() => navigate(`/agent-analytics/${agentId}`)}
                 >
                   View Analytics
@@ -440,6 +496,32 @@ const AgentTesting = () => {
             </Card>
           </Grid>
         </Grid>
+
+        {/* Pre-deployment Notice */}
+        {!isDeployed && (
+          <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
+            <Typography variant="body2" gutterBottom>
+              <strong>Pre-deployment Testing Available:</strong> 
+              You can test your agent for free during development using the Agent Editor interface.
+            </Typography>
+            <Button 
+              size="small" 
+              variant="outlined" 
+              onClick={() => navigate(`/agent-editor/${agentId}`)}
+              sx={{ 
+                mt: 1,
+                color: '#10b981',
+                borderColor: '#10b981',
+                '&:hover': {
+                  bgcolor: '#10b98115',
+                  borderColor: '#059669'
+                }
+              }}
+            >
+              Go to Agent Editor for Free Testing
+            </Button>
+          </Alert>
+        )}
       </Box>
 
       {/* Main Testing Interface */}
@@ -451,33 +533,38 @@ const AgentTesting = () => {
               <Box display="flex" justifyContent="between" alignItems="center" mb={2}>
                 <Typography variant="h6">Test Conversation</Typography>
                 <Box display="flex" gap={1}>
-                  <FormControlLabel
-                    control={
-                      <Switch
-                        checked={streamingEnabled}
-                        onChange={(e) => setStreamingEnabled(e.target.checked)}
-                        disabled={testingActive}
-                      />
-                    }
-                    label="Streaming"
-                    disabled={testingActive}
-                  />
+                  <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', mr: 2 }}>
+                    🚀 Streaming Response Mode
+                  </Typography>
                   {testingActive ? (
                     <Button
                       variant="contained"
-                      color="error"
                       startIcon={<StopIcon />}
                       onClick={stopTesting}
+                      sx={{
+                        bgcolor: '#ef4444',
+                        '&:hover': {
+                          bgcolor: '#dc2626'
+                        }
+                      }}
                     >
                       Stop Testing
                     </Button>
                   ) : (
                     <Button
                       variant="contained"
-                      color="primary"
                       startIcon={<PlayIcon />}
                       onClick={startTesting}
                       disabled={!isDeployed}
+                      sx={{
+                        bgcolor: '#10b981',
+                        '&:hover': {
+                          bgcolor: '#059669'
+                        },
+                        '&:disabled': {
+                          bgcolor: '#d1d5db'
+                        }
+                      }}
                     >
                       Start Testing
                     </Button>
@@ -527,8 +614,10 @@ const AgentTesting = () => {
                           p: 2,
                           backgroundColor: 
                             message.type === 'user' ? 'primary.main' : 
-                            message.type === 'error' ? 'error.light' : 'grey.100',
-                          color: message.type === 'user' ? 'white' : 'text.primary',
+                            message.type === 'error' ? (message.isDebugError ? 'error.main' : 'error.light') : 'grey.100',
+                          color: 
+                            message.type === 'user' ? 'white' : 
+                            message.type === 'error' ? 'white' : 'text.primary',
                           borderRadius: 2,
                           position: 'relative'
                         }}
@@ -559,6 +648,12 @@ const AgentTesting = () => {
                         <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
                           {message.content}
                         </Typography>
+                        
+                        {message.isDebugError && (
+                          <Typography variant="caption" sx={{ display: 'block', mt: 1, opacity: 0.8, fontStyle: 'italic' }}>
+                            💡 Debug Error - Check console for more details
+                          </Typography>
+                        )}
                         
                         {message.tokens && testMode === 'production' && (
                           <Box sx={{ mt: 1, pt: 1, borderTop: '1px solid rgba(0,0,0,0.1)' }}>
@@ -605,10 +700,19 @@ const AgentTesting = () => {
                     size="small"
                   />
                   <IconButton
-                    color="primary"
                     onClick={sendMessage}
                     disabled={!currentMessage.trim() || isSending || isStreaming}
-                    sx={{ alignSelf: 'flex-end' }}
+                    sx={{ 
+                      alignSelf: 'flex-end',
+                      color: '#6366f1',
+                      '&:hover': {
+                        bgcolor: '#6366f115',
+                        color: '#4f46e5'
+                      },
+                      '&:disabled': {
+                        color: '#9ca3af'
+                      }
+                    }}
                   >
                     {isSending || isStreaming ? (
                       <CircularProgress size={24} />
@@ -687,8 +791,8 @@ const AgentTesting = () => {
                   <Box>
                     <Typography variant="body2" color="text.secondary">Last Deployed</Typography>
                     <Typography variant="body2">
-                      {deploymentStatus?.deployedAt 
-                        ? new Date(deploymentStatus.deployedAt).toLocaleDateString()
+                      {deploymentStatus?.created_at 
+                        ? new Date(deploymentStatus.created_at).toLocaleDateString()
                         : 'Not deployed'
                       }
                     </Typography>
@@ -698,13 +802,56 @@ const AgentTesting = () => {
                     <Typography variant="body2" color="text.secondary">Status</Typography>
                     <Chip 
                       label={deploymentStatus?.status || 'unknown'}
-                      color={deploymentStatus?.status === 'deployed' ? 'success' : 'default'}
+                      color={deploymentStatus?.status === 'completed' ? 'success' : 'default'}
                       size="small"
                     />
                   </Box>
                 </Stack>
               </CardContent>
             </Card>
+
+            {/* Template Tests */}
+            {isDeployed && (
+              <Card>
+                <CardContent>
+                  <Typography variant="h6" gutterBottom>Quick Tests</Typography>
+                  <Divider sx={{ mb: 2 }} />
+                  
+                  <Stack spacing={1}>
+                    {templateTests.map((template) => (
+                      <Button
+                        key={template.id}
+                        fullWidth
+                        variant="outlined"
+                        size="small"
+                        onClick={() => {
+                          if (!testingActive) {
+                            startTesting();
+                          }
+                          // Send first message from template
+                          setCurrentMessage(template.messages[0]);
+                        }}
+                        disabled={!isDeployed}
+                        sx={{
+                          color: '#8b5cf6',
+                          borderColor: '#8b5cf6',
+                          '&:hover': {
+                            bgcolor: '#8b5cf615',
+                            borderColor: '#7c3aed'
+                          },
+                          '&:disabled': {
+                            color: '#9ca3af',
+                            borderColor: '#d1d5db'
+                          }
+                        }}
+                      >
+                        {template.name}
+                      </Button>
+                    ))}
+                  </Stack>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Quick Actions */}
             <Card>
@@ -718,6 +865,14 @@ const AgentTesting = () => {
                     variant="outlined"
                     startIcon={<AnalyticsIcon />}
                     onClick={() => navigate(`/agent-analytics/${agentId}`)}
+                    sx={{
+                      color: '#0ea5e9',
+                      borderColor: '#0ea5e9',
+                      '&:hover': {
+                        bgcolor: '#0ea5e915',
+                        borderColor: '#0284c7'
+                      }
+                    }}
                   >
                     View Analytics
                   </Button>
@@ -743,6 +898,18 @@ const AgentTesting = () => {
                       a.click();
                     }}
                     disabled={messages.length === 0}
+                    sx={{
+                      color: '#f59e0b',
+                      borderColor: '#f59e0b',
+                      '&:hover': {
+                        bgcolor: '#f59e0b15',
+                        borderColor: '#d97706'
+                      },
+                      '&:disabled': {
+                        color: '#9ca3af',
+                        borderColor: '#d1d5db'
+                      }
+                    }}
                   >
                     Export Conversation
                   </Button>
@@ -752,6 +919,14 @@ const AgentTesting = () => {
                     variant="outlined"
                     startIcon={<SettingsIcon />}
                     onClick={() => navigate(`/agent-editor/${agentId}`)}
+                    sx={{
+                      color: '#6b7280',
+                      borderColor: '#6b7280',
+                      '&:hover': {
+                        bgcolor: '#6b728015',
+                        borderColor: '#4b5563'
+                      }
+                    }}
                   >
                     Edit Agent
                   </Button>
@@ -784,15 +959,28 @@ const AgentTesting = () => {
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setShowBillingAlert(false)}>
+          <Button 
+            onClick={() => setShowBillingAlert(false)}
+            sx={{
+              color: '#6b7280',
+              '&:hover': {
+                bgcolor: '#6b728015'
+              }
+            }}
+          >
             Cancel
           </Button>
           <Button 
             variant="contained" 
-            color="warning"
             onClick={() => {
               setShowBillingAlert(false);
               // Continue with testing
+            }}
+            sx={{
+              bgcolor: '#f59e0b',
+              '&:hover': {
+                bgcolor: '#d97706'
+              }
             }}
           >
             Continue with Billing

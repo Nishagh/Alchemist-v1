@@ -1,7 +1,7 @@
 fastapi>=0.104.0
 uvicorn[standard]>=0.24.0
 firebase-admin>=6.4.0
-openai>=1.0.0
+openai
 requests>=2.31.0
 pydantic>=2.0.0
 python-dotenv>=1.0.0

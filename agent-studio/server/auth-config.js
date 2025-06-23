@@ -1,38 +1,21 @@
 /**
  * Firebase Authentication Configuration
- * This file configures and enables various authentication methods in Firebase
+ * This file handles authentication-related server operations
+ * Note: Provider configuration should be done through Firebase console, not programmatically
  */
 
 const { admin } = require('./firebase-admin');
 
 /**
- * Configure Firebase Authentication Providers
- * This function should be called during server initialization to set up auth providers
+ * Initialize Firebase Authentication
+ * This function initializes auth-related middleware and settings
  */
 const configureFirebaseAuth = async () => {
   try {
-    // Get the current authentication configuration
-    const authConfig = await admin.auth().getProviderConfigs();
+    console.log('Firebase authentication initialized successfully');
     
-    // Check if Google provider is already configured
-    const googleProvider = authConfig.find(provider => provider.providerId === 'google.com');
-    
-    if (!googleProvider) {
-      console.log('Configuring Google authentication provider...');
-      
-      // Enable Google authentication with correct client ID
-      // This should match the client ID in your Google Cloud Console
-      await admin.auth().updateProviderConfig('google.com', {
-        enabled: true,
-        client_id: process.env.GOOGLE_CLIENT_ID || '103214520240448237488-lb29l43khpqnqnk7rfoiokbvsmvj5f7i.apps.googleusercontent.com'
-      });
-      
-      console.log('Google authentication provider configured successfully');
-    } else {
-      console.log('Google authentication provider already configured');
-    }
-    
-    // Additional providers can be configured here (Facebook, Twitter, GitHub, etc.)
+    // Add any auth middleware setup here if needed
+    // For example: setting up custom claims, auth middleware, etc.
     
   } catch (error) {
     console.error('Error configuring Firebase authentication:', error);
@@ -40,6 +23,20 @@ const configureFirebaseAuth = async () => {
   }
 };
 
+/**
+ * Verify Firebase ID token (utility function for API routes)
+ */
+const verifyIdToken = async (idToken) => {
+  try {
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    return decodedToken;
+  } catch (error) {
+    console.error('Error verifying ID token:', error);
+    throw error;
+  }
+};
+
 module.exports = {
-  configureFirebaseAuth
+  configureFirebaseAuth,
+  verifyIdToken
 }; 

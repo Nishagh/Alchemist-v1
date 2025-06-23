@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Firestore Test</title>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+    <h1>Firestore Authentication Test</h1>
+    <div id="status"></div>
+    <button onclick="testAuth()">Test Authentication</button>
+    <button onclick="testFirestore()">Test Firestore Access</button>
+    <div id="results"></div>
+
+    <script>
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyC9MLh9IiFIcH5RJRVLJlrTXNI5s03r4AE",
+            authDomain: "alchemist-e69bb.firebaseapp.com",
+            projectId: "alchemist-e69bb",
+            storageBucket: "alchemist-e69bb.appspot.com",
+            messagingSenderId: "103214520240448237488",
+            appId: "1:851487020021:web:527efbdbe1ded9aa2686bc"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        // Monitor auth state
+        auth.onAuthStateChanged((user) => {
+            const status = document.getElementById('status');
+            if (user) {
+                status.innerHTML = `<p style="color: green;">Authenticated: ${user.email} (UID: ${user.uid})</p>`;
+                console.log('User authenticated:', user);
+            } else {
+                status.innerHTML = '<p style="color: red;">Not authenticated</p>';
+                console.log('User not authenticated');
+            }
+        });
+
+        function testAuth() {
+            const user = auth.currentUser;
+            const results = document.getElementById('results');
+            
+            if (user) {
+                results.innerHTML = `
+                    <h3>Current User:</h3>
+                    <p>Email: ${user.email}</p>
+                    <p>UID: ${user.uid}</p>
+                    <p>Email Verified: ${user.emailVerified}</p>
+                `;
+            } else {
+                results.innerHTML = '<p style="color: red;">No user currently authenticated</p>';
+            }
+        }
+
+        async function testFirestore() {
+            const user = auth.currentUser;
+            const results = document.getElementById('results');
+            
+            if (!user) {
+                results.innerHTML = '<p style="color: red;">Please authenticate first</p>';
+                return;
+            }
+
+            try {
+                console.log('Testing Firestore access...');
+                
+                // Test query to alchemist_agents collection
+                const agentsQuery = db.collection('alchemist_agents')
+                    .where('user_id', '==', user.uid)
+                    .limit(5);
+                
+                const snapshot = await agentsQuery.get();
+                
+                results.innerHTML = `
+                    <h3>Firestore Test Results:</h3>
+                    <p>Query successful! Found ${snapshot.size} agents</p>
+                    <h4>Documents:</h4>
+                `;
+                
+                snapshot.forEach((doc) => {
+                    results.innerHTML += `<p>Agent ID: ${doc.id}, Data: ${JSON.stringify(doc.data())}</p>`;
+                });
+                
+            } catch (error) {
+                console.error('Firestore test error:', error);
+                results.innerHTML = `
+                    <h3>Firestore Test Error:</h3>
+                    <p style="color: red;">Error: ${error.message}</p>
+                    <p>Code: ${error.code}</p>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>

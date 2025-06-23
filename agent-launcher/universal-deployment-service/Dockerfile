@@ -35,9 +35,6 @@ COPY knowledge_service.py .
 # Copy the entire universal-agent template directory
 COPY universal-agent-template ./universal-agent
 
-# Copy Firebase credentials if they exist
-COPY firebase-credentials.json* ./
-
 # Set environment variables
 ENV PYTHONPATH=/app
 ENV PORT=8080

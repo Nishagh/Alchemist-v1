@@ -1,0 +1,47 @@
+[
+  {
+    "id": "pair_1",
+    "query": "Hi, I'm interested in your services. Can you tell me more about what you offer?",
+    "response": "Hello! I'd be happy to tell you about our services. We offer comprehensive AI agent solutions that can help automate customer support, streamline business processes, and enhance user experiences. Our platform allows you to create, deploy, and manage intelligent agents tailored to your specific needs.",
+    "query_type": "general",
+    "context": "New customer inquiry",
+    "timestamp": "2025-06-20T12:00:00Z",
+    "approved": true
+  },
+  {
+    "id": "pair_2", 
+    "query": "What are your pricing plans?",
+    "response": "We offer flexible pricing plans to suit different business needs. Our basic plan starts at $29/month for small businesses, our professional plan is $99/month for growing companies, and our enterprise plan offers custom pricing for large organizations. Each plan includes different features and usage limits. Would you like me to provide more details about a specific plan?",
+    "query_type": "pricing",
+    "context": "Pricing inquiry",
+    "timestamp": "2025-06-20T12:05:00Z",
+    "approved": true
+  },
+  {
+    "id": "pair_3",
+    "query": "I'm having trouble logging into my account. Can you help?",
+    "response": "I'd be happy to help you with your login issue. Let's try a few troubleshooting steps: 1) Make sure you're using the correct email address, 2) Try resetting your password using the 'Forgot Password' link, 3) Clear your browser cache and cookies, 4) Try accessing your account from a different browser or device. If none of these work, I can escalate this to our technical support team.",
+    "query_type": "support",
+    "context": "Technical support",
+    "timestamp": "2025-06-20T12:10:00Z",
+    "approved": true
+  },
+  {
+    "id": "pair_4",
+    "query": "Does your platform integrate with Slack?",
+    "response": "Yes! Our platform offers seamless integration with Slack. You can deploy agents directly into your Slack workspace to handle internal queries, automate workflows, and provide instant support to your team members. The integration is easy to set up through our dashboard and includes features like real-time notifications, custom commands, and automated responses.",
+    "query_type": "features",
+    "context": "Integration question",
+    "timestamp": "2025-06-20T12:15:00Z",
+    "approved": true
+  },
+  {
+    "id": "pair_5",
+    "query": "What security measures do you have in place?",
+    "response": "Security is our top priority. We implement multiple layers of protection including: end-to-end encryption for all data transmission, SOC 2 Type II compliance, regular security audits, role-based access controls, and secure cloud infrastructure hosted on Google Cloud Platform. All data is encrypted both in transit and at rest, and we follow industry best practices for data protection.",
+    "query_type": "security",
+    "context": "Security inquiry",
+    "timestamp": "2025-06-20T12:20:00Z",
+    "approved": true
+  }
+]

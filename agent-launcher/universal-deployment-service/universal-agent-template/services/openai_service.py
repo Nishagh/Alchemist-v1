@@ -8,15 +8,15 @@ of API keys, models, and error handling.
 import os
 import logging
 from typing import Optional, Dict, Any, Tuple
-from langchain_openai import ChatOpenAI
+import openai
 from dotenv import load_dotenv
 
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-# Cache for LLM instances
-_LLM_CACHE: Dict[Tuple[str, float], ChatOpenAI] = {}
+# Cache for OpenAI client instances
+_CLIENT_CACHE: Dict[str, openai.OpenAI] = {}
 
 class OpenAIService:
     """

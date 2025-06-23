@@ -2,8 +2,8 @@
 """
 WhatsApp Webhook Handler for Universal Agent Template
 
-This module provides the webhook endpoints and message processing logic
-for WhatsApp integration.
+Simplified webhook handler for existing WhatsApp Business users.
+Provides webhook endpoints for verification and message processing.
 """
 
 import logging
@@ -20,18 +20,18 @@ class WhatsAppWebhookHandler:
     Handler for WhatsApp webhook endpoints and message processing.
     """
     
-    def __init__(self, whatsapp_service, conversation_repo, agent_executor):
+    def __init__(self, whatsapp_service, conversation_repo, openai_client):
         """
         Initialize webhook handler with required services.
         
         Args:
             whatsapp_service: WhatsApp service instance
             conversation_repo: Conversation repository instance
-            agent_executor: LangChain agent executor instance
+            openai_client: OpenAI client instance
         """
         self.whatsapp_service = whatsapp_service
         self.conversation_repo = conversation_repo
-        self.agent_executor = agent_executor
+        self.openai_client = openai_client
         self.router = APIRouter()
         
         # Add routes
@@ -165,22 +165,26 @@ class WhatsAppWebhookHandler:
             # Get conversation history for context
             messages = self.conversation_repo.get_messages(conversation_id)
             
-            # Convert to LangChain message format
-            from langchain_core.messages import AIMessage, HumanMessage
+            # Convert to OpenAI message format
             chat_history = []
             for msg in messages[:-1]:  # Exclude the message we just added
-                if msg['role'] == 'user':
-                    chat_history.append(HumanMessage(content=msg['content']))
-                elif msg['role'] == 'assistant':
-                    chat_history.append(AIMessage(content=msg['content']))
+                chat_history.append({
+                    "role": msg['role'],
+                    "content": msg['content']
+                })
             
-            # Process with agent
-            result = await self.agent_executor.ainvoke({
-                "input": message_text,
-                "chat_history": chat_history
-            })
+            # Add system prompt and process with OpenAI
+            system_prompt = "You are a helpful AI assistant responding via WhatsApp. Keep responses concise and friendly."
+            messages_for_openai = [{"role": "system", "content": system_prompt}] + chat_history + [{"role": "user", "content": message_text}]
             
-            response_text = result.get('output', 'Sorry, I could not process your request.')
+            response = self.openai_client.chat.completions.create(
+                model="gpt-4",
+                messages=messages_for_openai,
+                temperature=0.7,
+                max_tokens=500  # Shorter for WhatsApp
+            )
+            
+            response_text = response.choices[0].message.content
             
             # Format response for WhatsApp
             formatted_response = self.whatsapp_service.format_agent_response(response_text)

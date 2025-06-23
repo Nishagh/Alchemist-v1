@@ -148,11 +148,6 @@ class UniversalAgentDeployer:
                 'requirements.txt'
             ]
             
-            # Copy optional files if they exist
-            optional_files = [
-                'firebase-credentials.json'
-            ]
-            
             for file_name in template_files:
                 src_file = self.template_dir / file_name
                 if src_file.exists():
@@ -161,14 +156,6 @@ class UniversalAgentDeployer:
                     logger.debug(f"Copied template file: {file_name}")
                 else:
                     logger.warning(f"Template file not found: {file_name}")
-            
-            # Copy optional files if they exist
-            for file_name in optional_files:
-                src_file = self.template_dir / file_name
-                if src_file.exists():
-                    dst_file = deployment_dir / file_name
-                    shutil.copy2(src_file, dst_file)
-                    logger.info(f"Copied optional file: {file_name}")
             
             # Create environment configuration
             self._create_environment_config(deployment_dir, agent_config)
@@ -188,7 +175,6 @@ class UniversalAgentDeployer:
 AGENT_ID={agent_config['agent_id']}
 PROJECT_ID={self.project_id}
 OPENAI_API_KEY={openai_key}
-FIREBASE_CREDENTIALS=/app/firebase-credentials.json
 """
             
             env_file = deployment_dir / '.env'
@@ -208,35 +194,9 @@ FIREBASE_CREDENTIALS=/app/firebase-credentials.json
             dockerfile = deployment_dir / 'Dockerfile'
             dockerfile.write_text(dockerfile_content)
             
-            # Copy Firebase credentials if they exist
-            # First check in the universal-agent template directory
-            template_firebase_creds = self.template_dir / 'firebase-credentials.json'
-            
-            # Then check environment/config paths
-            env_firebase_creds = (os.getenv('FIREBASE_CREDENTIALS') or 
-                                os.getenv('firebase_credentials') or 
-                                os.getenv('GOOGLE_APPLICATION_CREDENTIALS') or
-                                'firebase-credentials.json')
-            
-            firebase_creds_copied = False
-            
-            # Try template directory first (universal-agent/firebase-credentials.json)
-            if template_firebase_creds.exists():
-                dst_creds = deployment_dir / 'firebase-credentials.json'
-                shutil.copy2(template_firebase_creds, dst_creds)
-                logger.info(f"Firebase credentials copied from template: {template_firebase_creds}")
-                firebase_creds_copied = True
-            # Try environment-specified path
-            elif os.path.exists(env_firebase_creds):
-                dst_creds = deployment_dir / 'firebase-credentials.json'
-                shutil.copy2(env_firebase_creds, dst_creds)
-                logger.info(f"Firebase credentials copied from environment: {env_firebase_creds}")
-                firebase_creds_copied = True
-            else:
-                logger.info("No Firebase credentials file found, using Application Default Credentials")
-                
-            if not firebase_creds_copied:
-                logger.warning("Firebase credentials not found. Deployment may fail without proper authentication.")
+            # Firebase credentials not needed for Google Cloud deployments
+            # Google Cloud Run automatically uses Application Default Credentials (ADC)
+            logger.info("Using Google Cloud Application Default Credentials for Firebase authentication")
             
             # Create .dockerignore
             dockerignore_content = """
@@ -282,9 +242,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
-
-# Copy Firebase credentials if they exist
-COPY firebase-credentials.json* ./
 
 # Set environment variables
 ENV PYTHONPATH=/app
@@ -391,14 +348,7 @@ CMD ["python", "main.py"]
             try:
                 firebase_app = firebase_admin.get_app()
             except ValueError:
-                firebase_creds = (os.getenv('FIREBASE_CREDENTIALS') or 
-                                os.getenv('firebase_credentials') or 
-                                'firebase-credentials.json')
-                if os.path.exists(firebase_creds):
-                    cred = credentials.Certificate(firebase_creds)
-                    firebase_app = firebase_admin.initialize_app(cred, {'projectId': self.project_id})
-                else:
-                    firebase_app = firebase_admin.initialize_app()
+                firebase_app = firebase_admin.initialize_app()
             
             db = firestore.client(firebase_app)
             
@@ -437,14 +387,7 @@ CMD ["python", "main.py"]
             try:
                 firebase_app = firebase_admin.get_app()
             except ValueError:
-                firebase_creds = (os.getenv('FIREBASE_CREDENTIALS') or 
-                                os.getenv('firebase_credentials') or 
-                                'firebase-credentials.json')
-                if os.path.exists(firebase_creds):
-                    cred = credentials.Certificate(firebase_creds)
-                    firebase_app = firebase_admin.initialize_app(cred, {'projectId': self.project_id})
-                else:
-                    firebase_app = firebase_admin.initialize_app()
+                firebase_app = firebase_admin.initialize_app()
             
             db = firestore.client(firebase_app)
             

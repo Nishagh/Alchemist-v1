@@ -4,13 +4,13 @@ FROM node:18-alpine as build
 WORKDIR /app
 
 # Copy package.json and package-lock.json
-COPY agent-studio/package*.json ./
+COPY package*.json ./
 
 # Install dependencies
 RUN npm ci
 
 # Copy all source files (excluding firebase-credentials.json which will be mounted at runtime)
-COPY agent-studio/ .
+COPY . .
 
 # Ensure we're not trying to use the credentials file during build
 RUN rm -f firebase-credentials.json
@@ -32,7 +32,7 @@ FROM node:18-alpine
 WORKDIR /app
 
 # Copy package.json and package-lock.json
-COPY agent-studio/package*.json ./
+COPY package*.json ./
 
 # Install production dependencies only
 RUN npm ci --only=production

@@ -75,6 +75,7 @@ const AgentDeploymentManager = ({
   const [currentDeployment, setCurrentDeployment] = useState(null);
   const [deploymentProgress, setDeploymentProgress] = useState(null);
   const [showProgressDialog, setShowProgressDialog] = useState(false);
+  const [showDetailsDialog, setShowDetailsDialog] = useState(false);
   const [showLogsExpanded, setShowLogsExpanded] = useState(false);
   const pollingRef = useRef(null);
   const unsubscribeRef = useRef(null);
@@ -273,6 +274,16 @@ const AgentDeploymentManager = ({
     setDeploymentProgress(null);
     setCurrentDeployment(null);
     pollingRef.current = null;
+  };
+
+  const handleShowDetails = (deployment) => {
+    setSelectedDeployment(deployment);
+    setShowDetailsDialog(true);
+  };
+
+  const handleCloseDetailsDialog = () => {
+    setShowDetailsDialog(false);
+    setSelectedDeployment(null);
   };
 
   const getStatusColor = (status) => {
@@ -544,6 +555,7 @@ const AgentDeploymentManager = ({
                       size="small" 
                       startIcon={<SettingsIcon />}
                       disabled={disabled}
+                      onClick={() => handleShowDetails(deployment)}
                     >
                       Details
                     </Button>
@@ -685,7 +697,10 @@ const AgentDeploymentManager = ({
           open={Boolean(anchorEl)}
           onClose={handleMenuClose}
         >
-          <MenuItem onClick={handleMenuClose}>
+          <MenuItem onClick={() => {
+            handleShowDetails(selectedDeployment);
+            handleMenuClose();
+          }}>
             <SettingsIcon sx={{ mr: 1 }} />
             View Details
           </MenuItem>
@@ -705,6 +720,201 @@ const AgentDeploymentManager = ({
             Redeploy
           </MenuItem>
         </Menu>
+
+        {/* Deployment Details Dialog */}
+        <Dialog
+          open={showDetailsDialog}
+          onClose={handleCloseDetailsDialog}
+          maxWidth="md"
+          fullWidth
+        >
+          <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <SettingsIcon />
+            Deployment Details
+          </DialogTitle>
+          
+          <DialogContent>
+            {selectedDeployment && (
+              <Box sx={{ space: 2 }}>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="h6" gutterBottom>
+                      Basic Information
+                    </Typography>
+                    
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="body2" color="text.secondary" gutterBottom>
+                        <strong>Deployment ID:</strong>
+                      </Typography>
+                      <Typography variant="body2" sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                        {selectedDeployment.deployment_id}
+                      </Typography>
+                    </Box>
+
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="body2" color="text.secondary" gutterBottom>
+                        <strong>Agent ID:</strong>
+                      </Typography>
+                      <Typography variant="body2" sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                        {selectedDeployment.agent_id}
+                      </Typography>
+                    </Box>
+
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="body2" color="text.secondary" gutterBottom>
+                        <strong>Status:</strong>
+                      </Typography>
+                      <Chip 
+                        label={selectedDeployment.status} 
+                        color={getStatusColor(selectedDeployment.status)}
+                        size="small"
+                      />
+                    </Box>
+
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="body2" color="text.secondary" gutterBottom>
+                        <strong>Progress:</strong>
+                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <LinearProgress 
+                          variant="determinate" 
+                          value={selectedDeployment.progress_percentage || 0} 
+                          sx={{ flexGrow: 1, height: 6, borderRadius: 3 }}
+                        />
+                        <Typography variant="body2">
+                          {selectedDeployment.progress_percentage || 0}%
+                        </Typography>
+                      </Box>
+                    </Box>
+
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="body2" color="text.secondary" gutterBottom>
+                        <strong>Current Step:</strong>
+                      </Typography>
+                      <Typography variant="body2">
+                        {selectedDeployment.current_step || 'No current step available'}
+                      </Typography>
+                    </Box>
+                  </Grid>
+
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="h6" gutterBottom>
+                      Deployment Information
+                    </Typography>
+
+                    {selectedDeployment.service_url && (
+                      <Box sx={{ mb: 2 }}>
+                        <Typography variant="body2" color="text.secondary" gutterBottom>
+                          <strong>Service URL:</strong>
+                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Typography 
+                            variant="body2" 
+                            sx={{ fontFamily: 'monospace', wordBreak: 'break-all', flexGrow: 1 }}
+                          >
+                            {selectedDeployment.service_url}
+                          </Typography>
+                          <Button
+                            size="small"
+                            href={selectedDeployment.service_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            startIcon={<LaunchIcon />}
+                          >
+                            Open
+                          </Button>
+                        </Box>
+                      </Box>
+                    )}
+
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="body2" color="text.secondary" gutterBottom>
+                        <strong>Deployment Type:</strong>
+                      </Typography>
+                      <Typography variant="body2">
+                        {selectedDeployment.deployment_type || 'Universal'} Deployment
+                      </Typography>
+                    </Box>
+
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="body2" color="text.secondary" gutterBottom>
+                        <strong>Created:</strong>
+                      </Typography>
+                      <Typography variant="body2">
+                        {formatTimestamp(selectedDeployment.created_at)}
+                      </Typography>
+                    </Box>
+
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="body2" color="text.secondary" gutterBottom>
+                        <strong>Last Updated:</strong>
+                      </Typography>
+                      <Typography variant="body2">
+                        {formatTimestamp(selectedDeployment.updated_at)}
+                      </Typography>
+                    </Box>
+
+                    {selectedDeployment.error_message && (
+                      <Box sx={{ mb: 2 }}>
+                        <Typography variant="body2" color="text.secondary" gutterBottom>
+                          <strong>Error:</strong>
+                        </Typography>
+                        <Alert severity="error" sx={{ mt: 1 }}>
+                          {selectedDeployment.error_message}
+                        </Alert>
+                      </Box>
+                    )}
+                  </Grid>
+
+                  {selectedDeployment.logs && selectedDeployment.logs.length > 0 && (
+                    <Grid item xs={12}>
+                      <Typography variant="h6" gutterBottom>
+                        Deployment Logs
+                      </Typography>
+                      <Box 
+                        sx={{ 
+                          maxHeight: 200, 
+                          overflowY: 'auto', 
+                          border: 1, 
+                          borderColor: 'divider',
+                          borderRadius: 1,
+                          p: 1,
+                          backgroundColor: 'grey.50'
+                        }}
+                      >
+                        {selectedDeployment.logs.map((log, index) => (
+                          <Typography 
+                            key={index} 
+                            variant="body2" 
+                            sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}
+                          >
+                            {log}
+                          </Typography>
+                        ))}
+                      </Box>
+                    </Grid>
+                  )}
+                </Grid>
+              </Box>
+            )}
+          </DialogContent>
+          
+          <DialogActions>
+            {selectedDeployment?.service_url && (
+              <Button
+                href={selectedDeployment.service_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                startIcon={<LaunchIcon />}
+              >
+                Open Service
+              </Button>
+            )}
+            <Button onClick={handleCloseDetailsDialog}>
+              Close
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Box>
     </Box>
   );

@@ -14,8 +14,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from pathlib import Path
 
 import chromadb
-from langchain_openai import OpenAIEmbeddings
-from langchain.tools import Tool
+import openai
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -47,12 +46,8 @@ class EmbeddedVectorSearch:
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
         
-        # Initialize OpenAI embeddings
-        self.embeddings = OpenAIEmbeddings(
-            openai_api_key=openai_api_key,
-            model="text-embedding-3-small",
-            dimensions=1536
-        )
+        # Initialize OpenAI client
+        self.openai_client = openai.OpenAI(api_key=openai_api_key)
         
         # Initialize ChromaDB client
         self.chroma_client = chromadb.PersistentClient(path=str(self.data_dir))
@@ -432,15 +427,15 @@ class EmbeddedVectorSearch:
             return 0
 
 
-def create_embedded_vector_tools(agent_config: Dict[str, Any]) -> List[Tool]:
+def create_embedded_vector_tools(agent_config: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
-    Create LangChain tools for embedded vector search.
+    Create tool definitions for embedded vector search using direct OpenAI integration.
     
     Args:
         agent_config: Agent configuration containing agent_id and openai_api_key
         
     Returns:
-        List of LangChain tools for vector operations
+        List of tool definitions for vector operations
     """
     tools = []
     
@@ -516,24 +511,24 @@ def create_embedded_vector_tools(agent_config: Dict[str, Any]) -> List[Tool]:
             except Exception as e:
                 return f"Error getting knowledge base statistics: {str(e)}"
         
-        # Create LangChain tools
-        search_tool = Tool(
-            name="search_embedded_knowledge_base",
-            description="Search the agent's embedded knowledge base for relevant information. Use this when you need to find specific information that might be stored in the agent's knowledge base.",
-            func=search_vectors
-        )
+        # Create tool definitions using direct function calls
+        search_tool = {
+            "name": "search_embedded_knowledge_base",
+            "description": "Search the agent's embedded knowledge base for relevant information. Use this when you need to find specific information that might be stored in the agent's knowledge base.",
+            "function": search_vectors
+        }
         
-        add_tool = Tool(
-            name="add_to_embedded_knowledge_base",
-            description="Add new information to the agent's embedded knowledge base for future reference. Use this to store important information learned during conversations.",
-            func=add_to_vectors
-        )
+        add_tool = {
+            "name": "add_to_embedded_knowledge_base", 
+            "description": "Add new information to the agent's embedded knowledge base for future reference. Use this to store important information learned during conversations.",
+            "function": add_to_vectors
+        }
         
-        stats_tool = Tool(
-            name="knowledge_base_stats",
-            description="Get statistics about the agent's knowledge base, including the number of stored documents.",
-            func=get_kb_stats
-        )
+        stats_tool = {
+            "name": "knowledge_base_stats",
+            "description": "Get statistics about the agent's knowledge base, including the number of stored documents.",
+            "function": get_kb_stats
+        }
         
         tools.extend([search_tool, add_tool, stats_tool])
         logger.info(f"Created {len(tools)} embedded vector search tools")

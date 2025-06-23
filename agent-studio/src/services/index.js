@@ -7,7 +7,7 @@
 
 // Core services
 export { initializeAuthInterceptors, getAuthToken, verifyTokenWithServer } from './auth/authService';
-export { API_BASE_URL, KNOWLEDGE_BASE_URL, MCP_MANAGER_URL, ENDPOINTS, api, kbApi, mcpApi } from './config/apiConfig';
+export { API_BASE_URL, KNOWLEDGE_BASE_URL, MCP_MANAGER_URL, TUNING_SERVICE_URL, ENDPOINTS, api, kbApi, mcpApi, tuningApi, getApiConfig } from './config/apiConfig';
 
 // Agent services
 export {
@@ -90,6 +90,50 @@ export {
   getDeployment
 } from './deployment/deploymentService';
 
+// Agent Tuning services
+export {
+  createTrainingJob,
+  getTrainingJobs,
+  getTrainingJob,
+  getJobStatus,
+  startTrainingJob,
+  cancelTrainingJob,
+  deleteTrainingJob,
+  validateTrainingData,
+  processTrainingData,
+  getAgentTrainingData,
+  exportTrainingData,
+  getAgentModels,
+  getModelDetails,
+  activateModel,
+  deactivateModel,
+  deleteModel,
+  formatTrainingPairs,
+  createJobConfig,
+  monitorJobProgress,
+  generateQueries,
+  analyzeAgentContext,
+  getQueryCategories,
+  getQueryDifficulties,
+  startConversationTraining,
+  generateAndRespond,
+  addTrainingPair,
+  getConversationSessions,
+  getConversationSession,
+  updateAutoTrainingConfig,
+  getTrainingStats
+} from './tuning/tuningService';
+
+// Billing services
+export {
+  billingService
+} from './billing/billingService';
+
+// Credits services (prepaid billing)
+export {
+  creditsService
+} from './credits/creditsService';
+
 // Backward compatibility - re-export everything that was in the original apiService
 // This allows existing imports to continue working without changes
 export * from './agents/agentService';
@@ -100,3 +144,4 @@ export * from './alchemist/alchemistService';
 export * from './apiIntegration/apiIntegrationService';
 export * from './mcpServer/mcpServerService';
 export * from './deployment/deploymentService';
+export * from './tuning/tuningService';

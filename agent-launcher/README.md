@@ -45,12 +45,6 @@ Optimized deployment provides significant performance improvements over traditio
    pip install -r requirements.txt
    ```
 
-2. Ensure you have Firebase credentials:
-   ```bash
-   # Place your Firebase credentials file in this directory
-   cp /path/to/your/firebase-credentials.json ./firebase-credentials.json
-   ```
-
 3. Authenticate with Google Cloud:
    ```bash
    gcloud auth login

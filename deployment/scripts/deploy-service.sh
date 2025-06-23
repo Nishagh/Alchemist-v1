@@ -83,8 +83,137 @@ deploy_service() {
         return
     else
         # Build from root directory to include shared dependencies
-        # Create a temporary cloudbuild.yaml for this service
-        cat > cloudbuild-temp.yaml << EOF
+        # For agent-launcher, create optimized build context
+        if [[ "$service_name" == "agent-launcher" ]]; then
+            # Create a temporary build directory with only necessary files
+            echo -e "${YELLOW}Creating optimized build context for agent-launcher...${NC}"
+            BUILD_DIR="temp-build-${service_name}"
+            mkdir -p "$BUILD_DIR"
+            
+            # Copy only necessary directories
+            cp -r shared "$BUILD_DIR/"
+            
+            # Copy agent-launcher selectively, excluding large directories
+            mkdir -p "$BUILD_DIR/agent-launcher"
+            
+            # Copy universal-deployment-service (needed for deployment)
+            if [ -d "agent-launcher/universal-deployment-service" ]; then
+                cp -r agent-launcher/universal-deployment-service "$BUILD_DIR/agent-launcher/"
+            fi
+            
+            # Copy universal-agent-template (needed for template)
+            if [ -d "agent-launcher/universal-agent-template" ]; then
+                cp -r agent-launcher/universal-agent-template "$BUILD_DIR/agent-launcher/"
+            fi
+            
+            # Copy main Dockerfile
+            if [ -f "agent-launcher/Dockerfile" ]; then
+                cp agent-launcher/Dockerfile "$BUILD_DIR/agent-launcher/"
+            fi
+            
+            # Copy any other essential files
+            for file in agent-launcher/*.py agent-launcher/*.txt agent-launcher/*.md agent-launcher/.env* agent-launcher/.dockerignore; do
+                if [ -f "$file" ]; then
+                    cp "$file" "$BUILD_DIR/agent-launcher/"
+                fi
+            done
+            
+            # Create a minimal .dockerignore in the temp build directory
+            cat > "$BUILD_DIR/.dockerignore" << DOCKERIGNORE_EOF
+# Exclude test files and data
+**/tests/
+**/*test*
+**/test_*/
+**/*.test.*
+**/*.spec.*
+
+# Exclude vector data and large files
+**/vector_data*/
+vector_data*/
+**/*.bin
+**/*.sqlite3
+**/*.db
+
+# Exclude Python cache and virtual environments
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/venv/
+**/env/
+**/.venv/
+**/test_env/
+test_env/
+**/*.egg-info/
+
+# Exclude development files
+**/.env*
+!**/.env.example
+**/.vscode/
+**/.idea/
+**/*.swp
+**/*.swo
+
+# Exclude credentials
+firebase-credentials.json
+**/firebase-credentials.json
+
+# Exclude temporary and cache files
+**/.cache/
+**/tmp/
+**/temp/
+**/*.tmp
+**/*.log
+**/*.pid
+
+# Exclude OS files
+.DS_Store
+Thumbs.db
+**/.DS_Store
+**/Thumbs.db
+
+# Exclude git
+.git/
+.gitignore
+
+# Exclude large ML/AI dependencies and binaries
+**/*.dylib
+**/*.so
+**/*.dll
+**/torch/
+**/onnxruntime/
+**/chromadb*/
+DOCKERIGNORE_EOF
+            
+            # Create a temporary cloudbuild.yaml for optimized agent-launcher build
+            cat > cloudbuild-temp.yaml << EOF
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['build', '-f', 'agent-launcher/Dockerfile', '-t', '${image_name}', '.']
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['push', '${image_name}']
+images:
+- '${image_name}'
+timeout: '${TIMEOUT}'
+options:
+  sourceProvenanceHash: ['SHA256']
+  logging: CLOUD_LOGGING_ONLY
+EOF
+            
+            # Build from the optimized directory
+            echo -e "${YELLOW}Building from optimized context: ${BUILD_DIR}${NC}"
+            gcloud builds submit \
+                --config=cloudbuild-temp.yaml \
+                --timeout=${TIMEOUT} \
+                "$BUILD_DIR"
+            
+            # Clean up temporary build directory
+            rm -rf "$BUILD_DIR"
+            rm -f cloudbuild-temp.yaml
+            return
+        else
+            # Create a temporary cloudbuild.yaml for other services
+            cat > cloudbuild-temp.yaml << EOF
 steps:
 - name: 'gcr.io/cloud-builders/docker'
   args: ['build', '-f', '${SERVICE_DIR}/Dockerfile', '-t', '${image_name}', '.']
@@ -94,6 +223,7 @@ images:
 - '${image_name}'
 timeout: '${TIMEOUT}'
 EOF
+        fi
     fi
     
     gcloud builds submit \
@@ -140,25 +270,77 @@ EOF
     esac
     
     # Deploy to Cloud Run
+    echo -e "${YELLOW}Deploying to Cloud Run...${NC}"
     if [[ "$service_name" == "alchemist-monitor-service" ]]; then
         # Special handling for monitor service name
-        gcloud run deploy "${service_name}" \
+        if ! gcloud run deploy "${service_name}" \
             --image=${image_name} \
             --platform=managed \
             --region=${REGION} \
             --allow-unauthenticated \
             --port=8080 \
             --set-env-vars="ENVIRONMENT=${ENVIRONMENT}" \
-            ${service_config}
+            ${service_config}; then
+            echo -e "${RED}❌ Cloud Run deployment failed${NC}"
+            exit 1
+        fi
     else
-        gcloud run deploy "alchemist-${service_name}" \
+        if ! gcloud run deploy "alchemist-${service_name}" \
             --image=${image_name} \
             --platform=managed \
             --region=${REGION} \
             --allow-unauthenticated \
             --port=8080 \
             --set-env-vars="ENVIRONMENT=${ENVIRONMENT}" \
-            ${service_config}
+            ${service_config}; then
+            echo -e "${RED}❌ Cloud Run deployment failed${NC}"
+            exit 1
+        fi
+    fi
+    
+    # Wait for deployment to stabilize and check revision health
+    echo -e "${YELLOW}Waiting for revision to become ready...${NC}"
+    sleep 10
+    
+    # Get the latest revision
+    if [[ "$service_name" == "alchemist-monitor-service" ]]; then
+        latest_revision=$(gcloud run revisions list --service="${service_name}" --region=${REGION} --limit=1 --format="value(metadata.name)")
+    else
+        latest_revision=$(gcloud run revisions list --service="alchemist-${service_name}" --region=${REGION} --limit=1 --format="value(metadata.name)")
+    fi
+    
+    # Check if the latest revision is ready
+    max_wait=300  # 5 minutes
+    wait_time=0
+    while [ $wait_time -lt $max_wait ]; do
+        if [[ "$service_name" == "alchemist-monitor-service" ]]; then
+            revision_status=$(gcloud run revisions describe "$latest_revision" --region=${REGION} --format="value(status.conditions[0].status)")
+        else
+            revision_status=$(gcloud run revisions describe "$latest_revision" --region=${REGION} --format="value(status.conditions[0].status)")
+        fi
+        
+        if [[ "$revision_status" == "True" ]]; then
+            echo -e "${GREEN}✅ Revision $latest_revision is ready${NC}"
+            break
+        elif [[ "$revision_status" == "False" ]]; then
+            echo -e "${RED}❌ Revision $latest_revision failed to start${NC}"
+            if [[ "$service_name" == "alchemist-monitor-service" ]]; then
+                error_msg=$(gcloud run revisions describe "$latest_revision" --region=${REGION} --format="value(status.conditions[0].message)")
+            else
+                error_msg=$(gcloud run revisions describe "$latest_revision" --region=${REGION} --format="value(status.conditions[0].message)")
+            fi
+            echo -e "${RED}Error: $error_msg${NC}"
+            exit 1
+        fi
+        
+        echo -e "${YELLOW}Waiting for revision to become ready... (${wait_time}s/${max_wait}s)${NC}"
+        sleep 10
+        wait_time=$((wait_time + 10))
+    done
+    
+    if [ $wait_time -ge $max_wait ]; then
+        echo -e "${RED}❌ Timeout waiting for revision to become ready${NC}"
+        exit 1
     fi
     
     # Get service URL

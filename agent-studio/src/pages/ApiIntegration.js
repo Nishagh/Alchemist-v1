@@ -1407,6 +1407,14 @@ const ApiIntegration = () => {
           variant="outlined" 
           startIcon={<ArrowBackIcon />} 
           onClick={() => navigate('/agents')}
+          sx={{
+            color: '#6366f1',
+            borderColor: '#6366f1',
+            '&:hover': {
+              bgcolor: '#6366f115',
+              borderColor: '#4f46e5'
+            }
+          }}
         >
           Back to My Agents
         </Button>
@@ -1430,7 +1438,15 @@ const ApiIntegration = () => {
                 variant="outlined" 
                 startIcon={<ArrowBackIcon />} 
                 onClick={() => navigate(-1)}
-                sx={{ mr: 2 }}
+                sx={{ 
+                  mr: 2,
+                  color: '#6366f1',
+                  borderColor: '#6366f1',
+                  '&:hover': {
+                    bgcolor: '#6366f115',
+                    borderColor: '#4f46e5'
+                  }
+                }}
               >
                 Back
               </Button>
@@ -1448,10 +1464,18 @@ const ApiIntegration = () => {
             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
               <Button
                 variant="contained"
-                color="primary"
                 startIcon={<UploadIcon />}
                 onClick={handleFileUploadClick}
                 disabled={isUploading}
+                sx={{
+                  bgcolor: '#8b5cf6',
+                  '&:hover': {
+                    bgcolor: '#7c3aed'
+                  },
+                  '&:disabled': {
+                    bgcolor: '#d1d5db'
+                  }
+                }}
               >
                 Upload API Configuration
               </Button>

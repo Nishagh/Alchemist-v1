@@ -436,10 +436,11 @@ const KnowledgeBase = () => {
           variant="outlined"
           size="small"
           sx={{
-            borderColor: theme.palette.primary.main,
-            color: theme.palette.primary.main,
+            borderColor: '#6366f1',
+            color: '#6366f1',
             '&:hover': {
-              backgroundColor: alpha(theme.palette.primary.main, 0.05)
+              backgroundColor: '#6366f115',
+              borderColor: '#4f46e5'
             }
           }}
         >
@@ -474,10 +475,15 @@ const KnowledgeBase = () => {
             disabled={!searchQuery.trim()}
             sx={{
               mr: 2,
-              borderColor: theme.palette.primary.main,
-              color: theme.palette.primary.main,
+              borderColor: '#10b981',
+              color: '#10b981',
               '&:hover': {
-                backgroundColor: alpha(theme.palette.primary.main, 0.05)
+                backgroundColor: '#10b98115',
+                borderColor: '#059669'
+              },
+              '&:disabled': {
+                borderColor: '#d1d5db',
+                color: '#9ca3af'
               }
             }}
           >
@@ -504,8 +510,10 @@ const KnowledgeBase = () => {
             sx={{ 
               fontWeight: 'bold',
               boxShadow: 'none',
+              bgcolor: '#8b5cf6',
               '&:hover': {
-                boxShadow: '0 2px 5px rgba(0, 0, 0, 0.1)'
+                bgcolor: '#7c3aed',
+                boxShadow: '0 2px 5px rgba(139, 92, 246, 0.3)'
               }
             }}
           >
@@ -650,9 +658,15 @@ const KnowledgeBase = () => {
                           </TableCell>
                           <TableCell align="right">
                             <IconButton 
-                              color="error" 
                               onClick={() => handleOpenDeleteConfirm(file.id || `file-${files.indexOf(file)}`)}
                               size="small"
+                              sx={{
+                                color: '#ef4444',
+                                '&:hover': {
+                                  backgroundColor: '#fef2f2',
+                                  color: '#dc2626'
+                                }
+                              }}
                             >
                               <DeleteIcon />
                             </IconButton>
@@ -750,9 +764,15 @@ const KnowledgeBase = () => {
                         
                         <CardActions sx={{ justifyContent: 'flex-end', p: 1 }}>
                           <IconButton 
-                            color="error" 
                             onClick={() => handleOpenDeleteConfirm(file.id || `file-${files.indexOf(file)}`)} 
                             size="small"
+                            sx={{
+                              color: '#ef4444',
+                              '&:hover': {
+                                backgroundColor: '#fef2f2',
+                                color: '#dc2626'
+                              }
+                            }}
                           >
                             <DeleteIcon fontSize="small" />
                           </IconButton>
@@ -827,10 +847,26 @@ const KnowledgeBase = () => {
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseDeleteConfirm} color="primary">
+          <Button 
+            onClick={handleCloseDeleteConfirm}
+            sx={{
+              color: '#6b7280',
+              '&:hover': {
+                backgroundColor: '#6b728015'
+              }
+            }}
+          >
             Cancel
           </Button>
-          <Button onClick={handleConfirmDelete} color="error">
+          <Button 
+            onClick={handleConfirmDelete}
+            sx={{
+              color: '#ef4444',
+              '&:hover': {
+                backgroundColor: '#fef2f2'
+              }
+            }}
+          >
             Delete
           </Button>
         </DialogActions>

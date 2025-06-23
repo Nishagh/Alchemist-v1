@@ -7,6 +7,32 @@ const PORT = process.env.PORT || 8080;
 const { auth, db } = require('./server/firebase-admin');
 const { configureFirebaseAuth } = require('./server/auth-config');
 
+// Import billing routes (now using CommonJS)
+let billingRoutes = null;
+let creditsRoutes = null;
+let webhookRoutes = null;
+let usageTrackingMiddleware = null;
+let creditsMiddleware = null;
+
+// Load modules
+function loadModules() {
+  try {
+    // Enable payment modules
+    console.log('Loading payment modules...');
+    billingRoutes = require('./server/routes/billing');
+    creditsRoutes = require('./server/routes/credits');
+    webhookRoutes = require('./server/routes/webhooks');
+    usageTrackingMiddleware = require('./server/middleware/usageTracking');
+    creditsMiddleware = require('./server/middleware/creditsMiddleware');
+    
+    console.log('All modules loaded successfully including payment modules');
+  } catch (error) {
+    console.error('Error loading modules:', error);
+    // Continue without billing if modules fail to load
+    console.log('Continuing without payment modules due to error');
+  }
+}
+
 // Initialize Firebase Authentication
 configureFirebaseAuth().catch(error => {
   console.error('Failed to configure Firebase authentication:', error);
@@ -552,7 +578,16 @@ app.post('/api/user-agents/:agentId/action', authenticateUser, validateUserId, a
 // =========== ALCHEMIST AGENT ROUTES =============
 
 // Interact with Alchemist agent
-app.post('/api/alchemist/interact', authenticateUser, validateUserId, async (req, res) => {
+app.post('/api/alchemist/interact', authenticateUser, validateUserId, async (req, res, next) => {
+  // Apply credits middleware if available
+  if (creditsMiddleware) {
+    await creditsMiddleware.checkCreditsBeforeUsage(req, res, () => {
+      creditsMiddleware.deductCreditsAfterUsage(req, res, next);
+    });
+  } else {
+    next();
+  }
+}, async (req, res) => {
   try {
     const userId = req.user.uid;
     const { message, agent_id, create_agent, agent_requirement } = req.body;
@@ -581,6 +616,39 @@ app.post('/api/alchemist/interact', authenticateUser, validateUserId, async (req
   }
 });
 
+// =========== WEBHOOK ROUTES =============
+
+// Webhook routes (no authentication required)
+app.use('/webhooks', async (req, res, next) => {
+  if (webhookRoutes) {
+    webhookRoutes(req, res, next);
+  } else {
+    res.status(503).json({ error: 'Webhook service not available' });
+  }
+});
+
+// =========== CREDITS API ROUTES =============
+
+// Use credits routes if available (primary billing system)
+app.use('/api/credits', authenticateUser, validateUserId, async (req, res, next) => {
+  if (creditsRoutes) {
+    creditsRoutes(req, res, next);
+  } else {
+    res.status(503).json({ error: 'Credits service not available' });
+  }
+});
+
+// =========== BILLING API ROUTES =============
+
+// Use billing routes if available (legacy postpaid system)
+app.use('/api/billing', authenticateUser, validateUserId, async (req, res, next) => {
+  if (billingRoutes) {
+    billingRoutes(req, res, next);
+  } else {
+    res.status(503).json({ error: 'Billing service not available' });
+  }
+});
+
 // Serve static files from the build directory
 app.use(express.static(path.join(__dirname, 'build')));
 
@@ -592,4 +660,7 @@ app.get('/*', (req, res) => {
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  
+  // Load modules after server starts
+  loadModules();
 }); 

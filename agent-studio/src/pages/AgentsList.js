@@ -39,7 +39,10 @@ import {
   MenuBook as MenuBookIcon,
   TrendingUp as TrendingUpIcon,
   Speed as SpeedIcon,
-  PlayArrow as PlayArrowIcon
+  PlayArrow as PlayArrowIcon,
+  Hub as IntegrationIcon,
+  Analytics as AnalyticsIcon,
+  WhatsApp as WhatsAppIcon
 } from '@mui/icons-material';
 import { deleteAgent } from '../services';
 import { useAuth } from '../utils/AuthContext';
@@ -120,22 +123,22 @@ const AgentsList = () => {
 
   const handleCardClick = (agentId) => {
     if (agentId) {
-      navigate(`/agent-editor/${agentId}`);
+      navigate(`/agent/${agentId}`);
     }
   };
 
   const getRandomGradient = (index) => {
     const gradients = [
-      `linear-gradient(135deg, ${theme.palette.grey[900]} 0%, ${theme.palette.grey[700]} 100%)`,
-      `linear-gradient(135deg, ${theme.palette.grey[800]} 0%, ${theme.palette.grey[600]} 100%)`,
-      `linear-gradient(135deg, ${theme.palette.grey[700]} 0%, ${theme.palette.grey[500]} 100%)`,
-      `linear-gradient(135deg, ${theme.palette.grey[600]} 0%, ${theme.palette.grey[800]} 100%)`,
-      `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.grey[800]} 100%)`,
-      `linear-gradient(135deg, ${theme.palette.grey[800]} 0%, ${theme.palette.primary.main} 100%)`,
-      `linear-gradient(135deg, ${theme.palette.secondary.main} 0%, ${theme.palette.grey[700]} 100%)`,
-      `linear-gradient(135deg, ${theme.palette.grey[700]} 0%, ${theme.palette.secondary.main} 100%)`,
-      `linear-gradient(135deg, ${theme.palette.grey[900]} 0%, ${theme.palette.grey[600]} 100%)`,
-      `linear-gradient(135deg, ${theme.palette.grey[600]} 0%, ${theme.palette.grey[900]} 100%)`
+      alpha(theme.palette.primary.main, 0.1),
+      alpha(theme.palette.secondary.main, 0.1),
+      alpha(theme.palette.success.main, 0.1),
+      alpha(theme.palette.info.main, 0.1),
+      alpha(theme.palette.warning.main, 0.1),
+      alpha(theme.palette.error.main, 0.1),
+      alpha(theme.palette.primary.dark, 0.1),
+      alpha(theme.palette.secondary.dark, 0.1),
+      alpha(theme.palette.success.dark, 0.1),
+      alpha(theme.palette.info.dark, 0.1)
     ];
     return gradients[index % gradients.length];
   };
@@ -208,7 +211,7 @@ const AgentsList = () => {
                 left: 0,
                 right: 0,
                 height: 4,
-                background: `linear-gradient(90deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`
+                background: theme.palette.mode === 'dark' ? '#ffffff' : '#000000'
               }} />
               
               <Avatar sx={{ 
@@ -269,10 +272,15 @@ const AgentsList = () => {
                     textTransform: 'none',
                     fontWeight: 'medium',
                     borderWidth: 2,
+                    borderColor: theme.palette.primary.main,
+                    color: theme.palette.primary.main,
                     '&:hover': {
                       borderWidth: 2,
+                      borderColor: theme.palette.primary.dark,
+                      color: theme.palette.primary.dark,
+                      backgroundColor: alpha(theme.palette.primary.main, 0.1),
                       transform: 'translateY(-2px)',
-                      boxShadow: '0 8px 20px rgba(0, 0, 0, 0.1)'
+                      boxShadow: `0 8px 20px ${alpha(theme.palette.primary.main, 0.2)}`
                     },
                     transition: 'all 0.3s ease-in-out'
                   }}
@@ -290,7 +298,7 @@ const AgentsList = () => {
   return (
     <Box 
       sx={{ 
-        background: `linear-gradient(135deg, ${alpha(theme.palette.primary.light, 0.03)} 0%, ${alpha(theme.palette.secondary.light, 0.02)} 100%)`,
+        background: theme.palette.background.default,
         minHeight: '100vh',
         width: '100%',
         pb: 6
@@ -298,9 +306,9 @@ const AgentsList = () => {
     >
       {/* Enhanced Header Section */}
       <Box sx={{ 
-        background: `linear-gradient(135deg, ${alpha(theme.palette.background.paper, 0.9)} 0%, ${alpha(theme.palette.primary.light, 0.05)} 100%)`,
+        background: theme.palette.background.paper,
         backdropFilter: 'blur(20px)',
-        borderBottom: `1px solid ${alpha(theme.palette.primary.main, 0.08)}`,
+        borderBottom: `1px solid ${theme.palette.divider}`,
         position: 'relative',
         overflow: 'hidden'
       }}>
@@ -310,7 +318,7 @@ const AgentsList = () => {
           left: 0,
           right: 0,
           height: 3,
-          background: `linear-gradient(90deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`
+          background: theme.palette.mode === 'dark' ? '#ffffff' : '#000000'
         }} />
         
         <Container maxWidth="xl">
@@ -322,7 +330,8 @@ const AgentsList = () => {
             }}>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2 }}>
                 <Avatar sx={{ 
-                  bgcolor: theme.palette.primary.main, 
+                  bgcolor: theme.palette.mode === 'dark' ? '#ffffff' : '#000000',
+                  color: theme.palette.mode === 'dark' ? '#000000' : '#ffffff', 
                   mr: 2,
                   width: 56,
                   height: 56
@@ -334,11 +343,7 @@ const AgentsList = () => {
                   component="h1" 
                   sx={{ 
                     fontWeight: 'bold',
-                    background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
-                    backgroundClip: 'text',
-                    textFillColor: 'transparent',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent'
+                    color: theme.palette.text.primary
                   }}
                 >
                   My AI Agents
@@ -354,8 +359,8 @@ const AgentsList = () => {
                   icon={<SmartToyIcon />}
                   label={`${agents.length} Active Agents`}
                   sx={{ 
-                    bgcolor: alpha(theme.palette.primary.main, 0.1),
-                    color: theme.palette.primary.main,
+                    bgcolor: theme.palette.mode === 'dark' ? '#333333' : '#f0f0f0',
+                    color: theme.palette.text.primary,
                     fontWeight: 'medium',
                     px: 1
                   }} 
@@ -364,8 +369,8 @@ const AgentsList = () => {
                   icon={<SpeedIcon />}
                   label="Always Available"
                   sx={{ 
-                    bgcolor: alpha(theme.palette.success.main, 0.1),
-                    color: theme.palette.success.main,
+                    bgcolor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#e5e5e5',
+                    color: theme.palette.text.primary,
                     fontWeight: 'medium',
                     px: 1
                   }} 
@@ -415,12 +420,12 @@ const AgentsList = () => {
                 mb: 4,
                 p: 3,
                 borderRadius: 3,
-                background: `linear-gradient(135deg, ${alpha(theme.palette.background.paper, 0.8)} 0%, ${alpha(theme.palette.primary.light, 0.03)} 100%)`,
-                border: `1px solid ${alpha(theme.palette.primary.main, 0.08)}`,
+                background: theme.palette.background.paper,
+                border: `1px solid ${theme.palette.divider}`,
                 backdropFilter: 'blur(10px)'
               }}>
                 <Box>
-                  <Typography variant="h5" fontWeight="bold" color="primary">
+                  <Typography variant="h5" fontWeight="bold" color="textPrimary">
                     Agent Dashboard
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
@@ -441,11 +446,13 @@ const AgentsList = () => {
                     borderRadius: 3,
                     textTransform: 'none',
                     fontWeight: 'bold',
-                    background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
-                    boxShadow: '0 8px 25px rgba(0, 0, 0, 0.2)',
+                    background: theme.palette.mode === 'dark' ? '#ffffff' : '#000000',
+                    color: theme.palette.mode === 'dark' ? '#000000' : '#ffffff',
+                    boxShadow: `0 8px 25px ${alpha(theme.palette.common.black, 0.2)}`,
                     '&:hover': {
                       transform: 'translateY(-2px)',
-                      boxShadow: '0 12px 30px rgba(0, 0, 0, 0.3)'
+                      boxShadow: `0 12px 30px ${alpha(theme.palette.common.black, 0.3)}`,
+                      background: theme.palette.mode === 'dark' ? '#e5e5e5' : '#333333'
                     },
                     transition: 'all 0.3s ease-in-out'
                   }}
@@ -476,12 +483,7 @@ const AgentsList = () => {
                             '&:hover': {
                               transform: 'translateY(-12px)',
                               boxShadow: '0 25px 50px rgba(0, 0, 0, 0.25)',
-                              border: `2px solid ${theme.palette.primary.main}`,
-                              '& .agent-header': {
-                                '&:after': {
-                                  opacity: 1
-                                }
-                              },
+                              border: `2px solid ${theme.palette.mode === 'dark' ? '#ffffff' : '#000000'}`,
                               '& .agent-avatar': {
                                 transform: 'scale(1.1) rotate(5deg)',
                                 boxShadow: '0 8px 25px rgba(0, 0, 0, 0.3)'
@@ -509,7 +511,7 @@ const AgentsList = () => {
                             className="agent-header"
                             sx={{ 
                               height: '140px',
-                              background: `linear-gradient(135deg, ${alpha(theme.palette.grey[50], 1)} 0%, ${alpha(theme.palette.grey[100], 1)} 100%)`,
+                              background: theme.palette.background.paper,
                               display: 'flex',
                               flexDirection: 'column',
                               justifyContent: 'center',
@@ -517,69 +519,40 @@ const AgentsList = () => {
                               padding: 3,
                               position: 'relative',
                               transition: 'all 0.3s ease',
-                              borderBottom: `1px solid ${alpha(theme.palette.grey[200], 0.5)}`,
-                              '&:after': {
-                                content: '""',
-                                position: 'absolute',
-                                top: 0,
-                                left: 0,
-                                right: 0,
-                                bottom: 0,
-                                background: getRandomGradient(index),
-                                opacity: 0,
-                                transition: 'opacity 0.3s ease'
-                              }
+                              borderBottom: `1px solid ${alpha(theme.palette.grey[200], 0.5)}`
                             }}
                           >
                             {/* Agent Avatar */}
                             <Avatar 
                               className="agent-avatar"
                               sx={{ 
-                                bgcolor: theme.palette.primary.main,
+                                bgcolor: theme.palette.mode === 'dark' ? '#ffffff' : '#000000',
+                                color: theme.palette.mode === 'dark' ? '#000000' : '#ffffff',
                                 width: 64,
                                 height: 64,
                                 mb: 2,
-                                boxShadow: '0 4px 15px rgba(0, 0, 0, 0.15)',
+                                boxShadow: `0 4px 15px ${alpha(theme.palette.common.black, 0.15)}`,
                                 transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                                 border: `3px solid ${theme.palette.background.paper}`,
-                                zIndex: 2,
+                                zIndex: 10,
                                 position: 'relative'
                               }}
                             >
                               {getAgentTypeIcon(agent?.type)}
                             </Avatar>
                             
-                            {/* Agent Name */}
-                            <Typography 
-                              variant="h6" 
-                              sx={{ 
-                                fontWeight: 'bold', 
-                                color: theme.palette.text.primary,
-                                textAlign: 'center',
-                                mb: 1,
-                                zIndex: 2,
-                                position: 'relative',
-                                maxWidth: '100%',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap'
-                              }}
-                            >
-                              {agent?.name || 'Unnamed Agent'}
-                            </Typography>
-                            
                             {/* Model Badge */}
                             <Chip 
                               size="small" 
                               label={agent?.model || 'gpt-4'} 
                               sx={{ 
-                                bgcolor: alpha(theme.palette.primary.main, 0.1),
-                                color: theme.palette.primary.main,
+                                bgcolor: theme.palette.mode === 'dark' ? '#333333' : '#f0f0f0',
+                                color: theme.palette.text.primary,
                                 fontWeight: 'bold',
                                 fontSize: '0.75rem',
-                                zIndex: 2,
+                                zIndex: 10,
                                 position: 'relative',
-                                border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`
+                                border: `1px solid ${theme.palette.divider}`
                               }} 
                             />
                           </Box>
@@ -593,16 +566,29 @@ const AgentsList = () => {
                                 label={agent?.type?.charAt(0).toUpperCase() + agent?.type?.slice(1) || 'Generic'} 
                                 size="small"
                                 sx={{ 
-                                  bgcolor: alpha(theme.palette.grey[100], 1),
+                                  bgcolor: theme.palette.background.default,
                                   color: theme.palette.text.primary,
                                   fontWeight: 'bold',
                                   border: `1px solid ${alpha(theme.palette.grey[300], 0.5)}`,
                                   '& .MuiChip-icon': {
-                                    color: theme.palette.primary.main
+                                    color: theme.palette.text.primary
                                   }
                                 }} 
                               />
                             </Box>
+                            
+                            {/* Agent Name */}
+                            <Typography 
+                              variant="h6" 
+                              sx={{ 
+                                fontWeight: 'bold', 
+                                color: theme.palette.text.primary,
+                                mb: 2,
+                                textAlign: 'left'
+                              }}
+                            >
+                              {agent?.name || 'Unnamed Agent'}
+                            </Typography>
                             
                             {/* Description */}
                             <Typography 
@@ -658,7 +644,7 @@ const AgentsList = () => {
                             className="agent-actions"
                             sx={{ 
                               p: 2.5,
-                              background: `linear-gradient(135deg, ${alpha(theme.palette.grey[50], 1)} 0%, ${alpha(theme.palette.grey[100], 1)} 100%)`,
+                              background: theme.palette.background.paper,
                               borderTop: `1px solid ${alpha(theme?.palette?.grey[200], 0.5)}`,
                               transform: 'translateY(10px)',
                               opacity: 0.7,
@@ -671,6 +657,34 @@ const AgentsList = () => {
                                 <Button 
                                   size="small" 
                                   variant="contained"
+                                  startIcon={<SmartToyIcon />}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (agent?.agent_id) {
+                                      navigate(`/agent/${agent.agent_id}`);
+                                    }
+                                  }}
+                                  sx={{
+                                    borderRadius: 2,
+                                    textTransform: 'none',
+                                    fontWeight: 'bold',
+                                    fontSize: '0.8rem',
+                                    bgcolor: theme.palette.mode === 'dark' ? '#ffffff' : '#000000',
+                                    color: theme.palette.mode === 'dark' ? '#000000' : '#ffffff',
+                                    boxShadow: `0 2px 8px ${alpha(theme.palette.common.black, 0.15)}`,
+                                    '&:hover': {
+                                      bgcolor: theme.palette.mode === 'dark' ? '#e5e5e5' : '#333333',
+                                      transform: 'translateY(-1px)',
+                                      boxShadow: `0 4px 12px ${alpha(theme.palette.common.black, 0.2)}`
+                                    }
+                                  }}
+                                >
+                                  Manage
+                                </Button>
+                                
+                                <Button
+                                  size="small"
+                                  variant="outlined"
                                   startIcon={<EditIcon />}
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -681,129 +695,18 @@ const AgentsList = () => {
                                   sx={{
                                     borderRadius: 2,
                                     textTransform: 'none',
-                                    fontWeight: 'bold',
-                                    fontSize: '0.8rem',
-                                    bgcolor: theme.palette.primary.main,
-                                    color: 'white',
-                                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
-                                    '&:hover': {
-                                      bgcolor: theme.palette.primary.dark,
-                                      transform: 'translateY(-1px)',
-                                      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)'
-                                    }
-                                  }}
-                                >
-                                  Edit
-                                </Button>
-                                
-                                <Button
-                                  size="small"
-                                  variant="outlined"
-                                  startIcon={<CodeIcon />}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (agent?.agent_id) {
-                                      navigate(`/api-integration/${agent.agent_id}`);
-                                    }
-                                  }}
-                                  sx={{
-                                    borderRadius: 2,
-                                    textTransform: 'none',
                                     fontWeight: 'medium',
                                     fontSize: '0.8rem',
-                                    borderColor: alpha(theme.palette.grey[400], 0.8),
+                                    borderColor: theme.palette.divider,
                                     color: theme.palette.text.primary,
                                     '&:hover': {
-                                      borderColor: theme.palette.primary.main,
-                                      backgroundColor: alpha(theme.palette.primary.main, 0.05),
+                                      borderColor: theme.palette.text.primary,
+                                      backgroundColor: alpha(theme.palette.text.primary, 0.05),
                                       transform: 'translateY(-1px)'
                                     }
                                   }}
                                 >
-                                  API
-                                </Button>
-                                
-                                <Button
-                                  size="small"
-                                  variant="outlined"
-                                  startIcon={<MenuBookIcon />}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (agent?.agent_id) {
-                                      navigate(`/knowledge-base/${agent.agent_id}`);
-                                    }
-                                  }}
-                                  sx={{
-                                    borderRadius: 2,
-                                    textTransform: 'none',
-                                    fontWeight: 'medium',
-                                    fontSize: '0.8rem',
-                                    borderColor: alpha(theme.palette.grey[400], 0.8),
-                                    color: theme.palette.text.primary,
-                                    '&:hover': {
-                                      borderColor: theme.palette.secondary.main,
-                                      backgroundColor: alpha(theme.palette.secondary.main, 0.05),
-                                      transform: 'translateY(-1px)'
-                                    }
-                                  }}
-                                >
-                                  KB
-                                </Button>
-                                
-                                <Button
-                                  size="small"
-                                  variant="outlined"
-                                  startIcon={<PlayArrowIcon />}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (agent?.agent_id) {
-                                      navigate(`/agent-testing/${agent.agent_id}`);
-                                    }
-                                  }}
-                                  sx={{
-                                    borderRadius: 2,
-                                    textTransform: 'none',
-                                    fontWeight: 'medium',
-                                    fontSize: '0.8rem',
-                                    borderColor: alpha(theme.palette.success.main, 0.8),
-                                    color: theme.palette.success.main,
-                                    '&:hover': {
-                                      borderColor: theme.palette.success.main,
-                                      backgroundColor: alpha(theme.palette.success.main, 0.1),
-                                      transform: 'translateY(-1px)',
-                                      boxShadow: '0 2px 8px rgba(76, 175, 80, 0.2)'
-                                    }
-                                  }}
-                                >
-                                  Test
-                                </Button>
-                                
-                                <Button
-                                  size="small"
-                                  variant="outlined"
-                                  startIcon={<TrendingUpIcon />}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (agent?.agent_id) {
-                                      navigate(`/agent-analytics/${agent.agent_id}`);
-                                    }
-                                  }}
-                                  sx={{
-                                    borderRadius: 2,
-                                    textTransform: 'none',
-                                    fontWeight: 'medium',
-                                    fontSize: '0.8rem',
-                                    borderColor: alpha(theme.palette.info.main, 0.8),
-                                    color: theme.palette.info.main,
-                                    '&:hover': {
-                                      borderColor: theme.palette.info.main,
-                                      backgroundColor: alpha(theme.palette.info.main, 0.1),
-                                      transform: 'translateY(-1px)',
-                                      boxShadow: '0 2px 8px rgba(33, 150, 243, 0.2)'
-                                    }
-                                  }}
-                                >
-                                  Analytics
+                                  Quick Edit
                                 </Button>
                               </Box>
                               
@@ -816,8 +719,8 @@ const AgentsList = () => {
                                     onClick={(e) => handleDeleteClick(agent, e)}
                                     sx={{
                                       color: theme.palette.text.secondary,
-                                      bgcolor: alpha(theme.palette.grey[100], 1),
-                                      border: `1px solid ${alpha(theme.palette.grey[300], 0.5)}`,
+                                      bgcolor: theme.palette.background.default,
+                                      border: `1px solid ${theme.palette.divider}`,
                                       '&:hover': {
                                         bgcolor: alpha(theme.palette.error.main, 0.1),
                                         color: theme.palette.error.main,
@@ -825,8 +728,9 @@ const AgentsList = () => {
                                         transform: 'scale(1.05)'
                                       },
                                       '&:disabled': {
-                                        bgcolor: alpha(theme.palette.action.disabled, 0.1),
-                                        borderColor: alpha(theme.palette.action.disabled, 0.2)
+                                        bgcolor: theme.palette.action.disabledBackground,
+                                        borderColor: theme.palette.divider,
+                                        color: theme.palette.action.disabled
                                       },
                                       transition: 'all 0.2s ease'
                                     }}
@@ -848,8 +752,8 @@ const AgentsList = () => {
                     textAlign: 'center',
                     p: 8,
                     borderRadius: 4,
-                    background: `linear-gradient(135deg, ${alpha(theme.palette.background.paper, 0.9)} 0%, ${alpha(theme.palette.primary.light, 0.05)} 100%)`,
-                    border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+                    background: theme.palette.background.paper,
+                    border: `1px solid ${theme.palette.divider}`,
                     boxShadow: '0 10px 30px rgba(0, 0, 0, 0.05)',
                     position: 'relative',
                     overflow: 'hidden'
@@ -860,25 +764,21 @@ const AgentsList = () => {
                       left: 0,
                       right: 0,
                       height: 4,
-                      background: `linear-gradient(90deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`
+                      background: theme.palette.mode === 'dark' ? '#ffffff' : '#000000'
                     }} />
                     
                     <Avatar sx={{ 
-                      bgcolor: alpha(theme.palette.primary.main, 0.1), 
+                      bgcolor: theme.palette.mode === 'dark' ? '#333333' : '#f0f0f0',
                       mx: 'auto',
                       mb: 3,
                       width: 80,
                       height: 80
                     }}>
-                      <RocketLaunchIcon sx={{ fontSize: 40, color: theme.palette.primary.main }} />
+                      <RocketLaunchIcon sx={{ fontSize: 40, color: theme.palette.text.primary }} />
                     </Avatar>
                     
                     <Typography variant="h4" gutterBottom fontWeight="bold" sx={{
-                      background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
-                      backgroundClip: 'text',
-                      textFillColor: 'transparent',
-                      WebkitBackgroundClip: 'text',
-                      WebkitTextFillColor: 'transparent',
+                      color: theme.palette.text.primary,
                       mb: 2
                     }}>
                       Ready to Launch Your AI Journey?
@@ -907,11 +807,13 @@ const AgentsList = () => {
                         textTransform: 'none',
                         fontWeight: 'bold',
                         fontSize: '1.1rem',
-                        background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
-                        boxShadow: '0 8px 25px rgba(0, 0, 0, 0.2)',
+                        background: theme.palette.mode === 'dark' ? '#ffffff' : '#000000',
+                        color: theme.palette.mode === 'dark' ? '#000000' : '#ffffff',
+                        boxShadow: `0 8px 25px ${alpha(theme.palette.common.black, 0.3)}`,
                         '&:hover': {
+                          background: theme.palette.mode === 'dark' ? '#e5e5e5' : '#333333',
                           transform: 'translateY(-2px)',
-                          boxShadow: '0 12px 30px rgba(0, 0, 0, 0.3)'
+                          boxShadow: `0 12px 30px ${alpha(theme.palette.common.black, 0.4)}`
                         },
                         transition: 'all 0.3s ease-in-out'
                       }}
@@ -967,21 +869,29 @@ const AgentsList = () => {
               borderRadius: 2,
               textTransform: 'none',
               fontWeight: 'medium',
-              px: 3
+              px: 3,
+              borderColor: theme.palette.text.secondary,
+              color: theme.palette.text.secondary,
+              '&:hover': {
+                borderColor: theme.palette.text.primary,
+                backgroundColor: alpha(theme.palette.text.secondary, 0.08)
+              }
             }}
           >
             Cancel
           </Button>
           <Button 
             onClick={handleDeleteConfirm} 
-            color="error"
             variant="contained"
             sx={{
               borderRadius: 2,
               textTransform: 'none',
               fontWeight: 'bold',
               px: 3,
-              background: `linear-gradient(45deg, ${theme.palette.error.main}, ${theme.palette.error.dark})`
+              background: 'linear-gradient(45deg, #ef4444, #dc2626)',
+              '&:hover': {
+                background: 'linear-gradient(45deg, #dc2626, #b91c1c)'
+              }
             }}
           >
             Delete Agent

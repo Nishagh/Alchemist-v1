@@ -1,0 +1,78 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user owns the resource
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    // Users collection - users can only access their own profile
+    match /users/{userId} {
+      allow read, write: if isAuthenticated() && isOwner(userId);
+    }
+    
+    // Agents collection - users can only access their own agents
+    match /alchemist_agents/{agentId} {
+      allow read, write: if isAuthenticated() && 
+        (resource == null || resource.data.userId == request.auth.uid) &&
+        (request.resource == null || request.resource.data.userId == request.auth.uid);
+    }
+    
+    // Simplified collections for debugging
+    match /conversations/{conversationId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    match /dev_conversations/{conversationId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    match /conversation_sessions/{sessionId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    match /agent_billing_summary/{agentId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    match /agent_deployments/{deploymentId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    match /whatsapp_integrations/{integrationId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    match /whatsapp_webhooks/{webhookId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    match /whatsapp_user_phones/{phoneId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    // Helper function to check if user owns the agent
+    function ownsAgent(agentId) {
+      return exists(/databases/$(database)/documents/alchemist_agents/$(agentId)) &&
+        get(/databases/$(database)/documents/alchemist_agents/$(agentId)).data.userId == request.auth.uid;
+    }
+    
+    // Agent deployments - users can only access deployments for their agents
+    match /agent_deployments/{deploymentId} {
+      allow read, write: if isAuthenticated() && 
+        (resource == null || ownsAgent(resource.data.agent_id)) &&
+        (request.resource == null || ownsAgent(request.resource.data.agent_id));
+    }
+    
+    // All other collections - simplified for debugging
+    match /{document=**} {
+      allow read, write: if isAuthenticated();
+    }
+  }
+}

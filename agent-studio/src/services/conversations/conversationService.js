@@ -84,63 +84,119 @@ export const deleteConversation = async (conversationId) => {
 };
 
 // ============================================================================
+// PRE-DEPLOYMENT TESTING (FREE - NO BILLING)
+// ============================================================================
+
+/**
+ * Save pre-deployment test conversation (for development testing)
+ */
+export const saveTestConversation = async ({ agentId, conversationId, message, response, timestamp }) => {
+  try {
+    // Save to dev_conversations collection (pre-deployment testing)
+    const conversationRef = collection(db, 'dev_conversations');
+    
+    await addDoc(conversationRef, {
+      agentId,
+      conversationId,
+      userMessage: message,
+      agentResponse: response,
+      timestamp: timestamp || new Date().toISOString(),
+      createdAt: serverTimestamp(),
+      isProduction: false,
+      deploymentType: 'pre-deployment', // distinguishes from deployed agent testing
+      cost: 0, // always free for pre-deployment testing
+      tokens: { prompt: 0, completion: 0, total: 0 } // no token tracking for free testing
+    });
+
+  } catch (error) {
+    console.error('Error saving test conversation:', error);
+    // Don't throw error - pre-deployment testing should continue even if logging fails
+  }
+};
+
+/**
+ * Get pre-deployment test conversation history
+ */
+export const getTestConversationHistory = async (agentId, options = {}) => {
+  try {
+    const {
+      limit: limitCount = 50
+    } = options;
+
+    const q = query(
+      collection(db, 'dev_conversations'),
+      where('agentId', '==', agentId),
+      orderBy('createdAt', 'desc'),
+      limit(limitCount)
+    );
+
+    const snapshot = await getDocs(q);
+    const conversations = [];
+
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      conversations.push({
+        id: doc.id,
+        ...data,
+        timestamp: data.createdAt?.toDate?.()?.toISOString() || data.timestamp
+      });
+    });
+
+    return conversations;
+  } catch (error) {
+    console.error('Error getting test conversation history:', error);
+    return [];
+  }
+};
+
+// ============================================================================
 // DEPLOYED AGENT TESTING WITH BILLING TRACKING
 // ============================================================================
 
 /**
- * Send a message to a deployed agent with billing tracking
+ * Create a new conversation with a deployed agent
  */
-export const sendMessageToDeployedAgent = async ({ agentId, conversationId, message, testMode = 'production' }) => {
+export const createDeployedAgentConversation = async (agentId, userId = 'test-user') => {
   try {
-    // Get the deployed agent endpoint
     const agentEndpoint = await getAgentEndpoint(agentId);
     
-    const response = await fetch(`${agentEndpoint}/api/conversation/message`, {
+    const response = await fetch(`${agentEndpoint}/api/conversation/create`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${await getAuthToken()}`
       },
       body: JSON.stringify({
-        agent_id: agentId,
-        conversation_id: conversationId,
-        message: message,
-        test_mode: testMode,
-        user_id: 'test-user',
-        track_billing: testMode === 'production'
+        user_id: userId
       })
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      // Try to extract detailed error message from response
+      let errorMessage = `HTTP error! status: ${response.status}`;
+      try {
+        const errorData = await response.json();
+        if (errorData.detail) {
+          errorMessage = `${errorData.detail} (HTTP ${response.status})`;
+        } else if (errorData.message) {
+          errorMessage = `${errorData.message} (HTTP ${response.status})`;
+        }
+      } catch (parseError) {
+        // If we can't parse the error response, use the status text
+        errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+      }
+      throw new Error(errorMessage);
     }
 
     const data = await response.json();
-
-    // Save message to Firestore for billing tracking
-    if (testMode === 'production') {
-      await saveBillableMessage({
-        agentId,
-        conversationId,
-        message,
-        response: data.response,
-        tokens: data.token_usage,
-        cost: calculateCost(data.token_usage),
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    return {
-      content: data.response,
-      tokens: data.token_usage,
-      cost: calculateCost(data.token_usage),
-      conversationId: data.conversation_id
-    };
+    return data.conversation_id;
   } catch (error) {
-    console.error('Error sending message to deployed agent:', error);
-    throw new Error(error.message || 'Failed to send message');
+    console.error('Error creating conversation with deployed agent:', error);
+    throw new Error(error.message || 'Failed to create conversation');
   }
 };
+
+// Non-streaming API removed - deployed agents now use streaming only
 
 /**
  * Send a streaming message to a deployed agent
@@ -163,17 +219,27 @@ export const sendStreamingMessageToDeployedAgent = async ({
         'Authorization': `Bearer ${await getAuthToken()}`
       },
       body: JSON.stringify({
-        agent_id: agentId,
         conversation_id: conversationId,
         message: message,
-        test_mode: testMode,
-        user_id: 'test-user',
-        track_billing: testMode === 'production'
+        user_id: 'test-user'
       })
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      // Try to extract detailed error message from response
+      let errorMessage = `HTTP error! status: ${response.status}`;
+      try {
+        const errorData = await response.json();
+        if (errorData.detail) {
+          errorMessage = `${errorData.detail} (HTTP ${response.status})`;
+        } else if (errorData.message) {
+          errorMessage = `${errorData.message} (HTTP ${response.status})`;
+        }
+      } catch (parseError) {
+        // If we can't parse the error response, use the status text
+        errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+      }
+      throw new Error(errorMessage);
     }
 
     const reader = response.body.getReader();
@@ -204,7 +270,8 @@ export const sendStreamingMessageToDeployedAgent = async ({
                 response: fullResponse,
                 tokens,
                 cost,
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
+                testMode
               });
             }
             
@@ -250,20 +317,28 @@ export const sendStreamingMessageToDeployedAgent = async ({
  */
 const getAgentEndpoint = async (agentId) => {
   try {
-    // Get deployment info from Firestore
-    const deploymentRef = doc(db, 'agent_deployments', agentId);
-    const deploymentDoc = await getDoc(deploymentRef);
+    // Get deployment info from Firestore - find the latest completed deployment for this agent
+    const deploymentsRef = collection(db, 'agent_deployments');
+    const q = query(
+      deploymentsRef, 
+      where('agent_id', '==', agentId),
+      where('status', '==', 'completed'),
+      orderBy('created_at', 'desc'),
+      limit(1)
+    );
     
-    if (!deploymentDoc.exists()) {
-      throw new Error('Agent deployment not found');
+    const querySnapshot = await getDocs(q);
+    
+    if (querySnapshot.empty) {
+      throw new Error('No completed deployment found for agent');
     }
     
-    const deployment = deploymentDoc.data();
-    if (deployment.status !== 'deployed' || !deployment.url) {
-      throw new Error('Agent is not properly deployed');
+    const deployment = querySnapshot.docs[0].data();
+    if (!deployment.service_url) {
+      throw new Error('Agent deployment does not have a service URL');
     }
     
-    return deployment.url;
+    return deployment.service_url;
   } catch (error) {
     console.error('Error getting agent endpoint:', error);
     // Fallback to universal agent endpoint
@@ -272,12 +347,12 @@ const getAgentEndpoint = async (agentId) => {
 };
 
 /**
- * Save billable message interaction to Firestore
+ * Save conversation message interaction to Firestore
  */
-const saveBillableMessage = async ({ agentId, conversationId, message, response, tokens, cost, timestamp }) => {
+const saveBillableMessage = async ({ agentId, conversationId, message, response, tokens, cost, timestamp, testMode = 'production' }) => {
   try {
-    // Save to billable_conversations collection
-    const conversationRef = collection(db, 'billable_conversations');
+    // Save to conversations collection (main collection for deployed agents)
+    const conversationRef = collection(db, 'conversations');
     
     await addDoc(conversationRef, {
       agentId,
@@ -292,8 +367,8 @@ const saveBillableMessage = async ({ agentId, conversationId, message, response,
       cost: cost || 0,
       timestamp: timestamp || new Date().toISOString(),
       createdAt: serverTimestamp(),
-      billable: true,
-      testMode: true
+      isProduction: testMode === 'production', // true for production mode, false for development mode
+      deploymentType: 'deployed' // to distinguish from pre-deployment testing
     });
 
     // Update agent billing summary
@@ -380,11 +455,11 @@ export const getBillingInfo = async (agentId) => {
 };
 
 /**
- * Save billing session summary
+ * Save conversation session summary
  */
 export const saveBillingSession = async ({ agentId, conversationId, messages, totalTokens, totalCost, testMode, endedAt }) => {
   try {
-    const sessionRef = collection(db, 'billing_sessions');
+    const sessionRef = collection(db, 'conversation_sessions');
     
     await addDoc(sessionRef, {
       agentId,
@@ -392,7 +467,8 @@ export const saveBillingSession = async ({ agentId, conversationId, messages, to
       messageCount: messages,
       totalTokens,
       totalCost,
-      testMode,
+      isProduction: testMode === 'production',
+      deploymentType: 'deployed',
       endedAt: endedAt || new Date().toISOString(),
       createdAt: serverTimestamp()
     });
@@ -415,7 +491,7 @@ export const getConversationHistory = async (agentId, options = {}) => {
     } = options;
 
     let q = query(
-      collection(db, 'billable_conversations'),
+      collection(db, 'conversations'),
       where('agentId', '==', agentId),
       orderBy('createdAt', 'desc'),
       limit(limitCount)
@@ -423,7 +499,9 @@ export const getConversationHistory = async (agentId, options = {}) => {
 
     // Add filters if provided
     if (testMode !== undefined) {
-      q = query(q, where('testMode', '==', testMode));
+      // Convert testMode to isProduction boolean
+      const isProduction = testMode === 'production';
+      q = query(q, where('isProduction', '==', isProduction));
     }
 
     const snapshot = await getDocs(q);
@@ -589,7 +667,20 @@ export const testAgentEndpoint = async (agentId) => {
     const response = await fetch(`${agentEndpoint}/health?agent_id=${agentId}`);
     
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      // Try to extract detailed error message from response
+      let errorMessage = `Health check failed with HTTP ${response.status}`;
+      try {
+        const errorData = await response.json();
+        if (errorData.detail) {
+          errorMessage = `Health check failed: ${errorData.detail}`;
+        } else if (errorData.message) {
+          errorMessage = `Health check failed: ${errorData.message}`;
+        }
+      } catch (parseError) {
+        // If we can't parse the error response, use the status text
+        errorMessage = `Health check failed: HTTP ${response.status} ${response.statusText}`;
+      }
+      throw new Error(errorMessage);
     }
     
     const data = await response.json();

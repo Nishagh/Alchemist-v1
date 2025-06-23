@@ -1,776 +1,487 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from '../utils/AuthContext';
-import {
-  Box,
-  Typography,
-  TextField,
-  Button,
-  Paper,
-  Container,
-  Grid,
-  CircularProgress,
-  Card,
-  CardContent,
-  Divider,
-  useTheme,
-  alpha,
-  Fade,
-  Grow,
-  Chip,
-  Avatar,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-  Stack
-} from '@mui/material';
-import { 
-  AutoAwesome as AutoAwesomeIcon,
-  Psychology as PsychologyIcon,
-  LocalLibrary as LibraryIcon,
-  RocketLaunch as RocketLaunchIcon,
-  Code as CodeIcon,
-  Business as BusinessIcon,
-  Science as ScienceIcon,
-  AttachMoney as MoneyIcon,
-  Speed as SpeedIcon,
-  Security as SecurityIcon,
-  CloudSync as CloudSyncIcon,
-  CheckCircle as CheckCircleIcon,
-  Star as StarIcon,
-  TrendingUp as TrendingUpIcon,
-  People as PeopleIcon,
-  Timer as TimerIcon,
-  ExpandMore as ExpandMoreIcon,
-  LinkedIn as LinkedInIcon,
-  Twitter as TwitterIcon,
-  GitHub as GitHubIcon,
-  AutoAwesome
-} from '@mui/icons-material';
-import { interactWithAlchemist } from '../services';
-
-// Example agent requirements for inspiration
-const exampleRequirements = [
-  {
-    text: "Create a marketing assistant that helps write social media posts and analyzes their performance",
-    icon: <BusinessIcon />,
-  },
-  {
-    text: "Build a coding tutor that can explain complex programming concepts and review code",
-    icon: <CodeIcon />,
-  },
-  {
-    text: "Make a research agent that can summarize scientific papers and extract key findings",
-    icon: <ScienceIcon />,
-  },
-  {
-    text: "Design a financial advisor that helps with budgeting and investment recommendations",
-    icon: <MoneyIcon />,
-  }
-];
-
-// Features data
-const features = [
-  {
-    icon: <SpeedIcon />,
-    title: "Lightning Fast",
-    description: "Create and deploy AI agents in minutes, not hours. Our streamlined process gets you up and running quickly."
-  },
-  {
-    icon: <SecurityIcon />,
-    title: "Enterprise Security",
-    description: "Bank-level security with encrypted data transmission and secure cloud infrastructure."
-  },
-  {
-    icon: <CloudSyncIcon />,
-    title: "Cloud-Native",
-    description: "Scalable cloud infrastructure that grows with your needs. No setup or maintenance required."
-  },
-  {
-    icon: <PsychologyIcon />,
-    title: "Advanced AI",
-    description: "Powered by cutting-edge AI models that understand context and provide intelligent responses."
-  }
-];
-
-// Statistics data
-const stats = [
-  { number: "10,000+", label: "Agents Created", icon: <AutoAwesomeIcon /> },
-  { number: "500+", label: "Happy Users", icon: <PeopleIcon /> },
-  { number: "99.9%", label: "Uptime", icon: <TrendingUpIcon /> },
-  { number: "< 2min", label: "Avg. Setup Time", icon: <TimerIcon /> }
-];
-
-// Testimonials data
-const testimonials = [
-  {
-    name: "Sarah Chen",
-    role: "Product Manager at TechCorp",
-    avatar: "SC",
-    text: "Alchemist has transformed how we handle customer support. Our AI agent handles 80% of inquiries automatically.",
-    rating: 5
-  },
-  {
-    name: "Michael Rodriguez",
-    role: "Startup Founder",
-    avatar: "MR", 
-    text: "Built a research assistant in 5 minutes that would have taken our team weeks to develop. Incredible!",
-    rating: 5
-  },
-  {
-    name: "Dr. Emily Watson",
-    role: "Research Scientist",
-    avatar: "EW",
-    text: "The scientific paper summarization agent has saved me hours of research time every week.",
-    rating: 5
-  }
-];
-
-// FAQ data
-const faqs = [
-  {
-    question: "How quickly can I create an AI agent?",
-    answer: "Most agents can be created and deployed in under 2 minutes. Simply describe what you want your agent to do, and Alchemist handles the rest."
-  },
-  {
-    question: "Do I need programming knowledge?",
-    answer: "No programming knowledge required! Alchemist uses natural language processing to understand your requirements and automatically generates the agent code."
-  },
-  {
-    question: "How secure is my data?",
-    answer: "We use enterprise-grade security with encrypted data transmission, secure cloud infrastructure, and compliance with industry standards."
-  },
-  {
-    question: "Can I customize my agent after creation?",
-    answer: "Yes! You can continuously refine and improve your agent's capabilities through our intuitive editor interface."
-  },
-  {
-    question: "What kind of agents can I create?",
-    answer: "You can create agents for customer support, research assistance, content creation, data analysis, coding help, and much more."
-  }
-];
+import './LandingPage.css';
 
 const LandingPage = () => {
   const navigate = useNavigate();
-  const theme = useTheme();
   const { currentUser } = useAuth();
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const handleInputChange = (e) => {
-    setInput(e.target.value);
-  };
+  // If user is already logged in, redirect to dashboard
+  useEffect(() => {
+    if (currentUser) {
+      navigate('/dashboard');
+    }
+  }, [currentUser, navigate]);
 
-  const handleSubmit = async (e) => {
+  // Handle scroll effect for navbar
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 50);
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Handle smooth scrolling for anchor links
+  const handleAnchorClick = (e, href) => {
     e.preventDefault();
-    
-    if (!input.trim()) return;
-    
-    // Check if user is authenticated
-    if (!currentUser) {
-      // Store the agent creation data in sessionStorage for after login
-      sessionStorage.setItem('pendingAgentCreation', JSON.stringify({
-        input: input.trim(),
-        timestamp: Date.now()
-      }));
-      
-      // Redirect to login with return path
-      navigate('/login', { 
-        state: { 
-          from: '/agent-creation-redirect',
-          message: 'Please sign in to create your AI agent'
-        } 
+    const target = document.querySelector(href);
+    if (target) {
+      const offsetTop = target.offsetTop - 80;
+      window.scrollTo({
+        top: offsetTop,
+        behavior: 'smooth'
       });
-      return;
-    }
-    
-    try {
-      setLoading(true);
-      setError('');
-      
-      // Generate a new agent ID
-      const newAgentId = uuidv4();
-      
-      // Send the user input to Alchemist
-      await interactWithAlchemist(input, newAgentId);
-      
-      // Navigate to the agent editor with the new agent ID
-      navigate(`/agent-editor/${newAgentId}`);
-    } catch (error) {
-      console.error('Error creating agent:', error);
-      setError('Failed to create agent. Please try again.');
-    } finally {
-      setLoading(false);
     }
   };
 
-  const fillExampleRequirement = (example) => {
-    setInput(example.text);
+  const handleStartBuilding = () => {
+    navigate('/signup');
+  };
+
+  const toggleMobileMenu = () => {
+    setMobileMenuOpen(!mobileMenuOpen);
+  };
+
+  const handleMobileMenuClick = (e, href) => {
+    setMobileMenuOpen(false);
+    if (href) {
+      handleAnchorClick(e, href);
+    }
   };
 
   return (
-    <Box sx={{ width: '100%', overflow: 'hidden' }}>
-      {/* Hero Section */}
-      <Box 
-        sx={{ 
-          background: `linear-gradient(135deg, ${alpha(theme.palette.grey[50], 1)} 0%, ${alpha(theme.palette.grey[100], 1)} 100%)`,
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          position: 'relative',
-          '&::before': {
-            content: '""',
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'radial-gradient(ellipse at center, transparent 0%, rgba(0,0,0,0.05) 100%)'
-          }
-        }}
-      >
-        <Container maxWidth="lg" sx={{ position: 'relative', zIndex: 1 }}>
-          <Fade in={true} timeout={1000}>
-            <Grid container spacing={6} alignItems="center">
-              <Grid item xs={12} md={6}>
-                <Box sx={{ textAlign: { xs: 'center', md: 'left' } }}>
-                  <Chip 
-                    label="🚀 New: AI Agent Builder 2.0" 
-                    color="primary" 
-                    variant="outlined"
-                    sx={{ mb: 3, fontWeight: 'bold' }}
-                  />
-                  <Typography 
-                    variant="h1" 
-                    component="h1" 
-                    sx={{ 
-                      fontWeight: 900,
-                      fontSize: { xs: '2.5rem', md: '3.5rem' },
-                      color: theme.palette.text.primary,
-                      mb: 2,
-                      lineHeight: 1.2
-                    }}
-                  >
-                    Build AI Agents in
-                    <Box component="span" sx={{ color: theme.palette.text.primary, display: 'block', fontWeight: 900 }}>
-                      Under 2 Minutes
-                    </Box>
-                  </Typography>
-                  <Typography 
-                    variant="h5" 
-                    color="text.secondary" 
-                    sx={{ mb: 4, fontWeight: 400, lineHeight: 1.4 }}
-                  >
-                    Transform your ideas into intelligent AI agents with natural language. 
-                    No coding required, enterprise-ready security.
-                  </Typography>
-                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 4 }}>
-                    <Button
-                      variant="contained"
-                      size="large"
-                      startIcon={<RocketLaunchIcon />}
-                      onClick={() => document.getElementById('agent-builder').scrollIntoView({ behavior: 'smooth' })}
-                      sx={{ 
-                        py: 1.5,
-                        px: 4,
-                        fontWeight: 'bold',
-                        fontSize: '1.1rem',
-                        borderRadius: 3
-                      }}
-                    >
-                      Start Building Now
-                    </Button>
-                    <Button
-                      variant="outlined"
-                      size="large"
-                      sx={{ py: 1.5, px: 4, fontWeight: 'bold', borderRadius: 3 }}
-                    >
-                      View Examples
-                    </Button>
-                  </Stack>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-                    <Typography variant="body2" color="text.secondary">Trusted by:</Typography>
-                    <Chip label="500+ Users" size="small" variant="outlined" />
-                    <Chip label="10K+ Agents" size="small" variant="outlined" />
-                    <Chip label="99.9% Uptime" size="small" variant="outlined" />
-                  </Box>
-                </Box>
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-                  <Box 
-                    component="img" 
-                    src="/img/agent-illustration.svg" 
-                    alt="AI Agent Illustration" 
-                    sx={{ 
-                      maxWidth: '500px', 
-                      width: '100%',
-                      height: 'auto',
-                      filter: 'drop-shadow(0px 10px 30px rgba(0, 0, 0, 0.1))',
-                      animation: 'float 3s ease-in-out infinite'
-                    }}
-                    onError={(e) => {e.target.style.display = 'none'}}
-                  />
-                </Box>
-              </Grid>
-            </Grid>
-          </Fade>
-        </Container>
-      </Box>
+    <div>
+      {/* Modern Navigation */}
+      <nav className={`navbar ${isScrolled ? 'scrolled' : ''}`} id="navbar">
+        <div className="nav-container">
+          <div className="nav-logo">
+            <h2>
+              <svg width="28" height="28" fill="currentColor" viewBox="0 0 24 24" style={{ marginRight: '0.5rem' }}>
+                <path d="m19 9 1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12zM19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25z"></path>
+              </svg>
+              Alchemist
+            </h2>
+          </div>
+          <ul className={`nav-menu ${mobileMenuOpen ? 'active' : ''}`}>
+            <li><a href="#features" onClick={(e) => handleMobileMenuClick(e, '#features')}>Features</a></li>
+            <li><a href="#how-it-works" onClick={(e) => handleMobileMenuClick(e, '#how-it-works')}>How It Works</a></li>
+            <li><a href="#pricing" onClick={(e) => handleMobileMenuClick(e, '#pricing')}>Pricing</a></li>
+            <li><a href="#demo" className="nav-cta" onClick={(e) => { e.preventDefault(); setMobileMenuOpen(false); handleStartBuilding(); }}>Start Building Free</a></li>
+          </ul>
+          <div className={`hamburger ${mobileMenuOpen ? 'active' : ''}`} onClick={toggleMobileMenu}>
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+        </div>
+      </nav>
 
-      {/* Stats Section */}
-      <Box sx={{ py: 8, bgcolor: theme.palette.background.paper }}>
-        <Container maxWidth="lg">
-          <Grid container spacing={4}>
-            {stats.map((stat, index) => (
-              <Grid item xs={6} md={3} key={index}>
-                <Grow in={true} timeout={800 + index * 200}>
-                  <Box sx={{ textAlign: 'center' }}>
-                    <Box sx={{ 
-                      display: 'inline-flex',
-                      p: 2,
-                      borderRadius: '50%',
-                      bgcolor: alpha(theme.palette.primary.main, 0.1),
-                      color: theme.palette.primary.main,
-                      mb: 2
-                    }}>
-                      {stat.icon}
-                    </Box>
-                    <Typography variant="h3" component="div" sx={{ fontWeight: 900, mb: 1 }}>
-                      {stat.number}
-                    </Typography>
-                    <Typography variant="body1" color="text.secondary">
-                      {stat.label}
-                    </Typography>
-                  </Box>
-                </Grow>
-              </Grid>
-            ))}
-          </Grid>
-        </Container>
-      </Box>
-
-      {/* Agent Builder Section */}
-      <Box id="agent-builder" sx={{ py: 10, bgcolor: alpha(theme.palette.primary.main, 0.02) }}>
-        <Container maxWidth="lg">
-          <Grid container spacing={6} alignItems="stretch">
-            <Grid item xs={12} md={7}>
-              <Grow in={true} timeout={800}>
-                <Paper 
-                  elevation={0} 
-                  sx={{ 
-                    p: 4, 
-                    borderRadius: 3, 
-                    height: '100%',
-                    border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
-                    boxShadow: '0 8px 40px rgba(0, 0, 0, 0.08)',
-                  }}
-                >
-                  <Typography variant="h4" component="h2" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
-                    <PsychologyIcon sx={{ mr: 1.5, color: theme.palette.primary.main }} />
-                    Create Your Agent
-                  </Typography>
-                  
-                  <form onSubmit={handleSubmit}>
-                    <TextField
-                      fullWidth
-                      multiline
-                      rows={6}
-                      label="What should your AI agent do?"
-                      placeholder="Describe the purpose, capabilities, and any specific knowledge your agent should have..."
-                      variant="outlined"
-                      value={input}
-                      onChange={handleInputChange}
-                      disabled={loading}
-                      sx={{ 
-                        mb: 3, 
-                        mt: 2,
-                        '& .MuiOutlinedInput-root': {
-                          borderRadius: 2
-                        }
-                      }}
-                    />
-                    
-                    <Button
-                      type="submit"
-                      variant="contained"
-                      color="primary"
-                      size="large"
-                      fullWidth
-                      endIcon={loading ? <CircularProgress size={24} color="inherit" /> : <RocketLaunchIcon />}
-                      disabled={loading || !input.trim()}
-                      sx={{ 
-                        py: 2,
-                        fontWeight: 'bold',
-                        fontSize: '1.1rem',
-                        borderRadius: 2
-                      }}
-                    >
-                      {loading ? 'Creating Your Agent...' : currentUser ? 'Create My Agent' : 'Sign In & Create Agent'}
-                    </Button>
-                    
-                    {error && (
-                      <Typography color="error" sx={{ mt: 2 }}>
-                        {error}
-                      </Typography>
-                    )}
-                    
-                    {!currentUser && (
-                      <Typography variant="body2" color="text.secondary" sx={{ mt: 2, textAlign: 'center' }}>
-                        🔒 You'll be asked to sign in before creating your agent
-                      </Typography>
-                    )}
-                  </form>
-                </Paper>
-              </Grow>
-            </Grid>
-            
-            <Grid item xs={12} md={5}>
-              <Grow in={true} timeout={1000}>
-                <Paper 
-                  elevation={0}
-                  sx={{ 
-                    p: 4, 
-                    borderRadius: 3, 
-                    height: '100%',
-                    border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
-                    boxShadow: '0 8px 40px rgba(0, 0, 0, 0.08)',
-                  }}
-                >
-                  <Typography variant="h5" component="h3" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
-                    <LibraryIcon sx={{ mr: 1.5, color: theme.palette.primary.main }} />
-                    Popular Examples
-                  </Typography>
-                  
-                  <Box sx={{ mt: 3 }}>
-                    {exampleRequirements.map((example, index) => (
-                      <Card 
-                        key={index}
-                        elevation={0}
-                        onClick={() => fillExampleRequirement(example)}
-                        sx={{ 
-                          cursor: 'pointer', 
-                          mb: 2,
-                          transition: 'all 0.3s ease',
-                          border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
-                          borderRadius: 2,
-                          '&:hover': {
-                            transform: 'translateY(-4px)',
-                            bgcolor: alpha(theme.palette.primary.light, 0.05),
-                            borderColor: alpha(theme.palette.primary.main, 0.3),
-                            boxShadow: '0 8px 25px rgba(0, 0, 0, 0.1)'
-                          }
-                        }}
-                      >
-                        <CardContent sx={{ 
-                          display: 'flex',
-                          alignItems: 'flex-start',
-                          p: 3,
-                          '&:last-child': { pb: 3 }
-                        }}>
-                          <Box sx={{ 
-                            mr: 2, 
-                            color: theme.palette.primary.main,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            p: 1.5,
-                            borderRadius: 2,
-                            backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                          }}>
-                            {example.icon}
-                          </Box>
-                          <Typography variant="body1" sx={{ lineHeight: 1.5 }}>
-                            {example.text}
-                          </Typography>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </Box>
-                </Paper>
-              </Grow>
-            </Grid>
-          </Grid>
-        </Container>
-      </Box>
+      {/* Modern Hero Section */}
+      <section className="hero">
+        <div className="hero-container">
+          <div className="hero-content">
+            <div className="hero-badge">
+              New: Build unlimited agents for free
+            </div>
+            <h1>Build AI Agents<br />Without Code</h1>
+            <p className="hero-subtitle">
+              The most elegant way to create intelligent AI agents. No coding required, no limits on creativity. 
+              Build, test, and deploy production-ready agents in minutes, not months.
+            </p>
+            <div className="hero-features">
+              <div className="feature-chip">🎯 Visual Builder</div>
+              <div className="feature-chip">📚 Smart Knowledge</div>
+              <div className="feature-chip">🚀 One-Click Deploy</div>
+              <div className="feature-chip">💬 WhatsApp Ready</div>
+            </div>
+            <div className="hero-cta">
+              <a href="#demo" className="btn btn-primary" onClick={handleStartBuilding}>
+                Start Building Free
+                <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd"></path>
+                </svg>
+              </a>
+              <a href="#how-it-works" className="btn btn-secondary" onClick={(e) => handleAnchorClick(e, '#how-it-works')}>
+                See How It Works
+                <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"></path>
+                  <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd"></path>
+                </svg>
+              </a>
+            </div>
+          </div>
+          <div className="hero-visual">
+            <div className="hero-dashboard">
+              <div className="dashboard-grid">
+                <div className="dashboard-card">
+                  <div className="card-header">
+                    <div className="status-dot active"></div>
+                    <span>Agent Status</span>
+                  </div>
+                  <div className="card-metric">Active</div>
+                </div>
+                <div className="dashboard-card">
+                  <div className="card-header">
+                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2z"/>
+                    </svg>
+                    <span>Messages</span>
+                  </div>
+                  <div className="card-metric">1.2K</div>
+                </div>
+                <div className="dashboard-card">
+                  <div className="card-header">
+                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M13 3l-6 18h4l6-18h-4z"/>
+                    </svg>
+                    <span>Deploy Time</span>
+                  </div>
+                  <div className="card-metric">30s</div>
+                </div>
+                <div className="dashboard-card">
+                  <div className="card-header">
+                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                    </svg>
+                    <span>Performance</span>
+                  </div>
+                  <div className="card-metric">99.9%</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* Features Section */}
-      <Box sx={{ py: 10 }}>
-        <Container maxWidth="lg">
-          <Box sx={{ textAlign: 'center', mb: 8 }}>
-            <Typography variant="h3" component="h2" gutterBottom sx={{ fontWeight: 'bold' }}>
-              Why Choose Alchemist?
-            </Typography>
-            <Typography variant="h6" color="text.secondary" sx={{ maxWidth: '600px', mx: 'auto' }}>
-              Powerful features designed to make AI agent creation simple, secure, and scalable.
-            </Typography>
-          </Box>
-          <Grid container spacing={4}>
-            {features.map((feature, index) => (
-              <Grid item xs={12} sm={6} md={3} key={index}>
-                <Grow in={true} timeout={1000 + index * 200}>
-                  <Card 
-                    elevation={0}
-                    sx={{ 
-                      p: 3, 
-                      textAlign: 'center',
-                      height: '100%',
-                      border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
-                      borderRadius: 3,
-                      transition: 'all 0.3s ease',
-                      '&:hover': {
-                        transform: 'translateY(-8px)',
-                        boxShadow: '0 12px 40px rgba(0, 0, 0, 0.1)',
-                        borderColor: alpha(theme.palette.primary.main, 0.2)
-                      }
-                    }}
-                  >
-                    <Box sx={{ 
-                      display: 'inline-flex',
-                      p: 2,
-                      borderRadius: 3,
-                      bgcolor: alpha(theme.palette.primary.main, 0.1),
-                      color: theme.palette.primary.main,
-                      mb: 3
-                    }}>
-                      {feature.icon}
-                    </Box>
-                    <Typography variant="h5" component="h3" gutterBottom sx={{ fontWeight: 'bold' }}>
-                      {feature.title}
-                    </Typography>
-                    <Typography variant="body1" color="text.secondary">
-                      {feature.description}
-                    </Typography>
-                  </Card>
-                </Grow>
-              </Grid>
-            ))}
-          </Grid>
-        </Container>
-      </Box>
+      <section className="section" id="features">
+        <div className="container">
+          <div className="section-header">
+            <div className="section-badge">Features</div>
+            <h2 className="section-title">Everything You Need to Build AI Agents</h2>
+            <p className="section-subtitle">
+              Powerful, intuitive tools designed to make AI agent creation simple, secure, and scalable. 
+              No technical expertise required.
+            </p>
+          </div>
+          <div className="features-grid">
+            <div className="feature-card">
+              <div className="feature-icon">
+                <svg width="64" height="64" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                  <circle cx="12" cy="8" r="2"/>
+                  <path d="M12 14c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                </svg>
+              </div>
+              <h3>Visual Agent Builder</h3>
+              <p>Create AI agents through natural conversation. Simply describe what you want your agent to do - no coding, no complexity, just pure creativity.</p>
+            </div>
 
-      {/* Testimonials Section */}
-      <Box sx={{ py: 10, bgcolor: alpha(theme.palette.primary.main, 0.02) }}>
-        <Container maxWidth="lg">
-          <Box sx={{ textAlign: 'center', mb: 8 }}>
-            <Typography variant="h3" component="h2" gutterBottom sx={{ fontWeight: 'bold' }}>
-              What Our Users Say
-            </Typography>
-            <Typography variant="h6" color="text.secondary">
-              Join thousands of satisfied users who've transformed their workflows with Alchemist.
-            </Typography>
-          </Box>
-          <Grid container spacing={4}>
-            {testimonials.map((testimonial, index) => (
-              <Grid item xs={12} md={4} key={index}>
-                <Grow in={true} timeout={1200 + index * 200}>
-                  <Card 
-                    elevation={0}
-                    sx={{ 
-                      p: 4,
-                      height: '100%',
-                      border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
-                      borderRadius: 3,
-                      transition: 'all 0.3s ease',
-                      '&:hover': {
-                        transform: 'translateY(-4px)',
-                        boxShadow: '0 8px 30px rgba(0, 0, 0, 0.1)'
-                      }
-                    }}
-                  >
-                    <Box sx={{ display: 'flex', mb: 3 }}>
-                      {[...Array(testimonial.rating)].map((_, i) => (
-                        <StarIcon key={i} sx={{ color: '#ffd700', fontSize: '1.2rem' }} />
-                      ))}
-                    </Box>
-                    <Typography variant="body1" sx={{ mb: 3, fontStyle: 'italic', lineHeight: 1.6 }}>
-                      "{testimonial.text}"
-                    </Typography>
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <Avatar sx={{ mr: 2, bgcolor: theme.palette.primary.main }}>
-                        {testimonial.avatar}
-                      </Avatar>
-                      <Box>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
-                          {testimonial.name}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {testimonial.role}
-                        </Typography>
-                      </Box>
-                    </Box>
-                  </Card>
-                </Grow>
-              </Grid>
-            ))}
-          </Grid>
-        </Container>
-      </Box>
+            <div className="feature-card">
+              <div className="feature-icon">
+                <svg width="64" height="64" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/>
+                  <polyline points="14,2 14,8 20,8"/>
+                  <line x1="16" y1="13" x2="8" y2="13"/>
+                  <line x1="16" y1="17" x2="8" y2="17"/>
+                  <polyline points="10,9 9,9 8,9"/>
+                </svg>
+              </div>
+              <h3>Smart Knowledge Integration</h3>
+              <p>Upload documents, PDFs, and files. Your agents automatically learn from your content with advanced semantic search and understanding.</p>
+            </div>
 
-      {/* FAQ Section */}
-      <Box sx={{ py: 10 }}>
-        <Container maxWidth="md">
-          <Box sx={{ textAlign: 'center', mb: 8 }}>
-            <Typography variant="h3" component="h2" gutterBottom sx={{ fontWeight: 'bold' }}>
-              Frequently Asked Questions
-            </Typography>
-            <Typography variant="h6" color="text.secondary">
-              Everything you need to know about creating AI agents with Alchemist.
-            </Typography>
-          </Box>
-          {faqs.map((faq, index) => (
-            <Grow in={true} timeout={1000 + index * 100} key={index}>
-              <Accordion 
-                elevation={0}
-                sx={{ 
-                  mb: 2,
-                  border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
-                  borderRadius: 2,
-                  '&:before': { display: 'none' },
-                  '&.Mui-expanded': {
-                    margin: '0 0 16px 0'
-                  }
-                }}
-              >
-                <AccordionSummary 
-                  expandIcon={<ExpandMoreIcon />}
-                  sx={{ 
-                    px: 3,
-                    py: 2,
-                    '&.Mui-expanded': {
-                      minHeight: 'auto'
-                    },
-                    '& .MuiAccordionSummary-content.Mui-expanded': {
-                      margin: '12px 0'
-                    }
-                  }}
-                >
-                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                    {faq.question}
-                  </Typography>
-                </AccordionSummary>
-                <AccordionDetails sx={{ px: 3, pb: 3 }}>
-                  <Typography variant="body1" color="text.secondary" sx={{ lineHeight: 1.6 }}>
-                    {faq.answer}
-                  </Typography>
-                </AccordionDetails>
-              </Accordion>
-            </Grow>
-          ))}
-        </Container>
-      </Box>
+            <div className="feature-card">
+              <div className="feature-icon">
+                <svg width="64" height="64" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                  <circle cx="12" cy="12" r="3"/>
+                  <path d="M18.5 12.5l-1.41-1.41"/>
+                  <path d="M6.91 6.91l-1.41-1.41"/>
+                </svg>
+              </div>
+              <h3>Seamless API Integration</h3>
+              <p>Connect any service with OpenAPI specifications. Your agents can interact with external tools, databases, and services automatically.</p>
+            </div>
+
+            <div className="feature-card">
+              <div className="feature-icon">
+                <svg width="64" height="64" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
+                  <path d="M12 6V4l4 4-4 4v-2"/>
+                </svg>
+              </div>
+              <h3>One-Click Deployment</h3>
+              <p>Deploy to Google Cloud Run with enterprise-grade performance. 60-80% faster response times with automatic scaling.</p>
+            </div>
+
+            <div className="feature-card">
+              <div className="feature-icon">
+                <svg width="64" height="64" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-5 2.5l3.5 2.5-3.5 2.5V6.5zM6.5 6.5L10 9l-3.5 2.5V6.5z"/>
+                  <circle cx="12" cy="12" r="2"/>
+                </svg>
+              </div>
+              <h3>WhatsApp Integration</h3>
+              <p>Connect your agents to WhatsApp Business in 4 simple steps. No new accounts needed - use your existing business setup.</p>
+            </div>
+
+            <div className="feature-card">
+              <div className="feature-icon">
+                <svg width="64" height="64" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.94-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                </svg>
+              </div>
+              <h3>AI Training & Fine-tuning</h3>
+              <p>Improve your agents with conversational training. Generate training data and optimize models for better performance over time.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* How It Works Section */}
+      <section className="section" id="how-it-works">
+        <div className="container">
+          <div className="section-header">
+            <div className="section-badge">Process</div>
+            <h2 className="section-title">From Idea to Agent in Minutes</h2>
+            <p className="section-subtitle">
+              Our streamlined process makes AI agent creation intuitive and fast. 
+              No technical knowledge required.
+            </p>
+          </div>
+          <div className="steps-container">
+            <div className="steps-grid">
+              <div className="step-card">
+                <div className="step-number">1</div>
+                <div className="step-content">
+                  <h3>Describe Your Vision</h3>
+                  <p>Simply tell Alchemist what you want your agent to do using natural language. Our AI understands your requirements and creates the foundation.</p>
+                </div>
+              </div>
+              <div className="step-card">
+                <div className="step-number">2</div>
+                <div className="step-content">
+                  <h3>Add Knowledge & Connect APIs</h3>
+                  <p>Upload documents, PDFs, or connect APIs. Your agent learns from your content and gains the ability to interact with external services.</p>
+                </div>
+              </div>
+              <div className="step-card">
+                <div className="step-number">3</div>
+                <div className="step-content">
+                  <h3>Test & Refine</h3>
+                  <p>Test your agent in our built-in interface. Train it with conversation examples to improve responses and accuracy over time.</p>
+                </div>
+              </div>
+              <div className="step-card">
+                <div className="step-number">4</div>
+                <div className="step-content">
+                  <h3>Deploy & Scale</h3>
+                  <p>One-click deployment to production. Connect to WhatsApp, embed on your website, or integrate via API. Scale automatically.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Billing Model Section */}
+      <section className="section billing-model">
+        <div className="container">
+          <div className="section-header">
+            <div className="section-badge">Billing</div>
+            <h2 className="section-title">Simple, Fair Pricing</h2>
+            <p className="section-subtitle">
+              Build unlimited agents for free. Pay only when you deploy to production. 
+              No hidden fees, no surprises.
+            </p>
+          </div>
+          <div className="billing-steps">
+            <div className="billing-step">
+              <div className="billing-icon">🆓</div>
+              <h3>Build for Free</h3>
+              <p>Create unlimited AI agents, add knowledge bases, connect APIs, and test everything completely free. No time limits, no feature restrictions.</p>
+            </div>
+            <div className="billing-step">
+              <div className="billing-icon">🚀</div>
+              <h3>Deploy When Ready</h3>
+              <p>Only when you're ready to make your agent live and start serving real users do you begin paying for deployment and usage.</p>
+            </div>
+            <div className="billing-step">
+              <div className="billing-icon">📊</div>
+              <h3>Pay Per Use</h3>
+              <p>Simple usage-based pricing: ₹1 per 1,000 characters. No monthly fees, no hidden costs. Scale up or down automatically.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Pricing Section */}
+      <section className="section" id="pricing">
+        <div className="container">
+          <div className="section-header">
+            <div className="section-badge">Pricing</div>
+            <h2 className="section-title">Choose Your Plan</h2>
+            <p className="section-subtitle">
+              Start building for free. Scale when you're ready. 
+              Enterprise options available for large organizations.
+            </p>
+          </div>
+          <div className="pricing-grid">
+            <div className="pricing-card">
+              <div className="pricing-header">
+                <h3>Development</h3>
+                <div className="pricing-price">
+                  <span className="price">₹0</span>
+                  <span className="price-period">forever</span>
+                </div>
+                <p>Perfect for building and testing</p>
+              </div>
+              <div className="pricing-features">
+                <div className="feature">✅ Unlimited agent creation</div>
+                <div className="feature">✅ Full testing environment</div>
+                <div className="feature">✅ Knowledge base integration</div>
+                <div className="feature">✅ API connections</div>
+                <div className="feature">✅ Fine-tuning & training</div>
+                <div className="feature">✅ Community support</div>
+              </div>
+              <a href="#demo" className="btn btn-outline" onClick={handleStartBuilding}>Start Building Free</a>
+            </div>
+
+            <div className="pricing-card featured">
+              <div className="pricing-badge">Pay Per Use</div>
+              <div className="pricing-header">
+                <h3>Production</h3>
+                <div className="pricing-price">
+                  <span className="price">₹1</span>
+                  <span className="price-period">per 1K characters</span>
+                </div>
+                <p>When you're ready to go live</p>
+              </div>
+              <div className="pricing-features">
+                <div className="feature">✅ Everything in Development</div>
+                <div className="feature">✅ Production deployment</div>
+                <div className="feature">✅ WhatsApp integration</div>
+                <div className="feature">✅ Custom domain</div>
+                <div className="feature">✅ Analytics & monitoring</div>
+                <div className="feature">✅ Priority support</div>
+              </div>
+              <a href="#demo" className="btn btn-primary" onClick={handleStartBuilding}>Deploy Your Agent</a>
+            </div>
+
+            <div className="pricing-card">
+              <div className="pricing-header">
+                <h3>Enterprise</h3>
+                <div className="pricing-price">
+                  <span className="price">Custom</span>
+                  <span className="price-period">volume pricing</span>
+                </div>
+                <p>For large organizations</p>
+              </div>
+              <div className="pricing-features">
+                <div className="feature">✅ Everything in Production</div>
+                <div className="feature">✅ Volume discounts</div>
+                <div className="feature">✅ Dedicated infrastructure</div>
+                <div className="feature">✅ SLA guarantees</div>
+                <div className="feature">✅ Dedicated support</div>
+                <div className="feature">✅ Custom integrations</div>
+              </div>
+              <a href="#contact" className="btn btn-outline">Contact Sales</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      <section className="section cta-section" id="demo">
+        <div className="container">
+          <div className="cta-content">
+            <div className="section-badge">Get Started</div>
+            <h2>Ready to Build Your First AI Agent?</h2>
+            <p>Start building your first AI agent today. Create unlimited agents for free - pay only when you deploy to production.</p>
+            <div className="cta-buttons">
+              <a href="#" className="btn btn-primary" onClick={handleStartBuilding}>
+                Start Building Free
+                <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd"></path>
+                </svg>
+              </a>
+              <a href="#" className="btn btn-outline">
+                View Documentation
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* Footer */}
-      <Box sx={{ py: 6, bgcolor: theme.palette.grey[900], color: 'white' }}>
-        <Container maxWidth="lg">
-          <Grid container spacing={4}>
-            <Grid item xs={12} md={6}>
-              <Typography variant="h5" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
-                <AutoAwesome sx={{ mr: 1 }} />
+      <footer className="footer">
+        <div className="container">
+          <div className="footer-content">
+            <div className="footer-section">
+              <h3>
+                <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24" style={{ marginRight: '0.5rem', verticalAlign: 'middle' }}>
+                  <path d="m19 9 1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12zM19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25z"></path>
+                </svg>
                 Alchemist
-              </Typography>
-              <Typography variant="body1" color="grey.300" sx={{ mb: 3, maxWidth: '400px' }}>
-                Transform your ideas into intelligent AI agents. No coding required, 
-                enterprise-ready security, and lightning-fast deployment.
-              </Typography>
-              <Stack direction="row" spacing={2}>
-                <Button 
-                  variant="outlined" 
-                  size="small" 
-                  startIcon={<TwitterIcon />}
-                  sx={{ color: 'white', borderColor: 'grey.600' }}
-                >
-                  Twitter
-                </Button>
-                <Button 
-                  variant="outlined" 
-                  size="small" 
-                  startIcon={<LinkedInIcon />}
-                  sx={{ color: 'white', borderColor: 'grey.600' }}
-                >
-                  LinkedIn
-                </Button>
-                <Button 
-                  variant="outlined" 
-                  size="small" 
-                  startIcon={<GitHubIcon />}
-                  sx={{ color: 'white', borderColor: 'grey.600' }}
-                >
-                  GitHub
-                </Button>
-              </Stack>
-            </Grid>
-            <Grid item xs={12} md={3}>
-              <Typography variant="h6" gutterBottom>
-                Product
-              </Typography>
-              <List dense>
-                <ListItem disablePadding>
-                  <ListItemText primary="Features" sx={{ color: 'grey.300' }} />
-                </ListItem>
-                <ListItem disablePadding>
-                  <ListItemText primary="Pricing" sx={{ color: 'grey.300' }} />
-                </ListItem>
-                <ListItem disablePadding>
-                  <ListItemText primary="Documentation" sx={{ color: 'grey.300' }} />
-                </ListItem>
-                <ListItem disablePadding>
-                  <ListItemText primary="API" sx={{ color: 'grey.300' }} />
-                </ListItem>
-              </List>
-            </Grid>
-            <Grid item xs={12} md={3}>
-              <Typography variant="h6" gutterBottom>
-                Support
-              </Typography>
-              <List dense>
-                <ListItem disablePadding>
-                  <ListItemText primary="Help Center" sx={{ color: 'grey.300' }} />
-                </ListItem>
-                <ListItem disablePadding>
-                  <ListItemText primary="Contact Us" sx={{ color: 'grey.300' }} />
-                </ListItem>
-                <ListItem disablePadding>
-                  <ListItemText primary="Status" sx={{ color: 'grey.300' }} />
-                </ListItem>
-                <ListItem disablePadding>
-                  <ListItemText primary="Community" sx={{ color: 'grey.300' }} />
-                </ListItem>
-              </List>
-            </Grid>
-          </Grid>
-          <Divider sx={{ my: 4, borderColor: 'grey.700' }} />
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
-            <Typography variant="body2" color="grey.400">
-              © 2024 Alchemist. All rights reserved.
-            </Typography>
-            <Box sx={{ display: 'flex', gap: 3 }}>
-              <Typography variant="body2" color="grey.400" sx={{ cursor: 'pointer', '&:hover': { color: 'white' } }}>
-                Privacy Policy
-              </Typography>
-              <Typography variant="body2" color="grey.400" sx={{ cursor: 'pointer', '&:hover': { color: 'white' } }}>
-                Terms of Service
-              </Typography>
-            </Box>
-          </Box>
-        </Container>
-      </Box>
-
-      {/* Add CSS keyframes for floating animation */}
-      <style jsx>{`
-        @keyframes float {
-          0%, 100% { transform: translateY(0px); }
-          50% { transform: translateY(-20px); }
-        }
-      `}</style>
-    </Box>
+              </h3>
+              <p>Build, deploy, and manage intelligent AI agents without code. Create your first agent in minutes, not months.</p>
+              <div className="social-links">
+                <a href="#" aria-label="Twitter">
+                  <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8.29 20.251c7.547 0 11.675-6.253 11.675-11.675 0-.178 0-.355-.012-.53A8.348 8.348 0 0022 5.92a8.19 8.19 0 01-2.357.646 4.118 4.118 0 001.804-2.27 8.224 8.224 0 01-2.605.996 4.107 4.107 0 00-6.993 3.743 11.65 11.65 0 01-8.457-4.287 4.106 4.106 0 001.27 5.477A4.072 4.072 0 012.8 9.713v.052a4.105 4.105 0 003.292 4.022 4.095 4.095 0 01-1.853.07 4.108 4.108 0 003.834 2.85A8.233 8.233 0 012 18.407a11.616 11.616 0 006.29 1.84"></path>
+                  </svg>
+                </a>
+                <a href="#" aria-label="LinkedIn">
+                  <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"></path>
+                  </svg>
+                </a>
+              </div>
+            </div>
+            <div className="footer-section">
+              <h4>Product</h4>
+              <ul>
+                <li><a href="#features">Features</a></li>
+                <li><a href="#pricing">Pricing</a></li>
+                <li><a href="#">Documentation</a></li>
+                <li><a href="#">API Reference</a></li>
+                <li><a href="#">Status</a></li>
+              </ul>
+            </div>
+            <div className="footer-section">
+              <h4>Company</h4>
+              <ul>
+                <li><a href="#">About</a></li>
+                <li><a href="#">Blog</a></li>
+                <li><a href="#">Careers</a></li>
+                <li><a href="#">Press</a></li>
+                <li><a href="#">Partners</a></li>
+              </ul>
+            </div>
+            <div className="footer-section">
+              <h4>Support</h4>
+              <ul>
+                <li><a href="#">Help Center</a></li>
+                <li><a href="#">Community</a></li>
+                <li><a href="#">Contact</a></li>
+                <li><a href="#">Security</a></li>
+                <li><a href="#">Privacy</a></li>
+              </ul>
+            </div>
+          </div>
+          <div className="footer-bottom">
+            <p>&copy; 2024 Alchemist. All rights reserved. Built with ❤️ for the AI community.</p>
+          </div>
+        </div>
+      </footer>
+    </div>
   );
 };
 
-export default LandingPage; 
+export default LandingPage;

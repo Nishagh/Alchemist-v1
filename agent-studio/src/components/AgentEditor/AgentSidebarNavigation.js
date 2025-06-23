@@ -15,7 +15,6 @@ import {
   Drawer,
   IconButton,
   Typography,
-  Divider,
   Collapse,
   useTheme,
   useMediaQuery,
@@ -27,14 +26,11 @@ import {
   Storage as StorageIcon,
   Api as ApiIcon,
   BugReport as BugReportIcon,
-  CloudUpload as CloudUploadIcon,
+  Tune as TuneIcon,
   Menu as MenuIcon,
   ChevronLeft as ChevronLeftIcon,
   ExpandLess,
-  ExpandMore,
-  WhatsApp as WhatsAppIcon,
-  Hub as IntegrationIcon,
-  Language as WebsiteIcon
+  ExpandMore
 } from '@mui/icons-material';
 
 const SIDEBAR_WIDTH = 280;
@@ -61,36 +57,15 @@ const navigationItems = [
   },
   {
     id: 'testing',
-    label: 'Agent Testing',
+    label: 'Pre-deployment Testing',
     icon: BugReportIcon,
     description: 'Test and validate agent responses'
   },
   {
-    id: 'deployment',
-    label: 'Agent Deployment',
-    icon: CloudUploadIcon,
-    description: 'Deploy and manage agent instances'
-  },
-  {
-    id: 'integration',
-    label: 'Agent Integration',
-    icon: IntegrationIcon,
-    description: 'Connect your deployed agent to various platforms',
-    requiresDeployment: true,
-    subItems: [
-      {
-        id: 'whatsapp',
-        label: 'WhatsApp Integration',
-        icon: WhatsAppIcon,
-        description: 'Connect to WhatsApp Business API'
-      },
-      {
-        id: 'website',
-        label: 'Website Integration',
-        icon: WebsiteIcon,
-        description: 'Embed agent on your website'
-      }
-    ]
+    id: 'fine-tuning',
+    label: 'Fine-tuning',
+    icon: TuneIcon,
+    description: 'Optimize agent responses with custom training'
   }
 ];
 
@@ -99,7 +74,7 @@ const AgentSidebarNavigation = ({
   onSectionChange, 
   children,
   disabled = false,
-  deployments = []
+  workflow = null
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -134,15 +109,8 @@ const AgentSidebarNavigation = ({
     setExpandedSections(newExpanded);
   };
 
-  const hasCompletedDeployments = deployments.some(d => d.status === 'completed');
-
   const getVisibleNavigationItems = () => {
-    return navigationItems.filter(item => {
-      if (item.requiresDeployment) {
-        return hasCompletedDeployments;
-      }
-      return true;
-    });
+    return navigationItems;
   };
 
   const NavigationContent = ({ isCollapsed = false }) => (
@@ -435,7 +403,7 @@ const AgentSidebarNavigation = ({
         }}
       >
         {/* Render the active section content */}
-        <Box sx={{ flex: 1, overflow: 'hidden' }}>
+        <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
           {children}
         </Box>
       </Box>

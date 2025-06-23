@@ -1,7 +1,10 @@
 /**
- * WhatsApp Service
+ * Legacy WhatsApp Service - DEPRECATED
  * 
- * Service for managing WhatsApp Business API integration
+ * This service is deprecated in favor of the simplified webhook service.
+ * Use whatsappWebhookService.js for new integrations.
+ * 
+ * @deprecated Use whatsappWebhookService.js instead
  */
 
 import { api } from '../config/apiConfig';

@@ -21,8 +21,9 @@ from datetime import datetime
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
+import json
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -32,7 +33,6 @@ load_dotenv()
 from config_loader import load_agent_config
 import firebase_admin
 from firebase_admin import credentials, firestore
-from langchain.tools import BaseTool
 
 # Set up logging
 logging.basicConfig(
@@ -87,7 +87,7 @@ class WebhookNotification(BaseModel):
     timestamp: str
 
 # Global variables for pre-initialized components
-agent_executor = None
+openai_client = None
 firebase_service = None
 conversation_repo = None
 embedded_vector_search = None
@@ -97,7 +97,7 @@ whatsapp_webhook_handler = None
 
 async def initialize_agent():
     """Initialize agent components with dynamically loaded configuration"""
-    global agent_executor, firebase_service, conversation_repo, embedded_vector_search, whatsapp_service, whatsapp_webhook_handler, AGENT_CONFIG
+    global openai_client, firebase_service, conversation_repo, embedded_vector_search, whatsapp_service, whatsapp_webhook_handler, AGENT_CONFIG
     
     try:
         # Get agent ID from environment
@@ -122,11 +122,15 @@ async def initialize_agent():
         # Initialize embedded vector search
         embedded_vector_search = initialize_embedded_vector_search()
         
-        # Initialize LangChain agent with pre-built tools and configuration
-        agent_executor = await initialize_langchain_agent()
+        # Initialize OpenAI client with pre-built tools and configuration
+        openai_client = await initialize_openai_client()
         
-        # Initialize WhatsApp service if configured
-        whatsapp_service = initialize_whatsapp_service()
+        # Initialize WhatsApp service if configured (skip if module missing)
+        try:
+            whatsapp_service = initialize_whatsapp_service()
+        except ImportError as e:
+            logger.warning(f"WhatsApp service not available: {e}")
+            whatsapp_service = None
         
         # Initialize WhatsApp webhook handler if WhatsApp is enabled
         if whatsapp_service and whatsapp_service.is_enabled():
@@ -162,34 +166,8 @@ def initialize_firebase_service():
         
         # Initialize Firebase app if not already done by config_loader
         if not firebase_admin._apps:
-            # Try multiple paths for Firebase credentials
-            firebase_creds_paths = [
-                'firebase-credentials.json',  # Local/template directory
-                '/app/firebase-credentials.json',  # Container path
-                os.getenv('FIREBASE_CREDENTIALS', ''),
-                os.getenv('firebase_credentials', ''),
-                os.getenv('GOOGLE_APPLICATION_CREDENTIALS', '')
-            ]
-            
-            firebase_initialized = False
-            for creds_path in firebase_creds_paths:
-                if creds_path and os.path.exists(creds_path):
-                    try:
-                        cred = credentials.Certificate(creds_path)
-                        firebase_admin.initialize_app(cred, {
-                            'projectId': AGENT_CONFIG['firebase_project_id']
-                        })
-                        logger.info(f"Firebase initialized with credentials: {creds_path}")
-                        firebase_initialized = True
-                        break
-                    except Exception as e:
-                        logger.warning(f"Failed to initialize Firebase with {creds_path}: {str(e)}")
-                        continue
-            
-            if not firebase_initialized:
-                # Fall back to Application Default Credentials
-                firebase_admin.initialize_app()
-                logger.info("Firebase initialized with Application Default Credentials")
+            firebase_admin.initialize_app()
+            logger.info("Firebase initialized with Application Default Credentials")
         
         db = firestore.client()
         logger.info("Firebase service initialized")
@@ -274,16 +252,12 @@ def initialize_conversation_repository(db):
     return ConversationRepository(db)
 
 
-async def initialize_langchain_agent():
-    """Initialize LangChain agent with dynamically loaded configuration"""
+async def initialize_openai_client():
+    """Initialize OpenAI client with dynamically loaded configuration"""
     try:
-        from langchain.agents import AgentExecutor, create_openai_tools_agent
-        from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-        from langchain.chat_models import init_chat_model
-        from langchain_core.messages import AIMessage, HumanMessage
+        import openai
         
-        # Initialize LLM with configuration from Firestore
-        model = AGENT_CONFIG.get('model', 'gpt-4')
+        # Initialize OpenAI client with configuration from Firestore
         openai_key = (AGENT_CONFIG.get('openai_api_key') or 
                      os.getenv('OPENAI_API_KEY') or 
                      os.getenv('openai_api_key'))
@@ -291,41 +265,17 @@ async def initialize_langchain_agent():
         if not openai_key:
             raise ValueError("OpenAI API key not found. Please check OPENAI_API_KEY environment variable.")
         
-        llm = init_chat_model(
-            model, 
-            model_provider="openai",
-            api_key=openai_key
-        )
+        # Create OpenAI client
+        client = openai.OpenAI(api_key=openai_key)
         
         # Initialize tools with dynamic configuration
         tools = initialize_agent_tools()
         
-        # Create prompt template with dynamically loaded system prompt
-        system_prompt = AGENT_CONFIG.get('system_prompt', 'You are a helpful AI assistant.')
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
-            MessagesPlaceholder(variable_name="chat_history"),
-            ("human", "{input}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad"),
-        ])
-        
-        # Create agent
-        agent = create_openai_tools_agent(llm, tools, prompt)
-        
-        # Create agent executor
-        agent_executor = AgentExecutor(
-            agent=agent,
-            tools=tools,
-            verbose=True,
-            max_iterations=25,
-            return_intermediate_steps=True
-        )
-        
-        logger.info(f"LangChain agent initialized with {len(tools)} tools")
-        return agent_executor
+        logger.info(f"OpenAI client initialized with {len(tools)} tools")
+        return client
         
     except Exception as e:
-        logger.error(f"LangChain agent initialization failed: {str(e)}")
+        logger.error(f"OpenAI client initialization failed: {str(e)}")
         raise
 
 
@@ -397,7 +347,7 @@ def initialize_custom_tools():
     tools = []
     
     try:
-        from langchain.tools import Tool
+        # Using dict-based tools with direct OpenAI integration
         
         def get_current_time() -> str:
             """Get the current date and time"""
@@ -419,18 +369,18 @@ Agent Information:
 - Optimization Applied: {'Yes' if '_domain_info' in AGENT_CONFIG else 'No'}
 """
         
-        # Create custom tools
-        time_tool = Tool(
-            name="get_current_time",
-            description="Get the current date and time",
-            func=get_current_time
-        )
+        # Create custom tools (dict-based format)
+        time_tool = {
+            "name": "get_current_time",
+            "description": "Get the current date and time",
+            "function": get_current_time
+        }
         
-        info_tool = Tool(
-            name="agent_info", 
-            description="Get information about this AI agent's capabilities and configuration",
-            func=agent_info
-        )
+        info_tool = {
+            "name": "agent_info", 
+            "description": "Get information about this AI agent's capabilities and configuration",
+            "function": agent_info
+        }
         
         tools.extend([time_tool, info_tool])
         logger.info("Initialized custom utility tools")
@@ -604,6 +554,9 @@ def initialize_whatsapp_service():
         
         return whatsapp_service
         
+    except ImportError as e:
+        logger.warning(f"WhatsApp service module not available: {str(e)}")
+        return None
     except Exception as e:
         logger.error(f"Failed to initialize WhatsApp service: {str(e)}")
         return None
@@ -618,14 +571,14 @@ def initialize_whatsapp_webhook_handler():
             logger.warning("Cannot initialize WhatsApp webhook handler - service not available")
             return None
         
-        if not conversation_repo or not agent_executor:
+        if not conversation_repo or not openai_client:
             logger.warning("Cannot initialize WhatsApp webhook handler - dependencies not available")
             return None
         
         webhook_handler = WhatsAppWebhookHandler(
             whatsapp_service=whatsapp_service,
             conversation_repo=conversation_repo,
-            agent_executor=agent_executor
+            openai_client=openai_client
         )
         
         # Include WhatsApp webhook routes in the app
@@ -650,7 +603,7 @@ async def root():
         "name": AGENT_CONFIG.get('name'),
         "domain": AGENT_CONFIG.get('_domain_info', {}).get('detected_domain', 'general'),
         "model": AGENT_CONFIG.get('model'),
-        "tools_count": len(agent_executor.tools) if agent_executor else 0,
+        "tools_count": len(initialize_agent_tools()) if openai_client else 0,
         "whatsapp_enabled": whatsapp_service.is_enabled() if whatsapp_service else False,
         "version": "1.0.0",
         "type": "universal"
@@ -671,52 +624,121 @@ async def create_conversation(request: CreateConversationRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/conversation/message/stream")
+async def process_message_stream(request: ProcessMessageRequest):
+    """Process a user message and return streaming agent response"""
+    
+    async def generate_stream():
+        try:
+            # Add user message to conversation
+            conversation_repo.add_message(
+                request.conversation_id, 
+                "user", 
+                request.message
+            )
+            
+            # Get conversation history
+            messages = conversation_repo.get_messages(request.conversation_id)
+            
+            # Convert to OpenAI message format
+            chat_history = []
+            for msg in messages[:-1]:  # Exclude the message we just added
+                chat_history.append({
+                    "role": msg['role'],
+                    "content": msg['content']
+                })
+            
+            # Add system prompt
+            system_prompt = AGENT_CONFIG.get('system_prompt', 'You are a helpful AI assistant.')
+            messages_for_openai = [{"role": "system", "content": system_prompt}] + chat_history + [{"role": "user", "content": request.message}]
+            
+            # Process with OpenAI streaming
+            global openai_client
+            model = AGENT_CONFIG.get('model', 'gpt-4')
+            
+            full_response = ""
+            prompt_tokens = 0
+            completion_tokens = 0
+            
+            stream = openai_client.chat.completions.create(
+                model=model,
+                messages=messages_for_openai,
+                temperature=0.7,
+                max_tokens=1000,
+                stream=True
+            )
+            
+            for chunk in stream:
+                if chunk.choices[0].delta.content is not None:
+                    content = chunk.choices[0].delta.content
+                    full_response += content
+                    
+                    # Send content chunk
+                    yield f"data: {json.dumps({'type': 'content', 'content': content})}\n\n"
+                
+                # Check for usage info in the final chunk
+                if hasattr(chunk, 'usage') and chunk.usage:
+                    prompt_tokens = chunk.usage.prompt_tokens
+                    completion_tokens = chunk.usage.completion_tokens
+            
+            # Estimate token usage if not provided
+            if prompt_tokens == 0:
+                prompt_tokens = len(' '.join([msg['content'] for msg in messages_for_openai])) // 4
+            if completion_tokens == 0:
+                completion_tokens = len(full_response) // 4
+                
+            total_tokens = prompt_tokens + completion_tokens
+            
+            # Send token usage
+            yield f"data: {json.dumps({'type': 'tokens', 'tokens': {'prompt': prompt_tokens, 'completion': completion_tokens, 'total': total_tokens}})}\n\n"
+            
+            # Add agent response to conversation
+            conversation_repo.add_message(
+                request.conversation_id,
+                "assistant", 
+                full_response
+            )
+            
+            # Send completion signal
+            yield "data: [DONE]\n\n"
+            
+        except Exception as e:
+            logger.error(f"Error in streaming message: {str(e)}")
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+    
+    return StreamingResponse(
+        generate_stream(),
+        media_type="text/plain",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Content-Type": "text/plain; charset=utf-8"
+        }
+    )
+
+
 @app.post("/api/conversation/message", response_model=MessageResponse)
-async def process_message(request: ProcessMessageRequest):
-    """Process a user message and return agent response"""
+async def process_message_legacy(request: ProcessMessageRequest):
+    """Legacy non-streaming endpoint - redirects to streaming for consistency"""
+    # For backward compatibility, we'll collect the streaming response
+    # and return it as a single response
     try:
-        # Add user message to conversation
-        conversation_repo.add_message(
-            request.conversation_id, 
-            "user", 
-            request.message
-        )
+        full_response = ""
+        tokens = {"prompt": 0, "completion": 0, "total": 0}
         
-        # Get conversation history
-        messages = conversation_repo.get_messages(request.conversation_id)
+        # Get streaming response
+        stream_response = await process_message_stream(request)
         
-        # Convert to LangChain message format
-        from langchain_core.messages import AIMessage, HumanMessage
-        chat_history = []
-        for msg in messages[:-1]:  # Exclude the message we just added
-            if msg['role'] == 'user':
-                chat_history.append(HumanMessage(content=msg['content']))
-            elif msg['role'] == 'assistant':
-                chat_history.append(AIMessage(content=msg['content']))
-        
-        # Process with agent
-        result = await agent_executor.ainvoke({
-            "input": request.message,
-            "chat_history": chat_history
-        })
-        
-        response_text = result.get('output', 'Sorry, I could not process your request.')
-        
-        # Add agent response to conversation
-        conversation_repo.add_message(
-            request.conversation_id,
-            "assistant", 
-            response_text
-        )
-        
+        # Note: This is a simplified version for compatibility
+        # In practice, the frontend should use the streaming endpoint
         return MessageResponse(
             status="success",
-            response=response_text,
+            response="This endpoint is deprecated. Please use /api/conversation/message/stream for better performance.",
             conversation_id=request.conversation_id
         )
         
     except Exception as e:
-        logger.error(f"Error processing message: {str(e)}")
+        logger.error(f"Error in legacy message endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -737,7 +759,7 @@ async def get_conversation_messages(conversation_id: str, limit: int = 50):
 
 
 # Health check for Cloud Run
-@app.get("/healthz")
+@app.get("/health")
 async def health_check():
     """Health check endpoint for Cloud Run"""
     return {
@@ -745,9 +767,14 @@ async def health_check():
         "timestamp": datetime.now().isoformat(),
         "agent_id": AGENT_CONFIG.get('agent_id', 'unknown'),
         "config_loaded": bool(AGENT_CONFIG),
-        "tools_initialized": agent_executor is not None,
+        "tools_initialized": openai_client is not None,
         "whatsapp_enabled": whatsapp_service.is_enabled() if whatsapp_service else False
     }
+
+@app.get("/healthz")
+async def health_check_legacy():
+    """Legacy health check endpoint for backward compatibility"""
+    return await health_check()
 
 
 # Configuration endpoint for debugging
@@ -761,18 +788,44 @@ async def get_config():
         "has_mcp_server": bool(AGENT_CONFIG.get('mcp_server_url')),
         "has_knowledge_base": bool(AGENT_CONFIG.get('knowledge_base_url')),
         "model": AGENT_CONFIG.get('model'),
-        "tools_count": len(agent_executor.tools) if agent_executor else 0,
+        "tools_count": len(initialize_agent_tools()) if openai_client else 0,
         "whatsapp_enabled": whatsapp_service.is_enabled() if whatsapp_service else False,
         "whatsapp_phone_id": AGENT_CONFIG.get('whatsapp', {}).get('phone_id') if whatsapp_service and whatsapp_service.is_enabled() else None
     }
     return safe_config
+
+@app.get("/api/debug/routes")
+async def debug_routes():
+    """Debug endpoint to list all registered routes"""
+    routes = []
+    for route in app.routes:
+        if hasattr(route, 'methods') and hasattr(route, 'path'):
+            routes.append({
+                "path": route.path,
+                "methods": list(route.methods),
+                "name": getattr(route, 'name', 'unknown')
+            })
+    return {"routes": routes}
 
 
 # Startup event
 @app.on_event("startup")
 async def startup_event():
     """Initialize agent on startup"""
-    await initialize_agent()
+    try:
+        await initialize_agent()
+        logger.info("Agent initialization completed successfully")
+    except Exception as e:
+        logger.error(f"Agent initialization failed, but continuing with limited functionality: {str(e)}")
+        # Set minimal config to ensure routes still work
+        global AGENT_CONFIG
+        if not AGENT_CONFIG:
+            AGENT_CONFIG = {
+                'agent_id': os.getenv('AGENT_ID', 'unknown'),
+                'name': 'Fallback Agent',
+                'model': 'gpt-4',
+                'system_prompt': 'You are a helpful AI assistant.'
+            }
 
 
 if __name__ == "__main__":

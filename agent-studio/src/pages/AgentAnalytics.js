@@ -26,7 +26,9 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Tooltip
+  Tooltip,
+  Switch,
+  FormControlLabel
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -54,7 +56,8 @@ import { useAuth } from '../utils/AuthContext';
 import { getAgent } from '../services/agents/agentService';
 import { 
   getBillingAnalytics,
-  getConversationHistory 
+  getConversationHistory,
+  getTestConversationHistory 
 } from '../services/conversations/conversationService';
 
 // Register Chart.js components
@@ -93,8 +96,10 @@ const AgentAnalytics = () => {
   });
   
   const [conversationHistory, setConversationHistory] = useState([]);
+  const [testConversationHistory, setTestConversationHistory] = useState([]);
   const [timeframe, setTimeframe] = useState('30days');
   const [activeTab, setActiveTab] = useState(0);
+  const [showTestData, setShowTestData] = useState(false);
 
   // Load data
   useEffect(() => {
@@ -134,9 +139,13 @@ const AgentAnalytics = () => {
       const analyticsData = await getBillingAnalytics(agentId, timeframe);
       setAnalytics(analyticsData);
 
-      // Get conversation history
+      // Get conversation history (deployed agent)
       const historyData = await getConversationHistory(agentId, { limit: 100 });
       setConversationHistory(historyData);
+
+      // Get test conversation history (pre-deployment)
+      const testHistoryData = await getTestConversationHistory(agentId, { limit: 100 });
+      setTestConversationHistory(testHistoryData);
 
     } catch (err) {
       console.error('Error loading analytics:', err);
@@ -252,7 +261,18 @@ const AgentAnalytics = () => {
         <Alert severity="error" sx={{ mb: 2 }}>
           {error}
         </Alert>
-        <Button variant="outlined" onClick={() => navigate('/agents')}>
+        <Button 
+          variant="outlined" 
+          onClick={() => navigate('/agents')}
+          sx={{
+            color: '#6366f1',
+            borderColor: '#6366f1',
+            '&:hover': {
+              bgcolor: '#6366f115',
+              borderColor: '#4f46e5'
+            }
+          }}
+        >
           Back to Agents
         </Button>
       </Container>
@@ -265,7 +285,16 @@ const AgentAnalytics = () => {
       <Box sx={{ mb: 4 }}>
         <Box display="flex" alignItems="center" justifyContent="between" mb={2}>
           <Box display="flex" alignItems="center" gap={2}>
-            <IconButton onClick={() => navigate('/agents')}>
+            <IconButton 
+              onClick={() => navigate('/agents')}
+              sx={{
+                color: '#6366f1',
+                '&:hover': {
+                  bgcolor: '#6366f115',
+                  color: '#4f46e5'
+                }
+              }}
+            >
               <ArrowBackIcon />
             </IconButton>
             <Box>
@@ -293,7 +322,20 @@ const AgentAnalytics = () => {
             </FormControl>
             
             <Tooltip title="Refresh Data">
-              <IconButton onClick={loadAnalytics} disabled={refreshing}>
+              <IconButton 
+                onClick={loadAnalytics} 
+                disabled={refreshing}
+                sx={{
+                  color: '#10b981',
+                  '&:hover': {
+                    bgcolor: '#10b98115',
+                    color: '#059669'
+                  },
+                  '&:disabled': {
+                    color: '#9ca3af'
+                  }
+                }}
+              >
                 {refreshing ? <CircularProgress size={24} /> : <RefreshIcon />}
               </IconButton>
             </Tooltip>
@@ -302,6 +344,14 @@ const AgentAnalytics = () => {
               variant="outlined"
               startIcon={<DownloadIcon />}
               onClick={downloadReport}
+              sx={{
+                color: '#f59e0b',
+                borderColor: '#f59e0b',
+                '&:hover': {
+                  bgcolor: '#f59e0b15',
+                  borderColor: '#d97706'
+                }
+              }}
             >
               Export Report
             </Button>
@@ -533,9 +583,20 @@ const AgentAnalytics = () => {
       {activeTab === 2 && (
         <Card>
           <CardContent>
-            <Typography variant="h6" gutterBottom>
-              Recent Conversations
-            </Typography>
+            <Box display="flex" justifyContent="between" alignItems="center" mb={2}>
+              <Typography variant="h6">
+                Recent Conversations
+              </Typography>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={showTestData}
+                    onChange={(e) => setShowTestData(e.target.checked)}
+                  />
+                }
+                label="Include Pre-deployment Tests"
+              />
+            </Box>
             <TableContainer>
               <Table>
                 <TableHead>
@@ -549,7 +610,11 @@ const AgentAnalytics = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {conversationHistory.slice(0, 20).map((conversation, index) => (
+                  {(showTestData 
+                    ? [...conversationHistory, ...testConversationHistory]
+                      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+                    : conversationHistory
+                  ).slice(0, 20).map((conversation, index) => (
                     <TableRow key={conversation.id || index}>
                       <TableCell>
                         {new Date(conversation.timestamp).toLocaleString()}
@@ -572,8 +637,20 @@ const AgentAnalytics = () => {
                       </TableCell>
                       <TableCell>
                         <Chip 
-                          label={conversation.testMode ? 'Test' : 'Production'} 
-                          color={conversation.testMode ? 'warning' : 'success'}
+                          label={
+                            conversation.deploymentType === 'pre-deployment' 
+                              ? 'Pre-deployment Test' 
+                              : conversation.isProduction 
+                                ? 'Production' 
+                                : 'Development'
+                          } 
+                          color={
+                            conversation.deploymentType === 'pre-deployment' 
+                              ? 'info' 
+                              : conversation.isProduction 
+                                ? 'success' 
+                                : 'warning'
+                          }
                           size="small"
                         />
                       </TableCell>
@@ -592,7 +669,13 @@ const AgentAnalytics = () => {
           variant="contained"
           size="large"
           onClick={() => navigate(`/agent-testing/${agentId}`)}
-          sx={{ mr: 2 }}
+          sx={{ 
+            mr: 2,
+            bgcolor: '#10b981',
+            '&:hover': {
+              bgcolor: '#059669'
+            }
+          }}
         >
           Test Agent
         </Button>
@@ -600,6 +683,14 @@ const AgentAnalytics = () => {
           variant="outlined"
           size="large"
           onClick={() => navigate(`/agent-editor/${agentId}`)}
+          sx={{
+            color: '#6b7280',
+            borderColor: '#6b7280',
+            '&:hover': {
+              bgcolor: '#6b728015',
+              borderColor: '#4b5563'
+            }
+          }}
         >
           Edit Agent
         </Button>

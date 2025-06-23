@@ -11,7 +11,7 @@ import asyncio
 import httpx
 from typing import Dict, Any, List, Optional
 
-from langchain.tools import Tool
+# Removed LangChain dependency - using direct function calls
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -209,16 +209,16 @@ class RESTMCPClient:
         return self.tools_cache.copy()
 
 
-def create_rest_mcp_tool(tool_info: Dict[str, Any], mcp_client: RESTMCPClient, agent_config: dict = None) -> Tool:
+def create_rest_mcp_tool(tool_info: Dict[str, Any], mcp_client: RESTMCPClient, agent_config: dict = None) -> Dict[str, Any]:
     """
-    Create a LangChain tool from REST MCP tool information.
+    Create a tool definition from REST MCP tool information using direct function calls.
     
     Args:
         tool_info: Tool information from the MCP server
         mcp_client: The REST MCP client instance
         
     Returns:
-        LangChain Tool instance
+        Tool definition dictionary
     """
     tool_name = tool_info['name']
     base_description = tool_info['description']
@@ -316,23 +316,23 @@ def create_rest_mcp_tool(tool_info: Dict[str, Any], mcp_client: RESTMCPClient, a
             logger.error(f"Error in sync REST MCP tool wrapper for {tool_name}: {str(e)}")
             return f"Error executing tool {tool_name}: {str(e)}"
     
-    # Create the LangChain tool
-    return Tool.from_function(
-        func=sync_tool_func,
-        name=tool_name,
-        description=tool_description
-    )
+    # Create tool definition using direct function calls
+    return {
+        "name": tool_name,
+        "description": tool_description,
+        "function": sync_tool_func
+    }
 
 
-async def get_mcp_tools(server_url: str, agent_config: dict = None) -> List[Tool]:
+async def get_mcp_tools(server_url: str, agent_config: dict = None) -> List[Dict[str, Any]]:
     """
-    Get LangChain tools from a REST-based MCP server.
+    Get tool definitions from a REST-based MCP server using direct function calls.
     
     Args:
         server_url: URL of the MCP server
         
     Returns:
-        List of LangChain Tool instances
+        List of tool definition dictionaries
     """
     try:
         logger.info(f"🚀 Initializing REST MCP tools from server: {server_url}")
@@ -352,13 +352,13 @@ async def get_mcp_tools(server_url: str, agent_config: dict = None) -> List[Tool
             logger.warning("⚠️ No tools discovered from MCP server")
             return []
         
-        # Create LangChain tools with dynamic optimizations
+        # Create tool definitions with dynamic optimizations
         tools = []
         for tool_info in tool_infos:
             try:
                 tool = create_rest_mcp_tool(tool_info, mcp_client, agent_config)
                 tools.append(tool)
-                logger.info(f"✅ Created LangChain tool: {tool_info['name']}")
+                logger.info(f"✅ Created tool: {tool_info['name']}")
             except Exception as e:
                 logger.error(f"❌ Failed to create tool {tool_info['name']}: {str(e)}")
         
@@ -370,7 +370,7 @@ async def get_mcp_tools(server_url: str, agent_config: dict = None) -> List[Tool
         return []
 
 
-def get_mcp_tools_sync(server_url: str, agent_config: dict = None) -> List[Tool]:
+def get_mcp_tools_sync(server_url: str, agent_config: dict = None) -> List[Dict[str, Any]]:
     """
     Synchronous wrapper to get REST MCP tools with optional configuration.
     
@@ -379,7 +379,7 @@ def get_mcp_tools_sync(server_url: str, agent_config: dict = None) -> List[Tool]
         agent_config: Optional agent configuration for optimizations
         
     Returns:
-        List of LangChain Tool instances
+        List of tool definition dictionaries
     """
     try:
         loop = asyncio.get_event_loop()

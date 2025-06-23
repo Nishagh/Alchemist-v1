@@ -185,7 +185,6 @@ class UniversalAgentDeployer:
             
             # Copy optional files if they exist
             optional_files = [
-                'firebase-credentials.json',
                 '.gitignore',
                 '.dockerignore'
             ]
@@ -250,7 +249,6 @@ class UniversalAgentDeployer:
 AGENT_ID={agent_config['agent_id']}
 PROJECT_ID={self.project_id}
 OPENAI_API_KEY={openai_key}
-FIREBASE_CREDENTIALS=/app/firebase-credentials.json
 """
             
             env_file = deployment_dir / '.env'
@@ -263,38 +261,34 @@ FIREBASE_CREDENTIALS=/app/firebase-credentials.json
             raise
     
     def _create_deployment_files(self, deployment_dir: Path, agent_config: Dict[str, Any]):
-        """Create deployment files (Dockerfile is copied from template)."""
+        """Create Dockerfile and other deployment files."""
         try:
+            # Create Dockerfile
+            dockerfile_content = self._generate_dockerfile()
+            dockerfile = deployment_dir / 'Dockerfile'
+            dockerfile.write_text(dockerfile_content)
             
-            # Copy Firebase credentials if they exist
-            # First check in the universal-agent template directory
-            template_firebase_creds = self.template_dir / 'firebase-credentials.json'
+            # Firebase credentials not needed for Google Cloud deployments
+            # Google Cloud Run automatically uses Application Default Credentials (ADC)
+            logger.info("Using Google Cloud Application Default Credentials for Firebase authentication")
             
-            # Then check environment/config paths
-            env_firebase_creds = (os.getenv('FIREBASE_CREDENTIALS') or 
-                                os.getenv('firebase_credentials') or 
-                                os.getenv('GOOGLE_APPLICATION_CREDENTIALS') or
-                                'firebase-credentials.json')
-            
-            firebase_creds_copied = False
-            
-            # Try template directory first (universal-agent/firebase-credentials.json)
-            if template_firebase_creds.exists():
-                dst_creds = deployment_dir / 'firebase-credentials.json'
-                shutil.copy2(template_firebase_creds, dst_creds)
-                logger.info(f"Firebase credentials copied from template: {template_firebase_creds}")
-                firebase_creds_copied = True
-            # Try environment-specified path
-            elif os.path.exists(env_firebase_creds):
-                dst_creds = deployment_dir / 'firebase-credentials.json'
-                shutil.copy2(env_firebase_creds, dst_creds)
-                logger.info(f"Firebase credentials copied from environment: {env_firebase_creds}")
-                firebase_creds_copied = True
-            else:
-                logger.info("No Firebase credentials file found, using Application Default Credentials")
-                
-            if not firebase_creds_copied:
-                logger.warning("Firebase credentials not found. Deployment may fail without proper authentication.")
+            # Create .dockerignore
+            dockerignore_content = """
+.git
+.gitignore
+README.md
+.env
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.coverage
+.venv
+venv/
+"""
+            dockerignore = deployment_dir / '.dockerignore'
+            dockerignore.write_text(dockerignore_content.strip())
             
             logger.info("Deployment files created")
             
@@ -302,6 +296,41 @@ FIREBASE_CREDENTIALS=/app/firebase-credentials.json
             logger.error(f"Failed to create deployment files: {str(e)}")
             raise
     
+    def _generate_dockerfile(self) -> str:
+        """Generate optimized Dockerfile for universal agent."""
+        return """FROM python:3.12-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \\
+    gcc \\
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first for better caching
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY . .
+
+# Set environment variables
+ENV PYTHONPATH=/app
+ENV PORT=8080
+
+# Expose port
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \\
+    CMD curl -f http://localhost:8080/healthz || exit 1
+
+# Run the application
+CMD ["python", "main.py"]
+"""
     
     def _build_and_deploy(self, deployment_dir: Path, agent_id: str) -> str:
         """Build container and deploy to Cloud Run."""
@@ -400,14 +429,7 @@ FIREBASE_CREDENTIALS=/app/firebase-credentials.json
             try:
                 firebase_app = firebase_admin.get_app()
             except ValueError:
-                firebase_creds = (os.getenv('FIREBASE_CREDENTIALS') or 
-                                os.getenv('firebase_credentials') or 
-                                'firebase-credentials.json')
-                if os.path.exists(firebase_creds):
-                    cred = credentials.Certificate(firebase_creds)
-                    firebase_app = firebase_admin.initialize_app(cred, {'projectId': self.project_id})
-                else:
-                    firebase_app = firebase_admin.initialize_app()
+                firebase_app = firebase_admin.initialize_app()
             
             db = firestore.client(firebase_app)
             
@@ -446,14 +468,7 @@ FIREBASE_CREDENTIALS=/app/firebase-credentials.json
             try:
                 firebase_app = firebase_admin.get_app()
             except ValueError:
-                firebase_creds = (os.getenv('FIREBASE_CREDENTIALS') or 
-                                os.getenv('firebase_credentials') or 
-                                'firebase-credentials.json')
-                if os.path.exists(firebase_creds):
-                    cred = credentials.Certificate(firebase_creds)
-                    firebase_app = firebase_admin.initialize_app(cred, {'projectId': self.project_id})
-                else:
-                    firebase_app = firebase_admin.initialize_app()
+                firebase_app = firebase_admin.initialize_app()
             
             db = firestore.client(firebase_app)
             

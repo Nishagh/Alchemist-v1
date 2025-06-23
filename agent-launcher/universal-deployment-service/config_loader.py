@@ -42,33 +42,8 @@ class AgentConfigLoader:
             self.firebase_app = firebase_admin.get_app()
             logger.info("Using existing Firebase app")
         except ValueError:
-            # Try multiple paths for Firebase credentials
-            firebase_creds_paths = [
-                'firebase-credentials.json',  # Local directory
-                os.getenv('FIREBASE_CREDENTIALS', ''),
-                os.getenv('firebase_credentials', ''),
-                os.getenv('GOOGLE_APPLICATION_CREDENTIALS', '')
-            ]
-            
-            firebase_initialized = False
-            for creds_path in firebase_creds_paths:
-                if creds_path and os.path.exists(creds_path):
-                    try:
-                        cred = credentials.Certificate(creds_path)
-                        self.firebase_app = firebase_admin.initialize_app(
-                            cred, 
-                            {'projectId': self.project_id}
-                        )
-                        logger.info(f"Initialized Firebase with credentials: {creds_path}")
-                        firebase_initialized = True
-                        break
-                    except Exception as e:
-                        logger.warning(f"Failed to initialize Firebase with {creds_path}: {str(e)}")
-                        continue
-            
-            if not firebase_initialized:
-                self.firebase_app = firebase_admin.initialize_app()
-                logger.info("Initialized Firebase with Application Default Credentials")
+            self.firebase_app = firebase_admin.initialize_app()
+            logger.info("Initialized Firebase with Application Default Credentials")
         
         self.db = firestore.client(self.firebase_app)
     

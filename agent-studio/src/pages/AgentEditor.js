@@ -5,13 +5,14 @@
  */
 import React, { useState, useEffect } from 'react';
 import { CircularProgress, Box, Typography, IconButton } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { ArrowBack as ArrowBackIcon } from '@mui/icons-material';
 
 // Import the new component architecture
 import AgentEditorLayout from '../components/AgentEditor/AgentEditorLayout';
 import AgentSidebarNavigation from '../components/AgentEditor/AgentSidebarNavigation';
 import NotificationSystem, { createNotification } from '../components/shared/NotificationSystem';
+import WorkflowProgressIndicator from '../components/AgentEditor/WorkflowProgress/WorkflowProgressIndicator';
 
 // Import feature components
 import AgentConversationPanel from '../components/AgentEditor/AgentConversation/AgentConversationPanel';
@@ -19,20 +20,21 @@ import AgentConfigurationForm from '../components/AgentEditor/AgentConfiguration
 import KnowledgeBaseManager from '../components/AgentEditor/KnowledgeBase/KnowledgeBaseManager';
 import ApiIntegrationManager from '../components/AgentEditor/ApiIntegration/ApiIntegrationManager';
 import AgentTestingInterface from '../components/AgentEditor/AgentTesting/AgentTestingInterface';
-import AgentDeploymentManager from '../components/AgentEditor/AgentDeployment/AgentDeploymentManager';
-import AgentIntegrationManager from '../components/AgentEditor/AgentIntegration/AgentIntegrationManager';
+import AgentFineTuningInterface from '../components/AgentEditor/AgentFineTuning/AgentFineTuningInterface';
 
 // Import hooks and services
 import useAgentState from '../hooks/useAgentState';
-import { updateAgent, listDeployments } from '../services';
+import { useAgentWorkflow, WORKFLOW_STAGES } from '../hooks/useAgentWorkflow';
+import { updateAgent } from '../services';
 
 const AgentEditor = () => {
   const navigate = useNavigate();
+  const { agentId } = useParams();
+  const location = useLocation();
   
   // Core state management
   const { 
     agent, 
-    agentId, 
     loading, 
     error, 
     saving, 
@@ -40,34 +42,28 @@ const AgentEditor = () => {
     setSaving, 
     setError, 
     clearError 
-  } = useAgentState();
+  } = useAgentState(agentId);
+
+  // Workflow management
+  const workflow = useAgentWorkflow(agentId);
+
+  // Determine initial section from route
+  const getInitialSection = () => {
+    const path = location.pathname;
+    if (path.includes('/knowledge-base/')) return 'knowledge';
+    if (path.includes('/api-integration/')) return 'api-integration';
+    if (path.includes('/agent-testing/')) return 'pre-testing';
+    if (path.includes('/agent-fine-tuning/')) return 'fine-tuning';
+    return 'definition';
+  };
 
   // UI state
-  const [activeSection, setActiveSection] = useState('definition');
+  const [activeSection, setActiveSection] = useState(getInitialSection());
   const [notification, setNotification] = useState(null);
 
   // Agent conversation state
   const [messages, setMessages] = useState([]);
   const [thoughtProcess, setThoughtProcess] = useState([]);
-
-  // Deployments state
-  const [deployments, setDeployments] = useState([]);
-
-  // Load deployments when agentId changes
-  useEffect(() => {
-    const loadDeployments = async () => {
-      if (agentId) {
-        try {
-          const result = await listDeployments({ agentId });
-          setDeployments(result.deployments || []);
-        } catch (error) {
-          console.error('Error loading deployments:', error);
-        }
-      }
-    };
-
-    loadDeployments();
-  }, [agentId]);
 
   // Handle agent configuration updates
   const handleAgentUpdate = (updatedAgent) => {
@@ -110,9 +106,45 @@ const AgentEditor = () => {
     setNotification(null);
   };
 
-  // Handle section changes
+  // Handle section changes with workflow navigation
   const handleSectionChange = (newSection) => {
-    setActiveSection(newSection);
+    // Map UI sections to workflow stages
+    const sectionToStageMap = {
+      'definition': 'definition',
+      'knowledge': 'knowledge',
+      'api': 'api-integration',
+      'testing': 'pre-testing',
+      'fine-tuning': 'fine-tuning'
+    };
+
+    const stageId = sectionToStageMap[newSection];
+    if (stageId && workflow.canAccessStage(stageId)) {
+      setActiveSection(newSection);
+      workflow.navigateToStage(stageId);
+    }
+  };
+
+  // Handle workflow stage clicks from progress indicator
+  const handleWorkflowStageClick = (stage) => {
+    // Map workflow stages to UI sections or external routes
+    const stageToSectionMap = {
+      'definition': 'definition',
+      'knowledge': 'knowledge',
+      'api-integration': 'api',
+      'pre-testing': 'testing',
+      'fine-tuning': 'fine-tuning'
+    };
+
+    const section = stageToSectionMap[stage.id];
+    if (section) {
+      // Internal section within AgentEditor
+      setActiveSection(section);
+      workflow.navigateToStage(stage.id);
+    } else {
+      // External page - navigate directly
+      const route = stage.route.replace(':agentId', agentId);
+      navigate(route);
+    }
   };
 
   // Handle back navigation
@@ -158,12 +190,32 @@ const AgentEditor = () => {
               backdropFilter: 'blur(8px)',
               boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
             }}>
-              <IconButton onClick={handleBackClick} sx={{ mr: 2 }}>
+              <IconButton 
+                onClick={handleBackClick} 
+                sx={{ 
+                  mr: 2,
+                  color: '#6366f1',
+                  '&:hover': {
+                    bgcolor: '#6366f115',
+                    color: '#4f46e5'
+                  }
+                }}
+              >
                 <ArrowBackIcon />
               </IconButton>
               <Typography variant="h5" sx={{ fontWeight: 600 }}>
                 {loading ? 'Loading...' : (agent?.name || 'New Agent')}
               </Typography>
+            </Box>
+
+            {/* Workflow Progress Indicator */}
+            <Box sx={{ px: 3, pt: 2 }}>
+              <WorkflowProgressIndicator 
+                workflow={workflow}
+                agentId={agentId}
+                compact={true}
+                onStageClick={handleWorkflowStageClick}
+              />
             </Box>
 
             {/* Main Content */}
@@ -203,49 +255,85 @@ const AgentEditor = () => {
 
       case 'knowledge':
         return (
-          <KnowledgeBaseManager
-            agentId={agentId}
-            onNotification={handleNotification}
-            disabled={saving}
-          />
+          <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <Box sx={{ px: 3, pt: 2, flexShrink: 0 }}>
+              <WorkflowProgressIndicator 
+                workflow={workflow}
+                agentId={agentId}
+                compact={true}
+                onStageClick={handleWorkflowStageClick}
+              />
+            </Box>
+            <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+              <KnowledgeBaseManager
+                agentId={agentId}
+                onNotification={handleNotification}
+                disabled={saving}
+              />
+            </Box>
+          </Box>
         );
 
       case 'api':
         return (
-          <ApiIntegrationManager
-            onNotification={handleNotification}
-            disabled={saving}
-          />
+          <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <Box sx={{ px: 3, pt: 2, flexShrink: 0 }}>
+              <WorkflowProgressIndicator 
+                workflow={workflow}
+                agentId={agentId}
+                compact={true}
+                onStageClick={handleWorkflowStageClick}
+              />
+            </Box>
+            <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+              <ApiIntegrationManager
+                onNotification={handleNotification}
+                disabled={saving}
+              />
+            </Box>
+          </Box>
         );
 
       case 'testing':
         return (
-          <AgentTestingInterface
-            agentId={agentId}
-            onNotification={handleNotification}
-            disabled={saving}
-          />
+          <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <Box sx={{ px: 3, pt: 2, flexShrink: 0 }}>
+              <WorkflowProgressIndicator 
+                workflow={workflow}
+                agentId={agentId}
+                compact={true}
+                onStageClick={handleWorkflowStageClick}
+              />
+            </Box>
+            <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+              <AgentTestingInterface
+                agentId={agentId}
+                onNotification={handleNotification}
+                disabled={saving}
+              />
+            </Box>
+          </Box>
         );
 
-      case 'deployment':
+      case 'fine-tuning':
         return (
-          <AgentDeploymentManager
-            agentId={agentId}
-            onNotification={handleNotification}
-            disabled={saving}
-          />
-        );
-
-      case 'integration':
-      case 'whatsapp':
-      case 'website':
-        return (
-          <AgentIntegrationManager
-            deployments={deployments}
-            onNotification={handleNotification}
-            disabled={saving}
-            activeSection={activeSection}
-          />
+          <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <Box sx={{ px: 3, pt: 2, flexShrink: 0 }}>
+              <WorkflowProgressIndicator 
+                workflow={workflow}
+                agentId={agentId}
+                compact={true}
+                onStageClick={handleWorkflowStageClick}
+              />
+            </Box>
+            <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+              <AgentFineTuningInterface
+                agentId={agentId}
+                onNotification={handleNotification}
+                disabled={saving}
+              />
+            </Box>
+          </Box>
         );
 
       default:
@@ -258,8 +346,8 @@ const AgentEditor = () => {
       <AgentSidebarNavigation 
         activeSection={activeSection} 
         onSectionChange={handleSectionChange}
-        deployments={deployments}
         disabled={saving}
+        workflow={workflow}
       >
         {renderSectionContent()}
       </AgentSidebarNavigation>

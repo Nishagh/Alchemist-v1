@@ -1,30 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../utils/AuthContext';
-import { 
-  Box, 
-  Button, 
-  TextField, 
-  Typography, 
-  Paper, 
-  Alert, 
-  Container,
-  Grid,
-  Divider,
-  useTheme,
-  alpha,
-  Fade,
-  CircularProgress,
-  Stack,
-  Chip
-} from '@mui/material';
-import {
-  PersonAdd as PersonAddIcon,
-  Google as GoogleIcon,
-  AutoAwesome as AutoAwesomeIcon,
-  RocketLaunch as RocketLaunchIcon,
-  People as PeopleIcon
-} from '@mui/icons-material';
+import './LandingPage.css'; // Reuse the landing page styles
 
 const Signup = () => {
   const [email, setEmail] = useState('');
@@ -33,14 +10,19 @@ const Signup = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const { signup, signInWithGoogle, error: authError } = useAuth();
+  const { signup, signInWithGoogle, error: authError, currentUser } = useAuth();
   const navigate = useNavigate();
-  const theme = useTheme();
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (currentUser) {
+      navigate('/dashboard');
+    }
+  }, [currentUser, navigate]);
 
   const handleSignup = async (e) => {
     e.preventDefault();
     
-    // Validate form
     if (password !== confirmPassword) {
       return setError('Passwords do not match');
     }
@@ -54,7 +36,7 @@ const Signup = () => {
 
     try {
       await signup(email, password);
-      navigate('/agents'); // Redirect to agents page after signup
+      navigate('/dashboard');
     } catch (error) {
       setError(error.message);
     } finally {
@@ -68,7 +50,7 @@ const Signup = () => {
 
     try {
       await signInWithGoogle();
-      navigate('/agents'); // Redirect to agents page after signup
+      navigate('/dashboard');
     } catch (error) {
       setError(error.message);
     } finally {
@@ -77,263 +59,199 @@ const Signup = () => {
   };
 
   return (
-    <Box 
-      sx={{ 
-        minHeight: '100vh',
-        background: `linear-gradient(135deg, ${alpha(theme.palette.grey[100], 1)} 0%, ${alpha(theme.palette.grey[50], 1)} 100%)`,
-        display: 'flex',
-        alignItems: 'center',
-        position: 'relative',
-        '&::before': {
-          content: '""',
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'radial-gradient(ellipse at center, transparent 0%, rgba(0,0,0,0.02) 100%)'
-        }
-      }}
-    >
-      <Container component="main" maxWidth="lg" sx={{ position: 'relative', zIndex: 1 }}>
-        <Fade in={true} timeout={800}>
-          <Grid container spacing={8} alignItems="center">
+    <div className="signup-page">
+      {/* Signup Content */}
+      <section className="signup-section">
+        <div className="signup-container">
+          <div className="signup-content">
             {/* Left Side - Branding */}
-            <Grid item xs={12} md={6}>
-              <Box sx={{ textAlign: { xs: 'center', md: 'left' }, mb: { xs: 4, md: 0 } }}>
-                <Typography 
-                  variant="h2" 
-                  component="h1" 
-                  sx={{ 
-                    fontWeight: 900,
-                    fontSize: { xs: '2rem', md: '3rem' },
-                    color: theme.palette.text.primary,
-                    mb: 2,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: { xs: 'center', md: 'flex-start' }
-                  }}
-                >
-                  <RocketLaunchIcon sx={{ mr: 1, fontSize: 'inherit' }} />
-                  Start Building Today
-                </Typography>
-                <Typography 
-                  variant="h5" 
-                  color="text.secondary" 
-                  sx={{ mb: 4, fontWeight: 400, lineHeight: 1.4 }}
-                >
-                  Join the AI revolution and create intelligent agents that transform your workflow
-                </Typography>
-                
-                <Stack direction="row" spacing={2} sx={{ mb: 3, justifyContent: { xs: 'center', md: 'flex-start' } }}>
-                  <Chip 
-                    icon={<PeopleIcon />} 
-                    label="500+ Users" 
-                    variant="outlined" 
-                    sx={{ fontWeight: 'bold' }}
-                  />
-                  <Chip 
-                    icon={<AutoAwesomeIcon />} 
-                    label="10K+ Agents" 
-                    variant="outlined" 
-                    sx={{ fontWeight: 'bold' }}
-                  />
-                </Stack>
-                
-                <Typography variant="body1" color="text.secondary" sx={{ maxWidth: '500px' }}>
-                  Create your first AI agent in under 2 minutes. No coding required, just describe 
-                  what you want and watch your ideas come to life with enterprise-grade security.
-                </Typography>
-              </Box>
-            </Grid>
+            <div className="signup-branding">
+              <div className="signup-badge">
+                ✨ Join the AI Revolution
+              </div>
+              <h1>Start Building AI Agents Today</h1>
+              <p className="signup-subtitle">
+                Create intelligent AI agents that transform your workflow. No coding required, 
+                just describe what you want and watch your ideas come to life.
+              </p>
+              <div className="signup-features">
+                <div className="signup-feature">
+                  <div className="feature-icon">
+                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M12.395 2.553a1 1 0 00-1.45-.385c-.345.23-.614.558-.822.88-.214.33-.403.713-.57 1.116-.334.804-.614 1.768-.84 2.734a31.365 31.365 0 00-.613 3.58 2.64 2.64 0 01-.945-1.067c-.328-.68-.398-1.534-.398-2.654A1 1 0 005.05 6.05 6.981 6.981 0 003 11a7 7 0 1011.95-4.95c-.592-.591-.98-.985-1.348-1.467-.363-.476-.724-1.063-1.207-2.03zM12.12 15.12A3 3 0 017 13s.879.5 2.5.5c0-1 .5-4 1.25-4.5.5 1 .786 1.293 1.371 1.879A2.99 2.99 0 0113 13a2.99 2.99 0 01-.879 2.121z" clipRule="evenodd"/>
+                    </svg>
+                  </div>
+                  <div className="feature-content">
+                    <div className="feature-title">Build Unlimited Agents</div>
+                    <div className="feature-description">Create as many AI agents as you need</div>
+                  </div>
+                </div>
+                <div className="signup-feature">
+                  <div className="feature-icon">
+                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd"/>
+                    </svg>
+                  </div>
+                  <div className="feature-content">
+                    <div className="feature-title">Deploy in 30 Seconds</div>
+                    <div className="feature-description">From idea to live agent instantly</div>
+                  </div>
+                </div>
+                <div className="signup-feature">
+                  <div className="feature-icon">
+                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 5v8a2 2 0 01-2 2h-5l-5 4v-4H4a2 2 0 01-2-2V5a2 2 0 012-2h12a2 2 0 012 2zM7 8H5v2h2V8zm2 0h2v2H9V8zm6 0h-2v2h2V8z" clipRule="evenodd"/>
+                    </svg>
+                  </div>
+                  <div className="feature-content">
+                    <div className="feature-title">WhatsApp Integration</div>
+                    <div className="feature-description">Connect to WhatsApp Business API</div>
+                  </div>
+                </div>
+              </div>
+              <div className="signup-stats">
+                <div className="stat">
+                  <span className="stat-number">500+</span>
+                  <span className="stat-label">Active Users</span>
+                </div>
+                <div className="stat">
+                  <span className="stat-number">10K+</span>
+                  <span className="stat-label">AI Agents Created</span>
+                </div>
+              </div>
+            </div>
 
             {/* Right Side - Signup Form */}
-            <Grid item xs={12} md={6}>
-              <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-                <Paper 
-                  elevation={0} 
-                  sx={{ 
-                    p: 6, 
-                    borderRadius: 3,
-                    maxWidth: '450px',
-                    width: '100%',
-                    border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
-                    boxShadow: '0 8px 40px rgba(0, 0, 0, 0.08)',
-                    background: alpha(theme.palette.background.paper, 0.9),
-                    backdropFilter: 'blur(10px)'
-                  }}
-                >
-                  <Box 
-                    sx={{
-                      mb: 4,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                    }}
-                  >
-                    <Box 
-                      sx={{ 
-                        bgcolor: alpha(theme.palette.primary.main, 0.1),
-                        color: theme.palette.primary.main,
-                        p: 2,
-                        borderRadius: 3,
-                        mb: 2
-                      }}
-                    >
-                      <PersonAddIcon sx={{ fontSize: '2rem' }} />
-                    </Box>
-                    <Typography component="h2" variant="h4" sx={{ fontWeight: 'bold', textAlign: 'center' }}>
-                      Create Account
-                    </Typography>
-                    <Typography variant="body1" color="text.secondary" sx={{ textAlign: 'center', mt: 1 }}>
-                      Start building AI agents today
-                    </Typography>
-                  </Box>
+            <div className="signup-form-container">
+              <div className="signup-form-card">
+                <div className="form-header">
+                  <div className="form-icon">
+                    <svg width="32" height="32" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M8 9a3 3 0 100-6 3 3 0 000 6zM8 11a6 6 0 016 6H2a6 6 0 016-6zM16 7a1 1 0 10-2 0v1h-1a1 1 0 100 2h1v1a1 1 0 102 0v-1h1a1 1 0 100-2h-1V7z"></path>
+                    </svg>
+                  </div>
+                  <h2>Create Your Account</h2>
+                  <p>Start building AI agents in minutes</p>
+                </div>
 
-                  {(error || authError) && (
-                    <Alert 
-                      severity="error" 
-                      sx={{ 
-                        width: '100%', 
-                        mb: 3,
-                        borderRadius: 2,
-                        '& .MuiAlert-message': {
-                          fontSize: '0.9rem'
-                        }
-                      }}
-                    >
-                      {error || authError}
-                    </Alert>
-                  )}
+                {(error || authError) && (
+                  <div className="error-alert">
+                    {error || authError}
+                  </div>
+                )}
 
-                  <Box component="form" onSubmit={handleSignup} sx={{ width: '100%' }}>
-                    <TextField
-                      margin="normal"
-                      required
-                      fullWidth
+                <form onSubmit={handleSignup} className="signup-form">
+                  <div className="input-group">
+                    <label htmlFor="email">Email Address</label>
+                    <input
+                      type="email"
                       id="email"
-                      label="Email Address"
                       name="email"
-                      autoComplete="email"
-                      autoFocus
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      sx={{ 
-                        mb: 2,
-                        '& .MuiOutlinedInput-root': {
-                          borderRadius: 2
-                        }
-                      }}
-                    />
-                    <TextField
-                      margin="normal"
                       required
-                      fullWidth
-                      name="password"
-                      label="Password (min. 6 characters)"
+                      autoComplete="email"
+                      autoFocus
+                      placeholder="Enter your email"
+                    />
+                  </div>
+
+                  <div className="input-group">
+                    <label htmlFor="password">Password</label>
+                    <input
                       type="password"
                       id="password"
-                      autoComplete="new-password"
+                      name="password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      sx={{ 
-                        mb: 2,
-                        '& .MuiOutlinedInput-root': {
-                          borderRadius: 2
-                        }
-                      }}
-                    />
-                    <TextField
-                      margin="normal"
                       required
-                      fullWidth
-                      name="confirmPassword"
-                      label="Confirm Password"
+                      autoComplete="new-password"
+                      placeholder="Minimum 6 characters"
+                    />
+                  </div>
+
+                  <div className="input-group">
+                    <label htmlFor="confirmPassword">Confirm Password</label>
+                    <input
                       type="password"
                       id="confirmPassword"
-                      autoComplete="new-password"
+                      name="confirmPassword"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
-                      sx={{ 
-                        mb: 3,
-                        '& .MuiOutlinedInput-root': {
-                          borderRadius: 2
-                        }
-                      }}
+                      required
+                      autoComplete="new-password"
+                      placeholder="Confirm your password"
                     />
-                    
-                    <Button
-                      type="submit"
-                      fullWidth
-                      variant="contained"
-                      size="large"
-                      disabled={loading || googleLoading}
-                      endIcon={loading ? <CircularProgress size={20} color="inherit" /> : <RocketLaunchIcon />}
-                      sx={{ 
-                        py: 1.5,
-                        mb: 3,
-                        fontWeight: 'bold',
-                        fontSize: '1.1rem',
-                        borderRadius: 2
-                      }}
-                    >
-                      {loading ? 'Creating Account...' : 'Create My Account'}
-                    </Button>
+                  </div>
 
-                    <Divider sx={{ my: 3 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        OR
-                      </Typography>
-                    </Divider>
+                  <button
+                    type="submit"
+                    className="btn btn-primary btn-full"
+                    disabled={loading || googleLoading}
+                  >
+                    {loading ? (
+                      <>
+                        <svg className="loading-spinner" width="20" height="20" viewBox="0 0 24 24" fill="none">
+                          <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeDasharray="32 32" />
+                        </svg>
+                        Creating Account...
+                      </>
+                    ) : (
+                      <>
+                        Create My Account
+                        <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd"></path>
+                        </svg>
+                      </>
+                    )}
+                  </button>
 
-                    <Button
-                      fullWidth
-                      variant="outlined"
-                      size="large"
-                      startIcon={<GoogleIcon />}
-                      onClick={handleGoogleSignIn}
-                      disabled={loading || googleLoading}
-                      endIcon={googleLoading ? <CircularProgress size={20} color="inherit" /> : null}
-                      sx={{ 
-                        py: 1.5,
-                        mb: 4,
-                        fontWeight: 'bold',
-                        borderRadius: 2,
-                        borderColor: alpha(theme.palette.primary.main, 0.3),
-                        '&:hover': {
-                          borderColor: theme.palette.primary.main,
-                          bgcolor: alpha(theme.palette.primary.main, 0.05)
-                        }
-                      }}
-                    >
-                      {googleLoading ? 'Connecting...' : 'Continue with Google'}
-                    </Button>
+                  <div className="divider">
+                    <span>OR</span>
+                  </div>
 
-                    <Grid container justifyContent="center">
-                      <Grid item>
-                        <Link to="/login" style={{ textDecoration: 'none' }}>
-                          <Typography 
-                            variant="body2" 
-                            color="primary"
-                            sx={{ 
-                              fontWeight: 'bold',
-                              '&:hover': { textDecoration: 'underline' }
-                            }}
-                          >
-                            Already have an account? Sign in
-                          </Typography>
-                        </Link>
-                      </Grid>
-                    </Grid>
-                  </Box>
-                </Paper>
-              </Box>
-            </Grid>
-          </Grid>
-        </Fade>
-      </Container>
-    </Box>
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-full"
+                    onClick={handleGoogleSignIn}
+                    disabled={loading || googleLoading}
+                  >
+                    {googleLoading ? (
+                      <>
+                        <svg className="loading-spinner" width="20" height="20" viewBox="0 0 24 24" fill="none">
+                          <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeDasharray="32 32" />
+                        </svg>
+                        Connecting...
+                      </>
+                    ) : (
+                      <>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                        </svg>
+                        Continue with Google
+                      </>
+                    )}
+                  </button>
+
+                  <div className="form-footer">
+                    <p>
+                      Already have an account? {" "}
+                      <Link to="/login" className="form-link">
+                        Sign in here
+                      </Link>
+                    </p>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
   );
 };
 
-export default Signup; 
+export default Signup;

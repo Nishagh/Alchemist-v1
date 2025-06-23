@@ -97,36 +97,93 @@ const Dashboard = () => {
     }
   }, [currentUser]);
 
-  // Update deployment stats when user agent IDs or deployments change
+  // Load deployments when user agent IDs are available
   useEffect(() => {
-    if (userAgentIds.size > 0 && allDeployments.length > 0) {
-      // Filter deployments for user's agents
-      const userDeployments = allDeployments.filter(d => userAgentIds.has(d.agent_id));
-      const activeDeployments = userDeployments.filter(d => d.status === 'completed').length;
-      setStats(prev => ({ ...prev, activeDeployments }));
+    let unsubscribeDeployments;
+    
+    if (userAgentIds.size > 0) {
+      console.log('Loading deployments for agent IDs:', Array.from(userAgentIds));
       
-      // Generate activity from deployments
-      const deploymentActivity = userDeployments
-        .sort((a, b) => (b.updated_at?.seconds || 0) - (a.updated_at?.seconds || 0))
-        .slice(0, 2)
-        .map(deployment => ({
-          id: `deployment-${deployment.id}`,
-          type: 'deployment',
-          title: `Deployment ${deployment.status === 'completed' ? 'completed' : deployment.status}`,
-          time: formatTimeAgo(deployment.updated_at),
-          icon: <RocketLaunchIcon />,
-          color: deployment.status === 'completed' ? 'success' : 
-                deployment.status === 'failed' ? 'error' : 'info'
-        }));
+      // Firestore 'in' queries have a limit of 10 items, so we need to batch if more agents
+      const agentIdsArray = Array.from(userAgentIds);
+      if (agentIdsArray.length > 10) {
+        console.warn('More than 10 agents detected, using first 10 for deployment query');
+        agentIdsArray.splice(10); // Keep only first 10
+      }
       
-      setRecentActivity(prev => [...deploymentActivity, ...prev.filter(a => !a.id.startsWith('deployment-'))]);
+      // Query deployments for user's agents
+      const deploymentsRef = collection(db, 'agent_deployments');
+      const deploymentsQuery = query(
+        deploymentsRef,
+        where('agent_id', 'in', agentIdsArray),
+        orderBy('updated_at', 'desc')
+      );
+      
+      unsubscribeDeployments = onSnapshot(deploymentsQuery, 
+        (snapshot) => {
+          console.log('Deployments snapshot received:', snapshot.size, 'deployments');
+          const deployments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          
+          // Group by agent_id and keep only the latest deployment per agent
+          const latestDeployments = {};
+          deployments.forEach(deployment => {
+            const agentId = deployment.agent_id;
+            if (!latestDeployments[agentId] || 
+                (deployment.updated_at?.seconds || 0) > (latestDeployments[agentId].updated_at?.seconds || 0)) {
+              latestDeployments[agentId] = deployment;
+            }
+          });
+          
+          const uniqueDeployments = Object.values(latestDeployments);
+          setAllDeployments(uniqueDeployments);
+          
+          // Update stats
+          const activeDeployments = uniqueDeployments.filter(d => d.status === 'completed').length;
+          setStats(prev => ({ ...prev, activeDeployments }));
+          
+          // Generate activity from deployments
+          const deploymentActivity = uniqueDeployments
+            .sort((a, b) => (b.updated_at?.seconds || 0) - (a.updated_at?.seconds || 0))
+            .slice(0, 2)
+            .map(deployment => ({
+              id: `deployment-${deployment.id}`,
+              type: 'deployment',
+              title: `Deployment ${deployment.status === 'completed' ? 'completed' : deployment.status}`,
+              time: formatTimeAgo(deployment.updated_at),
+              icon: <RocketLaunchIcon />,
+              color: deployment.status === 'completed' ? 'success' : 
+                    deployment.status === 'failed' ? 'error' : 'info'
+            }));
+          
+          setRecentActivity(prev => [...prev.filter(a => !a.id.startsWith('deployment-')), ...deploymentActivity]);
+        },
+        (error) => {
+          console.error('Error in deployments snapshot listener:', error);
+          // Set empty deployments on error
+          setAllDeployments([]);
+          setStats(prev => ({ ...prev, activeDeployments: 0 }));
+        }
+      );
+    } else {
+      // No agents, so no deployments
+      console.log('No agent IDs available, skipping deployment query');
+      setAllDeployments([]);
+      setStats(prev => ({ ...prev, activeDeployments: 0 }));
     }
-  }, [userAgentIds, allDeployments]);
+    
+    return () => {
+      if (unsubscribeDeployments) {
+        unsubscribeDeployments();
+      }
+    };
+  }, [userAgentIds]);
 
   const loadDashboardData = async () => {
+    console.log('Loading dashboard data for user:', currentUser?.uid);
+    console.log('Current user:', currentUser);
+    
     try {
       let unsubscribeAgents;
-      let unsubscribeDeployments;
       let unsubscribePhones;
       
       // Load agents from correct collection
@@ -138,30 +195,27 @@ const Dashboard = () => {
         limit(6)
       );
       
-      unsubscribeAgents = onSnapshot(agentsQuery, (snapshot) => {
-        const agents = [];
-        const agentIds = new Set();
-        snapshot.forEach((doc) => {
-          agents.push({ id: doc.id, agent_id: doc.id, ...doc.data() });
-          agentIds.add(doc.id);
-        });
-        setRecentAgents(agents);
-        setUserAgentIds(agentIds);
-        setStats(prev => ({ ...prev, totalAgents: snapshot.size }));
-      });
-
-      // Load deployments - we'll filter by user's agents since deployments don't have user_id
-      const deploymentsRef = collection(db, 'agent_deployments');
-      const deploymentsQuery = query(
-        deploymentsRef,
-        orderBy('updated_at', 'desc'),
-        limit(20) // Get recent deployments and filter on client side
+      unsubscribeAgents = onSnapshot(agentsQuery, 
+        (snapshot) => {
+          console.log('Agents snapshot received:', snapshot.size, 'agents');
+          const agents = [];
+          const agentIds = new Set();
+          snapshot.forEach((doc) => {
+            console.log('Agent doc:', doc.id, doc.data());
+            agents.push({ id: doc.id, agent_id: doc.id, ...doc.data() });
+            agentIds.add(doc.id);
+          });
+          setRecentAgents(agents);
+          setUserAgentIds(agentIds);
+          setStats(prev => ({ ...prev, totalAgents: snapshot.size }));
+        },
+        (error) => {
+          console.error('Error in agents snapshot listener:', error);
+        }
       );
-      
-      unsubscribeDeployments = onSnapshot(deploymentsQuery, (snapshot) => {
-        const deployments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setAllDeployments(deployments);
-      });
+
+      // Note: Deployments will be loaded after agents are fetched
+      // This is handled in the useEffect that watches userAgentIds
 
       // Load WhatsApp integrations
       const phonesRef = collection(db, 'whatsapp_user_phones');
@@ -170,27 +224,33 @@ const Dashboard = () => {
         where('user_id', '==', currentUser.uid)
       );
       
-      unsubscribePhones = onSnapshot(phonesQuery, (snapshot) => {
-        const phones = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        const activePhones = phones.filter(p => p.status === 'active').length;
-        setStats(prev => ({ ...prev, totalIntegrations: activePhones }));
-        
-        // Generate activity from phone integrations
-        const phoneActivity = phones
-          .filter(p => p.verified_at || p.status === 'active')
-          .sort((a, b) => (b.verified_at?.seconds || b.updated_at?.seconds || 0) - (a.verified_at?.seconds || a.updated_at?.seconds || 0))
-          .slice(0, 1)
-          .map(phone => ({
-            id: `phone-${phone.id}`,
-            type: 'integration',
-            title: `WhatsApp ${phone.number} ${phone.status === 'active' ? 'activated' : 'configured'}`,
-            time: formatTimeAgo(phone.verified_at || phone.updated_at),
-            icon: <WhatsAppIcon />,
-            color: 'info'
-          }));
-        
-        setRecentActivity(prev => [...prev.filter(a => !a.id.startsWith('phone-')), ...phoneActivity]);
-      });
+      unsubscribePhones = onSnapshot(phonesQuery, 
+        (snapshot) => {
+          console.log('Phones snapshot received:', snapshot.size, 'phones');
+          const phones = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          const activePhones = phones.filter(p => p.status === 'active').length;
+          setStats(prev => ({ ...prev, totalIntegrations: activePhones }));
+          
+          // Generate activity from phone integrations
+          const phoneActivity = phones
+            .filter(p => p.verified_at || p.status === 'active')
+            .sort((a, b) => (b.verified_at?.seconds || b.updated_at?.seconds || 0) - (a.verified_at?.seconds || a.updated_at?.seconds || 0))
+            .slice(0, 1)
+            .map(phone => ({
+              id: `phone-${phone.id}`,
+              type: 'integration',
+              title: `WhatsApp ${phone.number} ${phone.status === 'active' ? 'activated' : 'configured'}`,
+              time: formatTimeAgo(phone.verified_at || phone.updated_at),
+              icon: <WhatsAppIcon />,
+              color: 'info'
+            }));
+          
+          setRecentActivity(prev => [...prev.filter(a => !a.id.startsWith('phone-')), ...phoneActivity]);
+        },
+        (error) => {
+          console.error('Error in phones snapshot listener:', error);
+        }
+      );
 
       // Load recent agent creation activity
       const recentAgentsRef = collection(db, 'alchemist_agents');
@@ -201,23 +261,29 @@ const Dashboard = () => {
         limit(3)
       );
       
-      onSnapshot(recentAgentsQuery, (snapshot) => {
-        const agentActivity = snapshot.docs
-          .slice(0, 2)
-          .map(doc => {
-            const agent = doc.data();
-            return {
-              id: `agent-${doc.id}`,
-              type: 'agent_created',
-              title: `Agent "${agent.name || 'Untitled'}" created`,
-              time: formatTimeAgo(agent.created_at),
-              icon: <SmartToyIcon />,
-              color: 'primary'
-            };
-          });
-        
-        setRecentActivity(prev => [...prev.filter(a => !a.id.startsWith('agent-')), ...agentActivity]);
-      });
+      onSnapshot(recentAgentsQuery, 
+        (snapshot) => {
+          console.log('Recent agents snapshot received:', snapshot.size, 'agents');
+          const agentActivity = snapshot.docs
+            .slice(0, 2)
+            .map(doc => {
+              const agent = doc.data();
+              return {
+                id: `agent-${doc.id}`,
+                type: 'agent_created',
+                title: `Agent "${agent.name || 'Untitled'}" created`,
+                time: formatTimeAgo(agent.created_at),
+                icon: <SmartToyIcon />,
+                color: 'primary'
+              };
+            });
+          
+          setRecentActivity(prev => [...prev.filter(a => !a.id.startsWith('agent-')), ...agentActivity]);
+        },
+        (error) => {
+          console.error('Error in recent agents snapshot listener:', error);
+        }
+      );
 
       // Set mock messages handled (would need actual message tracking)
       setStats(prev => ({ ...prev, messagesHandled: 0 })); // Real implementation would track this
@@ -226,7 +292,6 @@ const Dashboard = () => {
       
       return () => {
         unsubscribeAgents && unsubscribeAgents();
-        unsubscribeDeployments && unsubscribeDeployments();
         unsubscribePhones && unsubscribePhones();
       };
     } catch (error) {
@@ -251,11 +316,20 @@ const Dashboard = () => {
       action: () => navigate('/agents')
     },
     {
-      title: 'WhatsApp Setup',
-      description: 'Manage phone numbers',
+      title: 'WhatsApp Integration',
+      description: 'Connect agents to WhatsApp',
       icon: <WhatsAppIcon />,
       color: '#25D366',
-      action: () => navigate('/whatsapp-management')
+      action: () => {
+        // Navigate to agent management
+        // If user has agents, go to first agent's dashboard
+        if (recentAgents.length > 0) {
+          navigate(`/agent/${recentAgents[0].id}`);
+        } else {
+          // If no agents, suggest creating one first
+          navigate('/agent-editor');
+        }
+      }
     },
     {
       title: 'API Documentation',
@@ -368,7 +442,7 @@ const Dashboard = () => {
               </Box>
             </Box>
             <Box>
-              <IconButton onClick={() => navigate(`/agent-editor/${agent.id}`)}>
+              <IconButton onClick={() => navigate(`/agent/${agent.id}`)}>
                 <EditIcon />
               </IconButton>
               <IconButton>
