@@ -1,3 +1,4 @@
+# Build stage
 FROM node:18-alpine as build
 
 # Set working directory
@@ -9,13 +10,10 @@ COPY package*.json ./
 # Install dependencies
 RUN npm ci
 
-# Copy all source files (excluding firebase-credentials.json which will be mounted at runtime)
+# Copy all source files
 COPY . .
 
-# Ensure we're not trying to use the credentials file during build
-RUN rm -f firebase-credentials.json
-
-# Set Firebase environment variables for build (from .env file)
+# Set environment variables for build
 ENV REACT_APP_FIREBASE_API_KEY=AIzaSyC9MLh9IiFIcH5RJRVLJlrTXNI5s03r4AE
 ENV REACT_APP_FIREBASE_AUTH_DOMAIN=alchemist-e69bb.firebaseapp.com
 ENV REACT_APP_FIREBASE_PROJECT_ID=alchemist-e69bb
@@ -23,31 +21,26 @@ ENV REACT_APP_FIREBASE_STORAGE_BUCKET=alchemist-e69bb.appspot.com
 ENV REACT_APP_FIREBASE_MESSAGING_SENDER_ID=103214520240448237488
 ENV REACT_APP_FIREBASE_APP_ID=1:851487020021:web:527efbdbe1ded9aa2686bc
 
-# Build the app
+# Set service URLs for build
+ENV REACT_APP_API_BASE_URL=https://alchemist-agent-engine-851487020021.us-central1.run.app
+ENV REACT_APP_KNOWLEDGE_BASE_URL=https://alchemist-knowledge-vault-851487020021.us-central1.run.app
+ENV REACT_APP_MCP_MANAGER_URL=https://alchemist-tool-forge-851487020021.us-central1.run.app
+ENV REACT_APP_BILLING_SERVICE_URL=https://billing-service-851487020021.us-central1.run.app
+
+# Build the React app
 RUN npm run build
 
-# Production stage
-FROM node:18-alpine
+# Production stage - Nginx to serve static files
+FROM nginx:alpine
 
-WORKDIR /app
+# Copy built app from build stage to nginx html directory
+COPY --from=build /app/build /usr/share/nginx/html
 
-# Copy package.json and package-lock.json
-COPY package*.json ./
+# Copy nginx configuration
+COPY nginx.conf /etc/nginx/nginx.conf
 
-# Install production dependencies only
-RUN npm ci --only=production
+# Expose port 80 (nginx default)
+EXPOSE 80
 
-# Copy built app from the build stage
-COPY --from=build /app/build ./build
-COPY --from=build /app/server.js .
-COPY --from=build /app/server ./server
-
-# The Firebase credentials will be mounted at runtime from Secret Manager
-# Create a placeholder directory for credentials
-RUN mkdir -p /firebase
-
-# Expose port
-EXPOSE 8080
-
-# Start the app
-CMD ["npm", "run", "start:prod"] 
+# Start nginx
+CMD ["nginx", "-g", "daemon off;"] 

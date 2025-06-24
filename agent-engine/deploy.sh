@@ -20,7 +20,7 @@ else
 fi
 
 # Extract project ID from firebase-credentials.json
-FIREBASE_PROJECT_ID=$(grep -o '"project_id": "[^"]*' firebase-credentials.json | cut -d'"' -f4)
+FIREBASE_PROJECT_ID="alchemist-e69bb"
 echo -e "${YELLOW}Found Firebase project ID: ${FIREBASE_PROJECT_ID}${NC}"
 
 # Set GOOGLE_CLOUD_PROJECT to the Firebase project ID if not already set

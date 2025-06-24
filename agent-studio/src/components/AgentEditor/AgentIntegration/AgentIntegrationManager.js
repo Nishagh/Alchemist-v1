@@ -58,7 +58,7 @@ const AgentIntegrationManager = ({
   }, [activeSection]);
 
   // Check if there are completed deployments
-  const hasCompletedDeployments = deployments.some(d => d.status === 'completed');
+  const hasCompletedDeployments = deployments.some(d => d.status === 'completed' || d.status === 'deployed');
 
   const integrationOptions = [
     {

@@ -11,7 +11,6 @@ import asyncio
 import httpx
 from typing import Dict, Any, List, Optional
 
-# Removed LangChain dependency - using direct function calls
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')

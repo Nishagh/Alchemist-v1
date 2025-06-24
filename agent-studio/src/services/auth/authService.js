@@ -4,7 +4,7 @@
  * Handles authentication tokens and request/response interceptors
  */
 import { auth } from '../../utils/firebase';
-import { api, kbApi, mcpApi } from '../config/apiConfig';
+import { api, kbApi, mcpApi, billingApi } from '../config/apiConfig';
 
 // Track token refresh promises to prevent multiple simultaneous refresh attempts
 let refreshTokenPromise = null;
@@ -140,10 +140,12 @@ export const initializeAuthInterceptors = () => {
   addAuthInterceptor(api);
   addAuthInterceptor(kbApi);
   addAuthInterceptor(mcpApi);
+  addAuthInterceptor(billingApi);
   
   addResponseInterceptor(api);
   addResponseInterceptor(kbApi);
   addResponseInterceptor(mcpApi);
+  addResponseInterceptor(billingApi);
 };
 
 /**

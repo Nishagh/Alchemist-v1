@@ -26,7 +26,6 @@ import Signup from './pages/Signup';
 import ForgotPassword from './pages/ForgotPassword';
 import LandingPage from './pages/LandingPage';
 import AgentCreationRedirect from './pages/AgentCreationRedirect';
-import Billing from './pages/Billing';
 import Credits from './pages/Credits';
 import Account from './pages/Account';
 

@@ -60,7 +60,7 @@ const WebsiteIntegrationManager = ({
 
   // Get the latest deployment
   const latestDeployment = deployments
-    .filter(d => d.status === 'completed')
+    .filter(d => d.status === 'completed' || d.status === 'deployed')
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
 
   const handleConfigChange = (field) => (event) => {

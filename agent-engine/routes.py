@@ -24,6 +24,7 @@ from alchemist.services.storage_service import default_storage
 from alchemist.services.openai_init import initialize_openai
 from alchemist.agents.orchestrator_agent import OrchestratorAgent
 from alchemist.config.firebase_config import get_storage_bucket
+from firebase_admin import auth
 
 # Import metrics routes
 try:
@@ -78,22 +79,49 @@ class AgentActionRequest(BaseModel):
 
 # User authentication dependency
 async def get_current_user(
-    userId_header: Optional[str] = Header(None, alias="userId"), 
-    userId: Optional[str] = None
+    authorization: Optional[str] = Header(None, alias="Authorization")
 ) -> str:
     """
-    Validate the user ID from request headers or query parameters.
+    Validate the Firebase ID token from Authorization header and extract user ID.
     This function will be used as a dependency for routes that require user authentication.
     """
-    # Use header userId if available, otherwise use query parameter
-    user_id = userId_header or userId
-    
-    if not user_id:
+    if not authorization:
         raise HTTPException(
             status_code=401,
-            detail="User ID is required for this operation"
+            detail="Authorization header is required"
         )
-    return user_id
+    
+    # Extract token from "Bearer <token>" format
+    try:
+        scheme, token = authorization.split(" ", 1)
+        if scheme.lower() != "bearer":
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid authorization scheme. Use 'Bearer <token>'"
+            )
+    except ValueError:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid authorization header format. Use 'Bearer <token>'"
+        )
+    
+    # Verify the Firebase ID token
+    try:
+        decoded_token = auth.verify_id_token(token)
+        user_id = decoded_token['uid']
+        logger.debug(f"Authenticated user: {user_id}")
+        return user_id
+    except auth.InvalidIdTokenError:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired Firebase ID token"
+        )
+    except Exception as e:
+        logger.error(f"Error verifying Firebase token: {str(e)}")
+        raise HTTPException(
+            status_code=401,
+            detail="Failed to verify authentication token"
+        )
 
 def register_routes(app: FastAPI):
     """
@@ -173,12 +201,10 @@ def register_routes(app: FastAPI):
 
     # Agent Management Endpoints
     @app.get("/api/agents")
-    async def list_agents(userId: Optional[str] = None):
+    async def list_agents(user_id: str = Depends(get_current_user)):
         """Get a list of all agents for the authenticated user."""
         try:
-            # Use the validated userId from the dependency
-            
-            agents = await default_storage.list_agents(userId=userId)
+            agents = await default_storage.list_agents(userId=user_id)
             return {"status": "success", "agents": agents}
         except Exception as e:
             logger.error(f"Error listing agents: {str(e)}")
@@ -186,28 +212,59 @@ def register_routes(app: FastAPI):
                 status_code=500,
                 content={"status": "error", "message": f"Error: {str(e)}"}
             )
+
+    @app.post("/api/agents")
+    async def create_agent(request: AgentCreationRequest, user_id: str = Depends(get_current_user)):
+        """Create a new agent."""
+        try:
+            # Generate agent ID if not provided
+            agent_id = request.agent_id or str(uuid4())
+            
+            # Create agent configuration
+            agent_config = {
+                'agent_id': agent_id,
+                'agent_type': request.agent_type,
+                'config': request.config or {},
+                'userId': user_id,
+                'created_at': firestore.SERVER_TIMESTAMP,
+                'updated_at': firestore.SERVER_TIMESTAMP,
+                'status': 'active'
+            }
+            
+            # Save to Firestore
+            agent_ref = default_storage.db.collection('alchemist_agents').document(agent_id)
+            agent_ref.set(agent_config)
+            
+            logger.info(f"Created agent {agent_id} for user {user_id}")
+            return {
+                "status": "success", 
+                "agent_id": agent_id,
+                "agent": agent_config
+            }
+        except Exception as e:
+            logger.error(f"Error creating agent: {str(e)}")
+            return JSONResponse(
+                status_code=500,
+                content={"status": "error", "message": f"Error: {str(e)}"}
+            )
             
     @app.get("/api/agents/{agent_id}")
-    async def get_agent(agent_id: str, userId: Optional[str] = None):
+    async def get_agent(agent_id: str, user_id: str = Depends(get_current_user)):
         """Get details for a specific agent."""
         try:
-            # Use the validated userId from the dependency
-            
-            
             agent = await default_storage.get_agent_config(agent_id)
             if not agent:
                 return JSONResponse(
                     status_code=404,
                     content={"status": "error", "message": f"Agent {agent_id} not found"}
                 )
-            """
+            
             # Verify the user owns this agent
-            if agent.get("userId") != userId:
+            if agent.get("userId") != user_id:
                 return JSONResponse(
                     status_code=403,
                     content={"status": "error", "message": "You do not have permission to access this agent"}
                 )
-            """
                 
             return {"status": "success", "agent": agent}
         except Exception as e:
@@ -217,8 +274,56 @@ def register_routes(app: FastAPI):
                 content={"status": "error", "message": f"Error: {str(e)}"}
             )
 
+    @app.put("/api/agents/{agent_id}")
+    async def update_agent(agent_id: str, request: Dict[str, Any], user_id: str = Depends(get_current_user)):
+        """Update an existing agent."""
+        try:
+            # Check if agent exists
+            existing_agent = await default_storage.get_agent_config(agent_id)
+            if not existing_agent:
+                return JSONResponse(
+                    status_code=404,
+                    content={"status": "error", "message": f"Agent {agent_id} not found"}
+                )
+            
+            # Verify the user owns this agent
+            if existing_agent.get("userId") != user_id:
+                return JSONResponse(
+                    status_code=403,
+                    content={"status": "error", "message": "You do not have permission to update this agent"}
+                )
+            
+            # Update agent configuration
+            config_updates = request.get("config", {})
+            if "userId" in request:
+                config_updates["userId"] = request["userId"]
+            
+            update_success = await default_storage.update_agent_config(agent_id, config_updates)
+            
+            if not update_success:
+                return JSONResponse(
+                    status_code=500,
+                    content={"status": "error", "message": "Failed to update agent configuration"}
+                )
+            
+            # Get updated agent config
+            updated_agent = await default_storage.get_agent_config(agent_id)
+            
+            logger.info(f"Updated agent {agent_id} for user {user_id}")
+            return {
+                "status": "success",
+                "agent_id": agent_id,
+                "agent": updated_agent
+            }
+        except Exception as e:
+            logger.error(f"Error updating agent {agent_id}: {str(e)}")
+            return JSONResponse(
+                status_code=500,
+                content={"status": "error", "message": f"Error: {str(e)}"}
+            )
+
     @app.get("/api/agents/{agent_id}/conversations")
-    async def get_conversations(agent_id: str, userId: Optional[str] = None):
+    async def get_conversations(agent_id: str, user_id: str = Depends(get_current_user)):
         """Get conversations for an agent."""
         try:
             # Check if agent exists
@@ -227,6 +332,13 @@ def register_routes(app: FastAPI):
                 return JSONResponse(
                     status_code=404,
                     content={"status": "error", "message": f"Agent {agent_id} not found"}
+                )
+            
+            # Verify the user owns this agent
+            if existing_agent.get("userId") != user_id:
+                return JSONResponse(
+                    status_code=403,
+                    content={"status": "error", "message": "You do not have permission to access this agent"}
                 )
             result = []
             # Query the conversations collection to find those associated with this agent
@@ -259,7 +371,7 @@ def register_routes(app: FastAPI):
 
     # Alchemist Direct Interaction Endpoint
     @app.post("/api/alchemist/interact")
-    async def interact_with_alchemist(request: Request, userId: Optional[str] = None):
+    async def interact_with_alchemist(request: Request, user_id: str = Depends(get_current_user)):
         """
         Direct interaction with the Alchemist agent.
         
@@ -267,14 +379,12 @@ def register_routes(app: FastAPI):
         which can help with agent creation and management.
         """
         try:
-            # Use the validated userId from the dependency            
             # Get request body as JSON
             body = await request.json()
             
             # Extract message from request
             message = body.get("message")
             agent_id = body.get("agent_id")
-            user_id = body.get("user_id")
             logger.info(f"Interacting with Alchemist agent {agent_id}")
             
             if not message:
@@ -296,13 +406,11 @@ def register_routes(app: FastAPI):
             else:
                 logger.info(f"Agent config {agent_id} found")
                 # Verify the user owns this agent
-                """
-                if agent_config.get("userId") and agent_config.get("userId") != userId:
+                if agent_config.get("userId") and agent_config.get("userId") != user_id:
                     return JSONResponse(
                         status_code=403,
                         content={"status": "error", "message": "You do not have permission to interact with this agent"}
-                    )  
-                """
+                    )
                     
             orchestrator = OrchestratorAgent(agent_id)
                         
@@ -349,9 +457,23 @@ def register_routes(app: FastAPI):
             )
             
     @app.get("/api/agents/{agent_id}/prompt")
-    async def get_agent_prompt(agent_id: str, userId: Optional[str] = None):
+    async def get_agent_prompt(agent_id: str, user_id: str = Depends(get_current_user)):
         """Get the prompt for an agent."""
         try:
+            # Check if agent exists and user owns it
+            agent_config = await default_storage.get_agent_config(agent_id)
+            if not agent_config:
+                return JSONResponse(
+                    status_code=404,
+                    content={"status": "error", "message": f"Agent {agent_id} not found"}
+                )
+            
+            if agent_config.get("userId") != user_id:
+                return JSONResponse(
+                    status_code=403,
+                    content={"status": "error", "message": "You do not have permission to access this agent"}
+                )
+            
             system_prompt = await default_storage.get_agent_prompt(agent_id)
             return {"status": "success", "prompt": system_prompt}
         except Exception as e:
@@ -363,12 +485,9 @@ def register_routes(app: FastAPI):
 
     # Knowledge Base API endpoints
     @app.get("/api/agents/{agent_id}/knowledge")
-    async def get_knowledge_base_files(agent_id: str, userId: Optional[str] = None):
+    async def get_knowledge_base_files(agent_id: str, user_id: str = Depends(get_current_user)):
         """Get knowledge base files for an agent."""
         try:
-            # Use the validated userId from the dependency
-            
-            
             # Check if agent exists
             agent_config = await default_storage.get_agent_config(agent_id)
             if not agent_config:
@@ -376,14 +495,13 @@ def register_routes(app: FastAPI):
                     status_code=404,
                     content={"status": "error", "message": f"Agent {agent_id} not found"}
                 )
-            """   
+            
             # Verify the user owns this agent
-            if agent_config.get("userId") != userId:
+            if agent_config.get("userId") != user_id:
                 return JSONResponse(
                     status_code=403,
                     content={"status": "error", "message": "You do not have permission to access this agent's knowledge base"}
                 )
-            """
             
             # Get knowledge base files from agent config
             knowledge_base = agent_config.get("knowledge_base", [])
@@ -459,7 +577,7 @@ def register_routes(app: FastAPI):
     async def upload_config_file(
         agent_id: str,
         file: UploadFile = File(...),
-        userId: Optional[str] = Form(None)
+        user_id: str = Depends(get_current_user)
     ):
         """Upload a YAML configuration file (OpenAPI or MCP config) for an agent."""
         try:
@@ -476,6 +594,13 @@ def register_routes(app: FastAPI):
                 return JSONResponse(
                     status_code=404,
                     content={"status": "error", "message": f"Agent {agent_id} not found"}
+                )
+            
+            # Verify the user owns this agent
+            if agent_config.get("userId") != user_id:
+                return JSONResponse(
+                    status_code=403,
+                    content={"status": "error", "message": "You do not have permission to upload files for this agent"}
                 )
             
             # Read and validate YAML content

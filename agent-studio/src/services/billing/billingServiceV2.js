@@ -1,15 +1,16 @@
 /**
- * Frontend Credits Service
+ * Billing Service V2
  * 
- * Service layer for credits-related API calls
+ * New service layer for billing operations using the dedicated billing microservice
  */
 
-import { api } from '../config/apiConfig';
+import { billingApi } from '../config/apiConfig';
+import { ENDPOINTS } from '../config/apiConfig';
 import { getAuthToken } from '../auth/authService';
 
-class CreditsService {
+class BillingServiceV2 {
   constructor() {
-    this.baseURL = '/api/credits';
+    this.baseURL = '/api/v1';
   }
 
   /**
@@ -17,6 +18,9 @@ class CreditsService {
    */
   async getHeaders() {
     const token = await getAuthToken();
+    if (!token) {
+      throw new Error('Authentication failed. Please sign out and sign back in.');
+    }
     return {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json'
@@ -31,7 +35,7 @@ class CreditsService {
   async getBalance() {
     try {
       const headers = await this.getHeaders();
-      const response = await api.get(`${this.baseURL}/balance`, { headers });
+      const response = await billingApi.get(ENDPOINTS.BILLING_CREDITS_BALANCE, { headers });
       return response.data;
     } catch (error) {
       console.error('Error getting credit balance:', error);
@@ -45,7 +49,7 @@ class CreditsService {
   async getAccount() {
     try {
       const headers = await this.getHeaders();
-      const response = await api.get(`${this.baseURL}/account`, { headers });
+      const response = await billingApi.get(ENDPOINTS.BILLING_CREDITS_ACCOUNT, { headers });
       return response.data;
     } catch (error) {
       console.error('Error getting credits account:', error);
@@ -59,7 +63,7 @@ class CreditsService {
   async getStatus() {
     try {
       const headers = await this.getHeaders();
-      const response = await api.get(`${this.baseURL}/status`, { headers });
+      const response = await billingApi.get(ENDPOINTS.BILLING_CREDITS_STATUS, { headers });
       return response.data;
     } catch (error) {
       console.error('Error getting credit status:', error);
@@ -75,7 +79,7 @@ class CreditsService {
   async getPackages() {
     try {
       const headers = await this.getHeaders();
-      const response = await api.get(`${this.baseURL}/packages`, { headers });
+      const response = await billingApi.get(ENDPOINTS.BILLING_CREDITS_PACKAGES, { headers });
       return response.data;
     } catch (error) {
       console.error('Error getting credit packages:', error);
@@ -89,7 +93,7 @@ class CreditsService {
   async getPackage(packageId) {
     try {
       const headers = await this.getHeaders();
-      const response = await api.get(`${this.baseURL}/packages/${packageId}`, { headers });
+      const response = await billingApi.get(`${ENDPOINTS.BILLING_CREDITS_PACKAGES}/${packageId}`, { headers });
       return response.data;
     } catch (error) {
       console.error('Error getting credit package:', error);
@@ -105,13 +109,16 @@ class CreditsService {
   async purchaseCredits(packageId, quantity = 1, customAmount = null) {
     try {
       const headers = await this.getHeaders();
-      const requestData = { packageId, quantity };
+      const requestData = { 
+        package_id: packageId, 
+        quantity 
+      };
       
       if (customAmount) {
-        requestData.customAmount = customAmount;
+        requestData.custom_amount = customAmount;
       }
       
-      const response = await api.post(`${this.baseURL}/purchase`, requestData, { headers });
+      const response = await billingApi.post(ENDPOINTS.BILLING_CREDITS_PURCHASE, requestData, { headers });
       return response.data;
     } catch (error) {
       console.error('Error purchasing credits:', error);
@@ -125,9 +132,9 @@ class CreditsService {
   async verifyPurchase(orderId, paymentId, signature) {
     try {
       const headers = await this.getHeaders();
-      const response = await api.post(`${this.baseURL}/purchase/verify`, {
-        orderId,
-        paymentId,
+      const response = await billingApi.post(ENDPOINTS.BILLING_PAYMENTS_VERIFY, {
+        order_id: orderId,
+        payment_id: paymentId,
         signature
       }, { headers });
       return response.data;
@@ -143,10 +150,10 @@ class CreditsService {
   async getOrders(limit = 10, status = null) {
     try {
       const headers = await this.getHeaders();
-      let url = `${this.baseURL}/orders?limit=${limit}`;
+      let url = `${ENDPOINTS.BILLING_CREDITS_ORDERS}?limit=${limit}`;
       if (status) url += `&status=${status}`;
       
-      const response = await api.get(url, { headers });
+      const response = await billingApi.get(url, { headers });
       return response.data;
     } catch (error) {
       console.error('Error getting orders:', error);
@@ -162,10 +169,10 @@ class CreditsService {
   async getTransactions(limit = 20, type = null) {
     try {
       const headers = await this.getHeaders();
-      let url = `${this.baseURL}/transactions?limit=${limit}`;
-      if (type) url += `&type=${type}`;
+      let url = `${ENDPOINTS.BILLING_TRANSACTIONS}?limit=${limit}`;
+      if (type) url += `&transaction_type=${type}`;
       
-      const response = await api.get(url, { headers });
+      const response = await billingApi.get(url, { headers });
       return response.data;
     } catch (error) {
       console.error('Error getting transactions:', error);
@@ -179,7 +186,7 @@ class CreditsService {
   async getUsageSummary(period = 'current_month') {
     try {
       const headers = await this.getHeaders();
-      const response = await api.get(`${this.baseURL}/usage?period=${period}`, { headers });
+      const response = await billingApi.get(`${ENDPOINTS.BILLING_TRANSACTIONS}/usage?period=${period}`, { headers });
       return response.data;
     } catch (error) {
       console.error('Error getting usage summary:', error);
@@ -187,60 +194,152 @@ class CreditsService {
     }
   }
 
-  // ========== SETTINGS ==========
-
-  /**
-   * Update credit settings
-   */
-  async updateSettings(settings) {
-    try {
-      const headers = await this.getHeaders();
-      const response = await api.put(`${this.baseURL}/settings`, settings, { headers });
-      return response.data;
-    } catch (error) {
-      console.error('Error updating settings:', error);
-      throw this.handleError(error);
-    }
-  }
-
   // ========== UTILITY METHODS ==========
 
   /**
-   * Handle API errors
+   * Handle API errors with improved error messages
    */
   handleError(error) {
     if (error.response) {
       const { status, data } = error.response;
       
-      // Handle specific credit errors
+      // Handle authentication errors
+      if (status === 401) {
+        return {
+          status,
+          message: 'Authentication failed. Please sign out and sign back in.',
+          error_code: 'UNAUTHENTICATED',
+          type: 'authentication_error',
+          actions: ['Sign out', 'Sign back in', 'Refresh page']
+        };
+      }
+      
+      // Handle specific billing errors
       if (status === 402 && data.error_code === 'INSUFFICIENT_CREDITS') {
         return {
           status,
-          message: data.error,
+          message: data.error || 'Insufficient credits',
           error_code: data.error_code,
           details: data.details,
-          actions: data.actions,
+          actions: data.actions || ['Purchase more credits'],
           type: 'insufficient_credits'
+        };
+      }
+      
+      // Handle validation errors
+      if (status === 400) {
+        return {
+          status,
+          message: data.error || data.detail?.error || 'Invalid request',
+          error_code: data.error_code || data.detail?.error_code || 'VALIDATION_ERROR',
+          details: data.details || data.detail?.details
         };
       }
       
       return {
         status,
-        message: data.error || data.message || 'An error occurred',
-        details: data.details || null
+        message: data.error || data.detail?.error || data.message || 'An error occurred',
+        error_code: data.error_code || data.detail?.error_code,
+        details: data.details || data.detail?.details
       };
     } else if (error.request) {
       return {
         status: 0,
         message: 'Network error - please check your connection',
+        error_code: 'NETWORK_ERROR',
         details: null
       };
     } else {
       return {
         status: 0,
         message: error.message || 'Unknown error occurred',
+        error_code: 'UNKNOWN_ERROR',
         details: null
       };
+    }
+  }
+
+  /**
+   * Open Razorpay payment checkout
+   */
+  async openPaymentCheckout(order, onSuccess, onFailure) {
+    try {
+      // Load Razorpay script if not already loaded
+      if (!window.Razorpay) {
+        await this.loadRazorpayScript();
+      }
+
+      const options = {
+        key: process.env.REACT_APP_RAZORPAY_KEY_ID,
+        amount: order.total_amount * 100, // Amount in paisa
+        currency: 'INR',
+        name: 'Alchemist Credits',
+        description: `Purchase ${order.total_credits} credits`,
+        order_id: order.payment.gateway_order_id,
+        handler: async (response) => {
+          try {
+            // Verify payment using the new API
+            const result = await this.verifyPurchase(
+              order.id,
+              response.razorpay_payment_id,
+              response.razorpay_signature
+            );
+            
+            if (result.success) {
+              onSuccess(result.data);
+            } else {
+              onFailure({ message: 'Payment verification failed' });
+            }
+          } catch (error) {
+            onFailure(this.handleError(error));
+          }
+        },
+        prefill: {
+          name: order.customer?.name || '',
+          email: order.customer?.email || '',
+          contact: order.customer?.phone || ''
+        },
+        theme: {
+          color: '#6366f1'
+        },
+        modal: {
+          ondismiss: () => {
+            onFailure({ message: 'Payment cancelled by user' });
+          }
+        }
+      };
+
+      const paymentObject = new window.Razorpay(options);
+      paymentObject.open();
+    } catch (error) {
+      console.error('Error opening payment checkout:', error);
+      onFailure(this.handleError(error));
+    }
+  }
+
+  /**
+   * Load Razorpay script dynamically
+   */
+  loadRazorpayScript() {
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.onload = resolve;
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
+  }
+
+  /**
+   * Check service health
+   */
+  async checkHealth() {
+    try {
+      const response = await billingApi.get(ENDPOINTS.BILLING_HEALTH);
+      return response.data;
+    } catch (error) {
+      console.error('Billing service health check failed:', error);
+      throw this.handleError(error);
     }
   }
 
@@ -248,19 +347,25 @@ class CreditsService {
    * Format credits for display
    */
   formatCredits(credits) {
+    // Handle null, undefined, or NaN values
+    const safeCredits = (credits == null || isNaN(credits)) ? 0 : Number(credits);
+    
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
       currency: 'INR',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
-    }).format(credits);
+    }).format(safeCredits);
   }
 
   /**
    * Format large numbers
    */
   formatNumber(number) {
-    return new Intl.NumberFormat('en-IN').format(number);
+    // Handle null, undefined, or NaN values
+    const safeNumber = (number == null || isNaN(number)) ? 0 : Number(number);
+    
+    return new Intl.NumberFormat('en-IN').format(safeNumber);
   }
 
   /**
@@ -287,144 +392,13 @@ class CreditsService {
   }
 
   /**
-   * Get package display information
-   */
-  getPackageDisplayInfo(pkg) {
-    const savings = pkg.bonus_credits > 0 ? 
-      Math.round((pkg.bonus_credits / pkg.base_credits) * 100) : 0;
-    
-    return {
-      ...pkg,
-      savings_percentage: savings,
-      effective_rate: pkg.price / pkg.total_credits,
-      character_equivalent: this.creditsToCharacters(pkg.total_credits),
-      display_price: this.formatCredits(pkg.price),
-      display_credits: this.formatCredits(pkg.total_credits)
-    };
-  }
-
-  /**
    * Check if user needs to purchase credits
    */
   needsCreditPurchase(balance, threshold = 10) {
     return balance <= threshold;
   }
-
-  /**
-   * Get recommended package based on usage
-   */
-  getRecommendedPackage(packages, monthlyUsage = 0) {
-    if (monthlyUsage === 0) {
-      // First time user - recommend starter pack
-      return packages.find(p => p.category === 'starter') || packages[0];
-    }
-    
-    // Recommend based on usage with some buffer
-    const recommendedCredits = monthlyUsage * 1.2; // 20% buffer
-    
-    return packages.find(p => p.total_credits >= recommendedCredits) || 
-           packages[packages.length - 1]; // Return largest if usage is very high
-  }
-
-  /**
-   * Calculate days until credits run out
-   */
-  calculateDaysRemaining(currentBalance, dailyUsage) {
-    if (dailyUsage <= 0) return Infinity;
-    return Math.floor(currentBalance / dailyUsage);
-  }
-
-  /**
-   * Get usage trend (increasing/decreasing/stable)
-   */
-  getUsageTrend(transactions) {
-    if (transactions.length < 2) return 'stable';
-    
-    const recentUsage = transactions.slice(0, 7); // Last 7 transactions
-    const olderUsage = transactions.slice(7, 14); // Previous 7 transactions
-    
-    const recentAvg = recentUsage.reduce((sum, t) => sum + Math.abs(t.amount), 0) / recentUsage.length;
-    const olderAvg = olderUsage.reduce((sum, t) => sum + Math.abs(t.amount), 0) / olderUsage.length;
-    
-    const changePercent = ((recentAvg - olderAvg) / olderAvg) * 100;
-    
-    if (changePercent > 20) return 'increasing';
-    if (changePercent < -20) return 'decreasing';
-    return 'stable';
-  }
-
-  /**
-   * Open Razorpay payment checkout
-   */
-  async openPaymentCheckout(order, onSuccess, onFailure) {
-    try {
-      // Load Razorpay script if not already loaded
-      if (!window.Razorpay) {
-        await this.loadRazorpayScript();
-      }
-
-      const options = {
-        key: process.env.REACT_APP_RAZORPAY_KEY_ID, // Your Razorpay key
-        amount: order.total_amount * 100, // Amount in paisa
-        currency: 'INR',
-        name: 'Alchemist Credits',
-        description: `Purchase ${order.total_credits} credits`,
-        order_id: order.payment.gateway_order_id,
-        handler: async (response) => {
-          try {
-            // Verify payment
-            const result = await this.verifyPurchase(
-              order.id,
-              response.razorpay_payment_id,
-              response.razorpay_signature
-            );
-            
-            if (result.success) {
-              onSuccess(result.data);
-            } else {
-              onFailure({ message: 'Payment verification failed' });
-            }
-          } catch (error) {
-            onFailure(error);
-          }
-        },
-        prefill: {
-          name: order.customer?.name || '',
-          email: order.customer?.email || '',
-          contact: order.customer?.phone || ''
-        },
-        theme: {
-          color: '#6366f1'
-        },
-        modal: {
-          ondismiss: () => {
-            onFailure({ message: 'Payment cancelled by user' });
-          }
-        }
-      };
-
-      const paymentObject = new window.Razorpay(options);
-      paymentObject.open();
-    } catch (error) {
-      console.error('Error opening payment checkout:', error);
-      onFailure(error);
-    }
-  }
-
-  /**
-   * Load Razorpay script dynamically
-   */
-  loadRazorpayScript() {
-    return new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-      script.onload = resolve;
-      script.onerror = reject;
-      document.head.appendChild(script);
-    });
-  }
 }
 
 // Export singleton instance
-export const creditsService = new CreditsService();
-export default creditsService;
+export const billingServiceV2 = new BillingServiceV2();
+export default billingServiceV2;

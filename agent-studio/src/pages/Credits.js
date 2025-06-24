@@ -66,7 +66,7 @@ import {
   Refresh as RefreshIcon
 } from '@mui/icons-material';
 import { useAuth } from '../utils/AuthContext';
-import { creditsService } from '../services';
+import { billingServiceV2 as creditsService } from '../services/billing/billingServiceV2';
 
 const Credits = () => {
   const theme = useTheme();
@@ -76,10 +76,12 @@ const Credits = () => {
   // State management
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [processingPayment, setProcessingPayment] = useState(false);
   const [creditsData, setCreditsData] = useState({
     balance: {
       total_credits: 0,
-      available_credits: 0,
+      base_credits: 0,
       bonus_credits: 0
     },
     status: {
@@ -123,7 +125,7 @@ const Credits = () => {
         ]);
 
         // Handle status data
-        if (statusResult.status === 'fulfilled' && statusResult.value.success) {
+        if (statusResult.status === 'fulfilled' && statusResult.value && statusResult.value.success) {
           const statusData = statusResult.value.data;
           setCreditsData(prev => ({
             ...prev,
@@ -133,30 +135,61 @@ const Credits = () => {
           }));
           
           setSettings(statusData.settings || settings);
+        } else if (statusResult.status === 'rejected') {
+          console.warn('Failed to load credits status:', statusResult.reason);
         }
 
-        // Handle packages
-        if (packagesResult.status === 'fulfilled' && packagesResult.value.success) {
+        // Handle packages - if API fails, use default packages
+        if (packagesResult.status === 'fulfilled' && packagesResult.value && packagesResult.value.success) {
           setCreditsData(prev => ({
             ...prev,
             packages: packagesResult.value.data || []
           }));
+        } else {
+          console.warn('Failed to load packages, using defaults:', packagesResult.reason);
+          // Set default packages for flexible payment system
+          setCreditsData(prev => ({
+            ...prev,
+            packages: [
+              {
+                id: "custom_amount",
+                name: "Custom Amount",
+                description: "Choose any amount starting from ₹1000",
+                price: null,
+                base_credits: null,
+                bonus_credits: null,
+                total_credits: null,
+                category: "custom",
+                popular: false,
+                features: [
+                  "Minimum ₹1000",
+                  "No upper limit",
+                  "Bonus credits for larger amounts",
+                  "Flexible payment"
+                ]
+              }
+            ]
+          }));
         }
 
         // Handle transactions
-        if (transactionsResult.status === 'fulfilled' && transactionsResult.value.success) {
+        if (transactionsResult.status === 'fulfilled' && transactionsResult.value && transactionsResult.value.success) {
           setCreditsData(prev => ({
             ...prev,
             transactions: transactionsResult.value.data || []
           }));
+        } else {
+          console.warn('Failed to load transactions:', transactionsResult.reason);
         }
 
         // Handle orders
-        if (ordersResult.status === 'fulfilled' && ordersResult.value.success) {
+        if (ordersResult.status === 'fulfilled' && ordersResult.value && ordersResult.value.success) {
           setCreditsData(prev => ({
             ...prev,
             orders: ordersResult.value.data || []
           }));
+        } else {
+          console.warn('Failed to load orders:', ordersResult.reason);
         }
 
       } catch (error) {
@@ -180,9 +213,74 @@ const Credits = () => {
     setDialogOpen(true);
   };
 
+  const refreshCreditsData = async () => {
+    try {
+      console.log('Refreshing credits data after payment...');
+      
+      // Wait a moment for backend to process payment
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Reload all credits data
+      const [statusResult, packagesResult, transactionsResult, ordersResult] = await Promise.allSettled([
+        creditsService.getStatus(),
+        creditsService.getPackages(),
+        creditsService.getTransactions(10),
+        creditsService.getOrders(5)
+      ]);
+
+      // Handle status data
+      if (statusResult.status === 'fulfilled' && statusResult.value && statusResult.value.success) {
+        const statusData = statusResult.value.data;
+        setCreditsData(prev => ({
+          ...prev,
+          balance: statusData.balance || prev.balance,
+          status: statusData.alerts || prev.status,
+          settings: statusData.settings || prev.settings
+        }));
+        
+        setSettings(statusData.settings || settings);
+        console.log('Credits balance updated:', statusData.balance);
+      }
+
+      // Handle transactions to show new purchase
+      if (transactionsResult.status === 'fulfilled' && transactionsResult.value && transactionsResult.value.success) {
+        setCreditsData(prev => ({
+          ...prev,
+          transactions: transactionsResult.value.data || []
+        }));
+      }
+
+      // Handle orders to show new purchase
+      if (ordersResult.status === 'fulfilled' && ordersResult.value && ordersResult.value.success) {
+        setCreditsData(prev => ({
+          ...prev,
+          orders: ordersResult.value.data || []
+        }));
+      }
+      
+    } catch (error) {
+      console.error('Error refreshing credits data:', error);
+      // Fallback to page reload if refresh fails
+      window.location.reload();
+    }
+  };
+
   const handlePurchaseConfirm = async () => {
     try {
       setLoading(true);
+      
+      // Force token refresh before making purchase request
+      if (currentUser) {
+        try {
+          await currentUser.getIdToken(true); // Force refresh
+          console.log('Token refreshed successfully before purchase');
+        } catch (tokenError) {
+          console.error('Failed to refresh token:', tokenError);
+          throw new Error('Authentication failed. Please sign out and sign back in.');
+        }
+      } else {
+        throw new Error('User not authenticated');
+      }
       
       let order;
       if (dialogType === 'custom' && customAmount) {
@@ -195,23 +293,52 @@ const Credits = () => {
         // Open Razorpay checkout
         await creditsService.openPaymentCheckout(
           order.data.order,
-          (result) => {
-            // Payment successful
-            setDialogOpen(false);
-            setError('');
-            // Reload data to show updated balance
-            window.location.reload();
+          async (result) => {
+            try {
+              // Payment successful
+              console.log('Payment successful:', result);
+              setDialogOpen(false);
+              setError('');
+              setProcessingPayment(true);
+              
+              // Show success message
+              const purchaseAmount = dialogType === 'custom' ? parseFloat(customAmount) : selectedPackage.price * quantity;
+              setSuccessMessage(`Payment successful! ₹${purchaseAmount.toLocaleString('en-IN')} credits are being added to your account...`);
+              
+              // Refresh credits data
+              await refreshCreditsData();
+              
+              // Update success message
+              setSuccessMessage(`Successfully added ₹${purchaseAmount.toLocaleString('en-IN')} credits to your account!`);
+              
+              // Reset form state
+              setCustomAmount('');
+              setQuantity(1);
+              setSelectedPackage(null);
+              setProcessingPayment(false);
+              
+              // Clear success message after 5 seconds
+              setTimeout(() => {
+                setSuccessMessage('');
+              }, 5000);
+              
+            } catch (error) {
+              console.error('Error handling successful payment:', error);
+              setProcessingPayment(false);
+              setError('Payment was successful, but there was an error updating your balance. Please refresh the page.');
+            }
           },
           (error) => {
             // Payment failed
+            console.error('Payment failed:', error);
             setError(error.message || 'Payment failed. Please try again.');
+            setLoading(false);
           }
         );
       }
     } catch (error) {
       console.error('Error initiating purchase:', error);
       setError(error.message || 'Failed to initiate purchase');
-    } finally {
       setLoading(false);
     }
   };
@@ -275,6 +402,33 @@ const Credits = () => {
         </Alert>
       )}
 
+      {/* Success Alert */}
+      {successMessage && (
+        <Alert 
+          severity="success" 
+          sx={{ mb: 3 }}
+          onClose={() => setSuccessMessage('')}
+          action={
+            processingPayment && (
+              <CircularProgress size={20} sx={{ ml: 1 }} />
+            )
+          }
+        >
+          {successMessage}
+        </Alert>
+      )}
+
+      {/* Processing Payment Alert */}
+      {processingPayment && (
+        <Alert 
+          severity="info" 
+          sx={{ mb: 3 }}
+          icon={<CircularProgress size={20} />}
+        >
+          Processing your payment and updating your balance...
+        </Alert>
+      )}
+
       {/* Low Balance Alert */}
       {creditsData.status.is_low_balance && (
         <Alert 
@@ -318,7 +472,8 @@ const Credits = () => {
                 <Button
                   variant="outlined"
                   startIcon={<RefreshIcon />}
-                  onClick={() => window.location.reload()}
+                  onClick={refreshCreditsData}
+                  disabled={loading || processingPayment}
                   sx={{
                     borderColor: theme.palette.text.primary,
                     color: theme.palette.text.primary,
@@ -346,7 +501,7 @@ const Credits = () => {
                 <Grid item xs={6}>
                   <Box sx={{ textAlign: 'center', p: 2, border: `1px solid ${theme.palette.divider}`, borderRadius: 2 }}>
                     <Typography variant="h6" fontWeight="bold">
-                      {formatCredits(creditsData.balance.available_credits)}
+                      {formatCredits(creditsData.balance.base_credits)}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       Purchased Credits
@@ -438,92 +593,151 @@ const Credits = () => {
       <Card sx={{ mb: 4 }}>
         <CardContent>
           <Typography variant="h6" fontWeight="bold" gutterBottom>
-            Credit Packages
+            Add Credits to Your Account
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            Choose a package that fits your usage. All credits are valid for 1 year.
+            Choose any amount starting from ₹1000. No upper limit! 1 credit = ₹1 = ~1000 characters
           </Typography>
           
           <Grid container spacing={3}>
-            {(creditsData.packages || []).map((pkg) => (
-              <Grid item xs={12} sm={6} md={3} key={pkg.id}>
-                <Card 
-                  sx={{ 
-                    height: '100%',
-                    border: pkg.popular ? `2px solid ${theme.palette.primary.main}` : 
-                           pkg.best_value ? `2px solid ${theme.palette.success.main}` : 
-                           `1px solid ${theme.palette.divider}`,
-                    position: 'relative',
-                    '&:hover': {
-                      boxShadow: '0 8px 25px rgba(0, 0, 0, 0.15)'
-                    }
-                  }}
-                >
-                  {pkg.popular && (
-                    <Chip 
-                      label="Most Popular" 
-                      color="primary" 
-                      size="small"
-                      sx={{ position: 'absolute', top: 10, right: 10 }}
-                    />
-                  )}
-                  {pkg.best_value && (
-                    <Chip 
-                      label="Best Value" 
-                      color="success" 
-                      size="small"
-                      sx={{ position: 'absolute', top: 10, right: 10 }}
-                    />
-                  )}
+            {/* Custom Amount - Primary Option */}
+            <Grid item xs={12} md={6}>
+              <Card 
+                sx={{ 
+                  height: '100%',
+                  border: `3px solid ${theme.palette.primary.main}`,
+                  position: 'relative',
+                  '&:hover': {
+                    boxShadow: '0 8px 25px rgba(0, 0, 0, 0.15)'
+                  }
+                }}
+              >
+                <Chip 
+                  label="Recommended" 
+                  color="primary" 
+                  size="small"
+                  sx={{ position: 'absolute', top: 10, right: 10 }}
+                />
+                
+                <CardContent sx={{ p: 4 }}>
+                  <Typography variant="h5" fontWeight="bold" gutterBottom>
+                    Custom Amount
+                  </Typography>
+                  <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+                    Add any amount starting from ₹1000. Perfect for your exact needs.
+                  </Typography>
                   
-                  <CardContent>
-                    <Typography variant="h6" fontWeight="bold" gutterBottom>
-                      {pkg.name}
+                  <Box sx={{ mb: 3 }}>
+                    <Typography variant="h3" fontWeight="bold" color="primary.main">
+                      ₹1000+
                     </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                      {pkg.description}
+                    <Typography variant="body2" color="text.secondary">
+                      No upper limit
                     </Typography>
-                    
-                    <Box sx={{ mb: 2 }}>
-                      <Typography variant="h4" fontWeight="bold">
-                        {pkg.id === 'custom_amount' ? 'Custom' : formatCredits(pkg.price)}
-                      </Typography>
-                      {pkg.bonus_credits > 0 && (
-                        <Chip 
-                          label={`+${formatCredits(pkg.bonus_credits)} bonus`}
-                          size="small"
-                          color="success"
-                          sx={{ mt: 1 }}
+                  </Box>
+                  
+                  <List dense>
+                    {[
+                      "Minimum ₹1000",
+                      "No upper limit",
+                      "1 credit = ₹1 = ~1000 characters",
+                      "Bonus credits for larger amounts",
+                      "Flexible payment"
+                    ].map((feature, index) => (
+                      <ListItem key={index} sx={{ px: 0, py: 0.5 }}>
+                        <ListItemIcon sx={{ minWidth: 30 }}>
+                          <CheckCircleIcon fontSize="small" color="success" />
+                        </ListItemIcon>
+                        <ListItemText 
+                          primary={feature}
+                          primaryTypographyProps={{ variant: 'body2' }}
                         />
-                      )}
-                    </Box>
-                    
-                    <List dense>
-                      {pkg.features.map((feature, index) => (
-                        <ListItem key={index} sx={{ px: 0, py: 0.5 }}>
-                          <ListItemIcon sx={{ minWidth: 30 }}>
-                            <CheckCircleIcon fontSize="small" color="success" />
-                          </ListItemIcon>
-                          <ListItemText 
-                            primary={feature}
-                            primaryTypographyProps={{ variant: 'body2' }}
+                      </ListItem>
+                    ))}
+                  </List>
+                  
+                  <Button
+                    fullWidth
+                    variant="contained"
+                    size="large"
+                    onClick={() => {
+                      setDialogType('custom');
+                      setDialogOpen(true);
+                    }}
+                    sx={{ 
+                      mt: 3,
+                      py: 1.5,
+                      fontSize: '1.1rem',
+                      bgcolor: theme.palette.mode === 'dark' ? '#ffffff' : '#000000',
+                      color: theme.palette.mode === 'dark' ? '#000000' : '#ffffff',
+                      '&:hover': {
+                        bgcolor: theme.palette.mode === 'dark' ? '#e5e5e5' : '#333333'
+                      }
+                    }}
+                  >
+                    Choose Custom Amount
+                  </Button>
+                </CardContent>
+              </Card>
+            </Grid>
+
+            {/* Suggested Amounts */}
+            <Grid item xs={12} md={6}>
+              <Typography variant="h6" fontWeight="bold" gutterBottom>
+                Quick Suggestions
+              </Typography>
+              <Stack spacing={2}>
+                {[
+                  { amount: 1000, bonus: 0, label: "Starter" },
+                  { amount: 5000, bonus: 1250, label: "Popular" },
+                  { amount: 10000, bonus: 3000, label: "Best Value" }
+                ].map((suggestion, index) => (
+                  <Card 
+                    key={index}
+                    sx={{ 
+                      cursor: 'pointer',
+                      '&:hover': {
+                        boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)'
+                      }
+                    }}
+                    onClick={() => {
+                      setCustomAmount(suggestion.amount.toString());
+                      setDialogType('custom');
+                      setDialogOpen(true);
+                    }}
+                  >
+                    <CardContent sx={{ p: 2 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Box>
+                          <Typography variant="h6" fontWeight="bold">
+                            ₹{suggestion.amount.toLocaleString('en-IN')}
+                          </Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography variant="body2" color="text.secondary">
+                              {suggestion.amount + suggestion.bonus} credits total
+                            </Typography>
+                            {suggestion.bonus > 0 && (
+                              <Chip 
+                                label={`+${suggestion.bonus} bonus`}
+                                size="small"
+                                color="success"
+                              />
+                            )}
+                          </Box>
+                        </Box>
+                        <Box sx={{ textAlign: 'right' }}>
+                          <Chip 
+                            label={suggestion.label}
+                            size="small"
+                            color={suggestion.label === 'Popular' ? 'primary' : 'default'}
                           />
-                        </ListItem>
-                      ))}
-                    </List>
-                    
-                    <Button
-                      fullWidth
-                      variant={pkg.popular ? 'contained' : 'outlined'}
-                      onClick={() => handlePurchaseClick(pkg)}
-                      sx={{ mt: 2 }}
-                    >
-                      {pkg.id === 'custom_amount' ? 'Add Custom Amount' : 'Purchase'}
-                    </Button>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
+                        </Box>
+                      </Box>
+                    </CardContent>
+                  </Card>
+                ))}
+              </Stack>
+            </Grid>
           </Grid>
         </CardContent>
       </Card>
@@ -701,7 +915,7 @@ const Credits = () => {
                 margin="normal"
                 inputProps={{ min: 1000 }}
                 helperText="Minimum ₹1000 • 1 credit = ₹1 = ~1000 characters"
-                error={customAmount && parseFloat(customAmount) < 1000}
+                error={Boolean(customAmount && parseFloat(customAmount) < 1000)}
                 sx={{ mb: 3 }}
               />
               
@@ -782,6 +996,116 @@ const Credits = () => {
                 onChange={(e) => setSettings({...settings, low_balance_threshold: parseInt(e.target.value)})}
                 margin="normal"
               />
+            </Box>
+          )}
+
+          {dialogType === 'history' && (
+            <Box sx={{ pt: 2, minHeight: '400px' }}>
+              <Typography variant="body2" color="text.secondary" gutterBottom sx={{ mb: 3 }}>
+                Complete history of your credit transactions and purchases
+              </Typography>
+              
+              {(creditsData.transactions || []).length > 0 ? (
+                <TableContainer sx={{ maxHeight: '400px' }}>
+                  <Table stickyHeader>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Date & Time</TableCell>
+                        <TableCell>Type</TableCell>
+                        <TableCell>Description</TableCell>
+                        <TableCell align="right">Amount</TableCell>
+                        <TableCell align="right">Balance After</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {(creditsData.transactions || []).map((transaction) => (
+                        <TableRow key={transaction.id} hover>
+                          <TableCell>
+                            <Box>
+                              <Typography variant="body2" fontWeight="medium">
+                                {new Date(transaction.timestamp).toLocaleDateString('en-IN')}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {new Date(transaction.timestamp).toLocaleTimeString('en-IN')}
+                              </Typography>
+                            </Box>
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={transaction.type}
+                              size="small"
+                              color={
+                                transaction.type === 'purchase' ? 'success' : 
+                                transaction.type === 'usage' ? 'default' : 
+                                transaction.type === 'bonus' ? 'primary' : 'info'
+                              }
+                              sx={{ textTransform: 'capitalize' }}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {transaction.description}
+                            </Typography>
+                            {transaction.transaction_data && (
+                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                {transaction.transaction_data.order_id && `Order: ${transaction.transaction_data.order_id}`}
+                                {transaction.transaction_data.payment_id && ` • Payment: ${transaction.transaction_data.payment_id}`}
+                              </Typography>
+                            )}
+                          </TableCell>
+                          <TableCell align="right">
+                            <Typography 
+                              variant="body2" 
+                              color={transaction.amount > 0 ? 'success.main' : 'error.main'}
+                              fontWeight="bold"
+                            >
+                              {transaction.amount > 0 ? '+' : ''}{formatCredits(transaction.amount)}
+                            </Typography>
+                          </TableCell>
+                          <TableCell align="right">
+                            <Typography variant="body2" fontWeight="medium">
+                              {formatCredits(transaction.balance_after)}
+                            </Typography>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              ) : (
+                <Box sx={{ 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  py: 8,
+                  textAlign: 'center'
+                }}>
+                  <ReceiptIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
+                  <Typography variant="h6" color="text.secondary" gutterBottom>
+                    No transactions yet
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                    Your credit purchase and usage history will appear here
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    startIcon={<AddIcon />}
+                    onClick={() => {
+                      setDialogType('custom');
+                    }}
+                    sx={{
+                      bgcolor: theme.palette.mode === 'dark' ? '#ffffff' : '#000000',
+                      color: theme.palette.mode === 'dark' ? '#000000' : '#ffffff',
+                      '&:hover': {
+                        bgcolor: theme.palette.mode === 'dark' ? '#e5e5e5' : '#333333'
+                      }
+                    }}
+                  >
+                    Add Your First Credits
+                  </Button>
+                </Box>
+              )}
             </Box>
           )}
         </DialogContent>

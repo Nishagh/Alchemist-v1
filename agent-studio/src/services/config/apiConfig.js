@@ -10,6 +10,7 @@ export const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
 export const KNOWLEDGE_BASE_URL = process.env.REACT_APP_KNOWLEDGE_BASE_URL;
 export const MCP_MANAGER_URL = process.env.REACT_APP_MCP_MANAGER_URL;
 export const TUNING_SERVICE_URL = process.env.REACT_APP_TUNING_SERVICE_URL;
+export const BILLING_SERVICE_URL = process.env.REACT_APP_BILLING_SERVICE_URL || 'https://billing-service-851487020021.us-central1.run.app';
 
 // Create axios instances with default config
 export const api = axios.create({
@@ -37,6 +38,14 @@ export const mcpApi = axios.create({
 // Tuning service axios instance
 export const tuningApi = axios.create({
   baseURL: TUNING_SERVICE_URL,
+  headers: {
+    'Content-Type': 'application/json'
+  }
+});
+
+// Billing service axios instance
+export const billingApi = axios.create({
+  baseURL: BILLING_SERVICE_URL,
   headers: {
     'Content-Type': 'application/json'
   }
@@ -88,6 +97,17 @@ export const ENDPOINTS = {
   TUNING_DATA: '/api/training/data',
   TUNING_MODELS: '/api/training/models',
   TUNING_HEALTH: '/health',
+  
+  // Billing Service endpoints
+  BILLING_CREDITS_BALANCE: '/api/v1/credits/balance',
+  BILLING_CREDITS_ACCOUNT: '/api/v1/credits/account',
+  BILLING_CREDITS_PACKAGES: '/api/v1/credits/packages',
+  BILLING_CREDITS_PURCHASE: '/api/v1/credits/purchase',
+  BILLING_CREDITS_ORDERS: '/api/v1/credits/orders',
+  BILLING_CREDITS_STATUS: '/api/v1/credits/status',
+  BILLING_PAYMENTS_VERIFY: '/api/v1/payments/verify',
+  BILLING_TRANSACTIONS: '/api/v1/transactions',
+  BILLING_HEALTH: '/api/v1/health',
 };
 
 // Get API configuration for services
@@ -107,5 +127,9 @@ export const getApiConfig = () => ({
   tuningService: {
     url: TUNING_SERVICE_URL || 'http://localhost:8080',
     timeout: 60000
+  },
+  billingService: {
+    url: BILLING_SERVICE_URL,
+    timeout: 30000
   }
 });

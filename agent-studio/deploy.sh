@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Agent Studio Web Deployment Script for Google Cloud Run
-# This script uses Cloud Build to build and deploy to Google Cloud Run
+# Agent Studio Frontend Deployment Script for Google Cloud Run
+# This script deploys the React frontend as a static site using nginx
 
 set -e  # Exit immediately if a command exits with a non-zero status
 
@@ -19,7 +19,6 @@ SERVICE_NAME="agent-studio-web"
 MEMORY="512Mi"
 CPU="1"
 PROJECT_ID=alchemist-e69bb
-FIREBASE_CREDENTIALS="firebase-credentials.json"
 
 echo -e "${BLUE}=== Agent Studio Web Deployment to Google Cloud Run using Cloud Build ===${NC}"
 

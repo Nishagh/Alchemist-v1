@@ -319,7 +319,9 @@ const getAgentEndpoint = async (agentId) => {
   try {
     // Get deployment info from Firestore - find the latest completed deployment for this agent
     const deploymentsRef = collection(db, 'agent_deployments');
-    const q = query(
+    
+    // Query for completed deployments
+    const qCompleted = query(
       deploymentsRef, 
       where('agent_id', '==', agentId),
       where('status', '==', 'completed'),
@@ -327,13 +329,47 @@ const getAgentEndpoint = async (agentId) => {
       limit(1)
     );
     
-    const querySnapshot = await getDocs(q);
+    // Query for deployed deployments
+    const qDeployed = query(
+      deploymentsRef, 
+      where('agent_id', '==', agentId),
+      where('status', '==', 'deployed'),
+      orderBy('created_at', 'desc'),
+      limit(1)
+    );
     
-    if (querySnapshot.empty) {
+    const [completedSnapshot, deployedSnapshot] = await Promise.all([
+      getDocs(qCompleted),
+      getDocs(qDeployed)
+    ]);
+    
+    // Get the most recent deployment from either completed or deployed
+    const allDeployments = [];
+    if (!completedSnapshot.empty) {
+      allDeployments.push({
+        ...completedSnapshot.docs[0].data(),
+        id: completedSnapshot.docs[0].id
+      });
+    }
+    if (!deployedSnapshot.empty) {
+      allDeployments.push({
+        ...deployedSnapshot.docs[0].data(),
+        id: deployedSnapshot.docs[0].id
+      });
+    }
+    
+    if (allDeployments.length === 0) {
       throw new Error('No completed deployment found for agent');
     }
     
-    const deployment = querySnapshot.docs[0].data();
+    // Sort by created_at and get the most recent
+    allDeployments.sort((a, b) => {
+      const aTime = a.created_at?.toDate?.() || new Date(a.created_at);
+      const bTime = b.created_at?.toDate?.() || new Date(b.created_at);
+      return bTime - aTime;
+    });
+    
+    const deployment = allDeployments[0];
     if (!deployment.service_url) {
       throw new Error('Agent deployment does not have a service URL');
     }

@@ -288,7 +288,8 @@ const AgentDeploymentManager = ({
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'completed': return 'success';
+      case 'completed':
+      case 'deployed': return 'success';
       case 'failed': return 'error';
       case 'cancelled': return 'default';
       case 'deploying':
@@ -301,7 +302,8 @@ const AgentDeploymentManager = ({
 
   const getStatusIcon = (status) => {
     switch (status) {
-      case 'completed': return <CheckCircleIcon />;
+      case 'completed':
+      case 'deployed': return <CheckCircleIcon />;
       case 'failed': return <ErrorIcon />;
       case 'cancelled': return <CancelIcon />;
       case 'deploying':
@@ -572,7 +574,7 @@ const AgentDeploymentManager = ({
           onClose={() => {}}
           maxWidth="md"
           fullWidth
-          disableEscapeKeyDown={deploymentProgress?.status !== 'completed' && deploymentProgress?.status !== 'failed'}
+          disableEscapeKeyDown={deploymentProgress?.status !== 'completed' && deploymentProgress?.status !== 'deployed' && deploymentProgress?.status !== 'failed'}
         >
           <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <CloudUploadIcon />
@@ -652,7 +654,7 @@ const AgentDeploymentManager = ({
                 )}
 
                 {/* Success Message */}
-                {deploymentProgress.status === 'completed' && deploymentProgress.service_url && (
+                {(deploymentProgress.status === 'completed' || deploymentProgress.status === 'deployed') && deploymentProgress.service_url && (
                   <Alert severity="success" sx={{ mt: 2 }}>
                     <Typography variant="body2">
                       🚀 Agent deployed successfully! Your optimized agent is now running at:
@@ -674,7 +676,7 @@ const AgentDeploymentManager = ({
           </DialogContent>
           
           <DialogActions>
-            {deploymentProgress?.status === 'completed' || deploymentProgress?.status === 'failed' || deploymentProgress?.status === 'cancelled' ? (
+            {deploymentProgress?.status === 'completed' || deploymentProgress?.status === 'deployed' || deploymentProgress?.status === 'failed' || deploymentProgress?.status === 'cancelled' ? (
               <Button onClick={handleCloseProgressDialog}>
                 Close
               </Button>

@@ -21,7 +21,8 @@ import {
   Paper,
   Divider,
   Alert,
-  CircularProgress
+  CircularProgress,
+  Link
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -104,12 +105,30 @@ const AgentDashboard = () => {
     navigate(route);
   };
 
-  // Check deployment status
+  // Check deployment status - Google Cloud Run style: deployed if any successful deployment exists
   const latestDeployment = deployments.length > 0 ? deployments[0] : null;
-  const isDeployed = latestDeployment?.status === 'completed';
+  console.log('Latest Deployment',latestDeployment)
+  
+  // Get successful deployments (either completed or deployed status)
+  const successfulDeployments = deployments.filter(d => d.status === 'completed' || d.status === 'deployed');
+  const hasSuccessfulDeployment = successfulDeployments.length > 0;
+  
+  // Agent is considered deployed if:
+  // 1. Agent document has deployment_status set to completed/deployed, OR
+  // 2. Any deployment has succeeded (Google Cloud Run behavior)
+  const isDeployed = !!(agent?.deployment_status === 'completed' || 
+                       agent?.deployment_status === 'deployed' || 
+                       hasSuccessfulDeployment);
+  
+  // Get the active deployment (most recent successful one for service URL)
+  const activeDeployment = successfulDeployments.length > 0 ? successfulDeployments[0] : null;
+  
+  // Current deployment status for UI indicators
   const isDeploying = latestDeployment?.status === 'deploying' || 
                      latestDeployment?.status === 'building_image' || 
-                     latestDeployment?.status === 'generating_code';
+                     latestDeployment?.status === 'generating_code' ||
+                     latestDeployment?.status === 'queued' ||
+                     latestDeployment?.status === 'initializing';
 
   // Feature cards configuration
   const featureCards = [
@@ -206,6 +225,20 @@ const AgentDashboard = () => {
 
   const getStageStatus = (stageId) => {
     if (!workflow) return 'pending';
+    
+    // Override deployment status based on our Google Cloud Run-style logic
+    if (stageId === 'deployment') {
+      return isDeployed ? 'completed' : workflow.getStageStatus(stageId);
+    }
+    
+    // For stages that depend on deployment, use our enhanced deployment status
+    if (['post-testing', 'integration', 'analytics'].includes(stageId)) {
+      if (!isDeployed) {
+        return 'locked';
+      }
+      return workflow.getStageStatus(stageId);
+    }
+    
     return workflow.getStageStatus(stageId);
   };
 
@@ -284,7 +317,7 @@ const AgentDashboard = () => {
             {isDeployed && (
               <Chip
                 icon={<CheckCircleIcon />}
-                label="Deployed"
+                label={`Deployed (${successfulDeployments.length} revision${successfulDeployments.length !== 1 ? 's' : ''})`}
                 color="success"
                 variant="filled"
               />
@@ -295,6 +328,13 @@ const AgentDashboard = () => {
                 label="Deploying"
                 color="warning"
                 variant="filled"
+              />
+            )}
+            {!isDeployed && !isDeploying && deployments.length > 0 && (
+              <Chip
+                label={`${deployments.length} deployment${deployments.length !== 1 ? 's' : ''} - None successful`}
+                color="error"
+                variant="outlined"
               />
             )}
           </Box>
@@ -314,25 +354,73 @@ const AgentDashboard = () => {
               </Button>
             }
           >
-            Agent is not deployed yet. Deploy to enable integrations and production testing.
+            {deployments.length === 0 
+              ? "Agent is not deployed yet. Deploy to enable integrations and production testing."
+              : `${deployments.length} deployment attempt${deployments.length !== 1 ? 's' : ''} made, but none succeeded. Deploy successfully to enable integrations.`
+            }
           </Alert>
+        )}
+
+        {/* Active Deployment Info */}
+        {isDeployed && activeDeployment && (
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="body2" color="text.secondary" gutterBottom>
+              <strong>Active Deployment:</strong> {activeDeployment.deployment_id?.slice(-8) || 'Unknown'}
+              {activeDeployment.created_at && (
+                <span> • Deployed {new Date(activeDeployment.created_at).toLocaleDateString()}</span>
+              )}
+              {activeDeployment.service_url && (
+                <span> • <Link href={activeDeployment.service_url} target="_blank" rel="noopener noreferrer" sx={{ ml: 1 }}>Service URL</Link></span>
+              )}
+            </Typography>
+          </Box>
         )}
       </Box>
 
-      {/* Workflow Progress */}
+      {/* Quick Actions */}
       <Paper sx={{ p: 3, mb: 4 }}>
         <Typography variant="h6" gutterBottom>
-          Development Progress
+          Quick Actions
         </Typography>
-        <WorkflowProgressIndicator 
-          workflow={workflow}
-          agentId={agentId}
-          compact={false}
-          onStageClick={handleWorkflowStageClick}
-        />
+        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+          <Button
+            variant="outlined"
+            startIcon={<WhatsAppIcon />}
+            onClick={() => navigate(`/agent-integration/${agentId}?section=whatsapp`)}
+            disabled={!isDeployed}
+          >
+            Setup WhatsApp
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<WebsiteIcon />}
+            onClick={() => navigate(`/agent-integration/${agentId}?section=website`)}
+            disabled={!isDeployed}
+          >
+            Add to Website
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<TestingIcon />}
+            onClick={() => navigate(`/agent-testing/${agentId}`)}
+          >
+            Test Agent
+          </Button>
+          {(activeDeployment?.service_url || agent?.service_url) && (
+            <Button
+              variant="outlined"
+              startIcon={<LaunchIcon />}
+              href={activeDeployment?.service_url || agent?.service_url}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Open Service
+            </Button>
+          )}
+        </Box>
       </Paper>
 
-      {/* Feature Cards */}
+      {/* Agent Management */}
       <Typography variant="h5" fontWeight="bold" gutterBottom sx={{ mb: 3 }}>
         Agent Management
       </Typography>
@@ -453,47 +541,17 @@ const AgentDashboard = () => {
         })}
       </Grid>
 
-      {/* Quick Actions */}
+      {/* Development Progress */}
       <Paper sx={{ p: 3, mt: 4 }}>
         <Typography variant="h6" gutterBottom>
-          Quick Actions
+          Development Progress
         </Typography>
-        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-          <Button
-            variant="outlined"
-            startIcon={<WhatsAppIcon />}
-            onClick={() => navigate(`/agent-integration/${agentId}?section=whatsapp`)}
-            disabled={!isDeployed}
-          >
-            Setup WhatsApp
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<WebsiteIcon />}
-            onClick={() => navigate(`/agent-integration/${agentId}?section=website`)}
-            disabled={!isDeployed}
-          >
-            Add to Website
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<TestingIcon />}
-            onClick={() => navigate(`/agent-testing/${agentId}`)}
-          >
-            Test Agent
-          </Button>
-          {latestDeployment?.service_url && (
-            <Button
-              variant="outlined"
-              startIcon={<LaunchIcon />}
-              href={latestDeployment.service_url}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Open Service
-            </Button>
-          )}
-        </Box>
+        <WorkflowProgressIndicator 
+          workflow={workflow}
+          agentId={agentId}
+          compact={false}
+          onStageClick={handleWorkflowStageClick}
+        />
       </Paper>
 
       {/* Notification System */}

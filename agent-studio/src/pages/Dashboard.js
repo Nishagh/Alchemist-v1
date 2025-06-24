@@ -138,7 +138,7 @@ const Dashboard = () => {
           setAllDeployments(uniqueDeployments);
           
           // Update stats
-          const activeDeployments = uniqueDeployments.filter(d => d.status === 'completed').length;
+          const activeDeployments = uniqueDeployments.filter(d => d.status === 'completed' || d.status === 'deployed').length;
           setStats(prev => ({ ...prev, activeDeployments }));
           
           // Generate activity from deployments
@@ -148,10 +148,10 @@ const Dashboard = () => {
             .map(deployment => ({
               id: `deployment-${deployment.id}`,
               type: 'deployment',
-              title: `Deployment ${deployment.status === 'completed' ? 'completed' : deployment.status}`,
+              title: `Deployment ${deployment.status === 'completed' || deployment.status === 'deployed' ? 'completed' : deployment.status}`,
               time: formatTimeAgo(deployment.updated_at),
               icon: <RocketLaunchIcon />,
-              color: deployment.status === 'completed' ? 'success' : 
+              color: deployment.status === 'completed' || deployment.status === 'deployed' ? 'success' : 
                     deployment.status === 'failed' ? 'error' : 'info'
             }));
           

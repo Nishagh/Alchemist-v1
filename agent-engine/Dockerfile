@@ -17,18 +17,12 @@ RUN groupadd -r appuser && useradd -r -g appuser appuser
 
 WORKDIR /app
 
-# Copy shared libraries first (for better caching)
-COPY shared/ /app/shared/
-
-# Install shared libraries
-RUN cd /app/shared && pip install -e .
-
 # Copy requirements and install dependencies
-COPY agent-engine/requirements.txt .
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt gunicorn
 
 # Copy application code
-COPY agent-engine/ .
+COPY . .
 
 # Set ownership
 RUN chown -R appuser:appuser /app

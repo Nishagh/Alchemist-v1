@@ -124,15 +124,11 @@ export {
   getTrainingStats
 } from './tuning/tuningService';
 
-// Billing services
+// Billing Service (microservice-based)
 export {
-  billingService
-} from './billing/billingService';
-
-// Credits services (prepaid billing)
-export {
-  creditsService
-} from './credits/creditsService';
+  billingServiceV2,
+  billingServiceV2 as creditsService  // Alias for backward compatibility
+} from './billing/billingServiceV2';
 
 // Backward compatibility - re-export everything that was in the original apiService
 // This allows existing imports to continue working without changes

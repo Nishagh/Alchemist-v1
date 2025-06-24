@@ -2,6 +2,8 @@
 
 The most elegant way to create intelligent AI agents without code. Build, test, and deploy production-ready agents in minutes, not months.
 
+> **Frontend-Only Service**: This is the React frontend for the Alchemist platform. All backend functionality is handled by dedicated microservices. See [AGENT_ENGINE_INTEGRATION.md](./AGENT_ENGINE_INTEGRATION.md) for API integration details.
+
 ## ✨ Features
 
 - **Visual Agent Builder** - Create AI agents through natural conversation

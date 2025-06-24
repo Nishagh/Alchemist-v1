@@ -147,24 +147,24 @@ export const useAgentWorkflow = (agentId) => {
         canProceed: true
       },
       deployment: {
-        completed: !!(agentData?.deployment_status === 'completed'),
+        completed: !!(agentData?.deployment_status === 'completed' || agentData?.deployment_status === 'deployed'),
         requirements: ['Completed agent definition'],
         canProceed: !!(agentData?.name && agentData?.system_prompt && agentData?.model)
       },
       'post-testing': {
-        completed: !!(agentData?.deployment_status === 'completed'),
+        completed: !!(agentData?.deployment_status === 'completed' || agentData?.deployment_status === 'deployed'),
         requirements: ['Successful deployment'],
-        canProceed: !!(agentData?.deployment_status === 'completed')
+        canProceed: !!(agentData?.deployment_status === 'completed' || agentData?.deployment_status === 'deployed')
       },
       integration: {
         completed: !!(agentData?.integrations_configured),
         requirements: ['Successful deployment'],
-        canProceed: !!(agentData?.deployment_status === 'completed')
+        canProceed: !!(agentData?.deployment_status === 'completed' || agentData?.deployment_status === 'deployed')
       },
       analytics: {
         completed: true, // Always accessible once deployed
         requirements: ['Successful deployment'],
-        canProceed: !!(agentData?.deployment_status === 'completed')
+        canProceed: !!(agentData?.deployment_status === 'completed' || agentData?.deployment_status === 'deployed')
       }
     };
 

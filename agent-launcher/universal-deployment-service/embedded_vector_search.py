@@ -429,7 +429,6 @@ class EmbeddedVectorSearch:
 
 def create_embedded_vector_tools(agent_config: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
-    Create tool definitions for embedded vector search using direct OpenAI integration.
     
     Args:
         agent_config: Agent configuration containing agent_id and openai_api_key

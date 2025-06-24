@@ -124,7 +124,7 @@ const AgentTesting = () => {
           : null;
           
         setDeploymentStatus(deployStatus);
-        setIsDeployed(deployStatus?.status === 'completed');
+        setIsDeployed(deployStatus?.status === 'completed' || deployStatus?.status === 'deployed');
 
         // Load existing billing info
         const billing = await getBillingInfo(agentId);
@@ -135,7 +135,7 @@ const AgentTesting = () => {
         setTemplateTests(templates);
 
         // Test agent health if deployed
-        if (deployStatus?.status === 'completed') {
+        if (deployStatus?.status === 'completed' || deployStatus?.status === 'deployed') {
           try {
             const health = await testAgentEndpoint(agentId);
             setAgentHealth(health);
@@ -802,7 +802,7 @@ const AgentTesting = () => {
                     <Typography variant="body2" color="text.secondary">Status</Typography>
                     <Chip 
                       label={deploymentStatus?.status || 'unknown'}
-                      color={deploymentStatus?.status === 'completed' ? 'success' : 'default'}
+                      color={deploymentStatus?.status === 'completed' || deploymentStatus?.status === 'deployed' ? 'success' : 'default'}
                       size="small"
                     />
                   </Box>

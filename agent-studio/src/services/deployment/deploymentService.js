@@ -7,7 +7,7 @@
 
 import { apiConfig } from '../config/apiConfig';
 import { db } from '../../utils/firebase';
-import { collection, query, where, orderBy, getDocs, doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, orderBy, getDocs, doc, getDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 
 const DEPLOYMENT_SERVICE_URL = process.env.REACT_APP_DEPLOYMENT_SERVICE_URL || 'http://0.0.0.0:8080';
 
@@ -232,8 +232,19 @@ class DeploymentService {
           }
 
           // Check if deployment is complete
-          if (status.status === 'completed') {
+          if (status.status === 'completed' || status.status === 'deployed') {
             unsubscribe();
+            
+            // Update agent deployment status if deployment was successful
+            this.updateAgentDeploymentStatus(status.agent_id, status)
+              .then(() => {
+                console.log('Agent deployment status updated successfully');
+              })
+              .catch((updateError) => {
+                console.error('Failed to update agent deployment status:', updateError);
+                // Don't reject the promise - deployment still succeeded
+              });
+            
             resolve(status);
             return;
           }
@@ -331,6 +342,59 @@ class DeploymentService {
       throw error;
     }
   }
+
+  /**
+   * Update agent deployment status when deployment completes successfully
+   * Implements Google Cloud Run-like behavior where agent is "deployed" if any deployment succeeds
+   */
+  async updateAgentDeploymentStatus(agentId, deploymentData) {
+    try {
+      const agentDoc = doc(db, 'alchemist_agents', agentId);
+      
+      // Check if this is the first successful deployment
+      const currentDeployments = await this.listDeployments({ 
+        agentId: agentId,
+        status: 'completed'
+      });
+      
+      // Also check for 'deployed' status deployments
+      const deployedDeployments = await this.listDeployments({ 
+        agentId: agentId,
+        status: 'deployed'
+      });
+      
+      const totalSuccessful = (currentDeployments.deployments || []).length + 
+                             (deployedDeployments.deployments || []).length;
+      
+      // Prepare agent update data
+      const agentUpdates = {
+        deployment_status: 'completed',
+        active_deployment_id: deploymentData.deployment_id,
+        last_deployment_at: new Date(),
+        updated_at: new Date()
+      };
+      
+      // Add service URL if available
+      if (deploymentData.service_url) {
+        agentUpdates.service_url = deploymentData.service_url;
+      }
+      
+      // Update agent document
+      await updateDoc(agentDoc, agentUpdates);
+      
+      console.log(`Agent ${agentId} deployment status updated to completed with active deployment ${deploymentData.deployment_id}`);
+      
+      return {
+        success: true,
+        isFirstDeployment: totalSuccessful === 0,
+        agentUpdates
+      };
+      
+    } catch (error) {
+      console.error('Error updating agent deployment status:', error);
+      throw error;
+    }
+  }
 }
 
 // Create singleton instance
@@ -348,3 +412,4 @@ export const getServiceHealth = deploymentService.getServiceHealth.bind(deployme
 export const pollDeploymentStatus = deploymentService.pollDeploymentStatus.bind(deploymentService);
 export const subscribeToDeploymentUpdates = deploymentService.subscribeToDeploymentUpdates.bind(deploymentService);
 export const getDeployment = deploymentService.getDeployment.bind(deploymentService);
+export const updateAgentDeploymentStatus = deploymentService.updateAgentDeploymentStatus.bind(deploymentService);

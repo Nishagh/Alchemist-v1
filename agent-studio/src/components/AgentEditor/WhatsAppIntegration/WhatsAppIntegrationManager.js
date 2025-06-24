@@ -42,7 +42,7 @@ const WhatsAppIntegrationManager = ({
   const [deleting, setDeleting] = useState(false);
 
   // Get the latest completed deployment
-  const completedDeployment = deployments.find(d => d.status === 'completed');
+  const completedDeployment = deployments.find(d => d.status === 'completed' || d.status === 'deployed');
   const isDeployed = completedDeployment?.service_url;
 
   useEffect(() => {

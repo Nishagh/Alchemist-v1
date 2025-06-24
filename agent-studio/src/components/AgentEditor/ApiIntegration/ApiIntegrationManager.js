@@ -152,7 +152,7 @@ const ApiIntegrationManager = ({
             });
           } else {
             setDeploying(false);
-            if (latestDeployment.status === 'completed') {
+            if (latestDeployment.status === 'completed' || latestDeployment.status === 'deployed') {
               setDeploymentStatus({
                 status: 'deployed',
                 deployment_id: latestDeployment.deployment_id || latestDeployment.id,
