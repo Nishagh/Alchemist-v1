@@ -69,7 +69,7 @@ No manual configuration needed
 
 ## 🔧 **TECHNICAL IMPLEMENTATION**
 
-### **Backend Enhancements (agent-tuning-service)**
+### **Backend Enhancements (alchemist-agent-tuning)**
 
 #### ✅ **New Data Models**
 ```python
@@ -239,7 +239,7 @@ ConversationalFineTuning.js:
 - ✅ **Error Handling**: Robust fallback systems
 
 ### **Next Steps**
-1. **Deploy Updated Backend**: agent-tuning-service with conversation endpoints
+1. **Deploy Updated Backend**: alchemist-agent-tuning with conversation endpoints
 2. **Test End-to-End**: Complete flow with authenticated users
 3. **Monitor Performance**: Track conversation quality and training success
 4. **Iterate Based on Feedback**: Improve based on user experience

@@ -6,7 +6,7 @@ set -e
 
 # Configuration
 PROJECT_ID="alchemist-e69bb"
-SERVICE_NAME="agent-tuning-service"
+SERVICE_NAME="alchemist-agent-tuning"
 REGION="us-central1"
 IMAGE_NAME="gcr.io/${PROJECT_ID}/${SERVICE_NAME}"
 
@@ -46,6 +46,13 @@ gcloud config set project ${PROJECT_ID}
 # Configure Docker for gcr.io
 echo -e "${YELLOW}🐳 Configuring Docker for Google Container Registry...${NC}"
 gcloud auth configure-docker
+
+# Copy shared module to local directory for Docker context
+echo -e "${YELLOW}📦 Preparing shared module...${NC}"
+if [ -d "./shared" ]; then
+    rm -rf ./shared
+fi
+cp -r ../shared ./shared
 
 # Build the Docker image
 echo -e "${YELLOW}🔨 Building Docker image...${NC}"

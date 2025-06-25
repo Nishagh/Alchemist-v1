@@ -24,6 +24,21 @@ from langchain.chat_models import init_chat_model
 import requests
 from urllib.parse import urljoin
 
+# Import GNF integration
+try:
+    from alchemist_shared.services.gnf_adapter import (
+        create_gnf_adapter, 
+        AgentIdentityData, 
+        InteractionData, 
+        InteractionType,
+        track_conversation_interaction
+    )
+    from alchemist_shared.database.firebase_client import get_firebase_client
+    GNF_AVAILABLE = True
+except ImportError as e:
+    logging.warning(f"GNF integration not available: {e}")
+    GNF_AVAILABLE = False
+
 load_dotenv()
 
 logger = logging.getLogger(__name__)
@@ -85,6 +100,27 @@ class OrchestratorAgent():
         self.openai_api_key = os.getenv('OPENAI_API_KEY')
         self.model = os.getenv('ALCHEMIST_MODEL')   
         self.agent_id = agent_id
+        
+        # Initialize GNF integration
+        self.gnf_adapter = None
+        self._gnf_identity_created = False
+        
+        if GNF_AVAILABLE:
+            try:
+                gnf_service_url = os.getenv('GNF_SERVICE_URL', 'http://localhost:8000')
+                gnf_api_key = os.getenv('GNF_API_KEY')
+                firebase_client = get_firebase_client()
+                
+                self.gnf_adapter = create_gnf_adapter(
+                    service_url=gnf_service_url,
+                    api_key=gnf_api_key,
+                    firebase_client=firebase_client
+                )
+                logger.info(f"GNF adapter initialized for agent {agent_id}")
+            except Exception as e:
+                logger.warning(f"Failed to initialize GNF adapter: {e}")
+                self.gnf_adapter = None
+        
         self.init_langchain()
         
     def init_langchain(self):
@@ -236,6 +272,110 @@ class OrchestratorAgent():
         )
         return tools
     
+    async def _ensure_gnf_identity(self, agent_config: Dict[str, Any]) -> bool:
+        """
+        Ensure GNF identity exists for this agent.
+        
+        Args:
+            agent_config: Agent configuration from storage
+            
+        Returns:
+            True if identity exists or was created successfully
+        """
+        if not self.gnf_adapter or self._gnf_identity_created:
+            return self._gnf_identity_created
+        
+        try:
+            # Check if identity already exists
+            existing_identity = await self.gnf_adapter.get_agent_identity(self.agent_id)
+            
+            if existing_identity:
+                self._gnf_identity_created = True
+                logger.info(f"Found existing GNF identity for agent {self.agent_id}")
+                return True
+            
+            # Create new identity
+            if agent_config:
+                identity_data = AgentIdentityData(
+                    agent_id=self.agent_id,
+                    name=agent_config.get('name', f'Agent-{self.agent_id}'),
+                    personality={
+                        'traits': ['helpful', 'responsive', 'analytical'],
+                        'values': ['efficiency', 'accuracy', 'user_satisfaction'],
+                        'goals': ['assist users effectively', 'provide accurate information'],
+                        'motivations': ['learning', 'problem_solving', 'helping others']
+                    },
+                    capabilities={
+                        'knowledge_domains': [agent_config.get('domain', 'general')],
+                        'skills': ['conversation', 'analysis', 'problem_solving'],
+                        'use_cases': agent_config.get('use_cases', []),
+                        'limitations': ['requires clear instructions', 'limited by training data']
+                    },
+                    background={
+                        'origin': f"Created as {agent_config.get('name', 'Assistant')} on Alchemist platform",
+                        'creation_date': datetime.utcnow().isoformat(),
+                        'purpose': agent_config.get('description', 'General assistance'),
+                        'specialization': agent_config.get('domain', 'general')
+                    }
+                )
+                
+                identity_id = await self.gnf_adapter.create_agent_identity(identity_data)
+                
+                if identity_id:
+                    self._gnf_identity_created = True
+                    logger.info(f"Created GNF identity {identity_id} for agent {self.agent_id}")
+                    
+                    # Update agent config with identity reference
+                    await default_storage.update_agent_config(self.agent_id, {
+                        'narrative_identity_id': identity_id,
+                        'gnf_enabled': True,
+                        'last_gnf_sync': datetime.utcnow().isoformat()
+                    })
+                    
+                    return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Failed to ensure GNF identity for agent {self.agent_id}: {e}")
+            return False
+    
+    async def _track_conversation_interaction(self, user_message: str, agent_response: str, 
+                                            context: Optional[Dict[str, Any]] = None) -> None:
+        """
+        Track conversation interaction in GNF.
+        
+        Args:
+            user_message: User's input message
+            agent_response: Agent's response
+            context: Optional conversation context
+        """
+        if not self.gnf_adapter or not self._gnf_identity_created:
+            return
+        
+        try:
+            # Prepare interaction context
+            interaction_context = {
+                'conversation_type': 'agent_creation',
+                'platform': 'alchemist',
+                'model': self.model,
+                **(context or {})
+            }
+            
+            # Track the interaction
+            await track_conversation_interaction(
+                adapter=self.gnf_adapter,
+                agent_id=self.agent_id,
+                user_message=user_message,
+                agent_response=agent_response,
+                context=interaction_context
+            )
+            
+            logger.debug(f"Tracked conversation interaction for agent {self.agent_id}")
+            
+        except Exception as e:
+            logger.warning(f"Failed to track conversation interaction: {e}")
+    
     async def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Process the input data using LangChain for orchestration.
@@ -253,6 +393,9 @@ class OrchestratorAgent():
             agent_id = input_data.get('agent_id', '')
             
             agent_config = await default_storage.get_agent_config(agent_id)
+            
+            # Ensure GNF identity exists for this agent
+            await self._ensure_gnf_identity(agent_config)
             
             # Get conversation history from storage if we have a conversation ID
             chat_history = []
@@ -351,6 +494,17 @@ class OrchestratorAgent():
             
             # Modify the response if it contains raw tool output
             response = self._format_response_for_user(response, steps)
+            
+            # Track interaction in GNF
+            await self._track_conversation_interaction(
+                user_message=input_text,
+                agent_response=response,
+                context={
+                    'conversation_id': agent_id,
+                    'agent_config': agent_config,
+                    'steps_taken': len(steps) if steps else 0
+                }
+            )
             
             # Update the conversation with the new message
             if agent_id:

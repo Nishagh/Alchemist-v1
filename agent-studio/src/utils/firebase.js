@@ -2,7 +2,10 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, connectAuthEmulator, onAuthStateChanged } from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, serverTimestamp } from 'firebase/firestore';
+
+// Import centralized collection constants
+import { Collections, DocumentFields, StatusValues, ErrorMessages, validateCollectionUsage } from '../constants/collections';
 
 // Firebase configuration - with fallback to hardcoded values
 const firebaseConfig = {
@@ -66,5 +69,5 @@ try {
   db = {};
 }
 
-// Export the Firebase services
-export { app, auth, storage, db }; 
+// Export the Firebase services and constants
+export { app, auth, storage, db, serverTimestamp, Collections, DocumentFields, StatusValues, ErrorMessages, validateCollectionUsage }; 

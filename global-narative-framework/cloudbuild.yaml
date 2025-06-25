@@ -1,0 +1,71 @@
+# Google Cloud Build configuration for Global Narrative Framework
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/global-narrative-framework:$BUILD_ID'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/global-narrative-framework:latest'
+      - '.'
+    env:
+      - 'DOCKER_BUILDKIT=1'
+
+  # Push the container image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/global-narrative-framework:$BUILD_ID'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/global-narrative-framework:latest'
+
+  # Deploy backend service to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'global-narrative-framework-backend'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/global-narrative-framework:$BUILD_ID'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--memory'
+      - '2Gi'
+      - '--cpu'
+      - '2'
+      - '--max-instances'
+      - '5'
+      - '--min-instances'
+      - '0'
+      - '--port'
+      - '8080'
+      - '--timeout'
+      - '900'
+      - '--concurrency'
+      - '100'
+      - '--set-env-vars'
+      - 'ENVIRONMENT=production,FIREBASE_PROJECT_ID=$PROJECT_ID,PYTHONPATH=/app'
+      - '--set-secrets'
+      - 'OPENAI_API_KEY=openai-api-key:latest'
+      - '--service-account'
+      - '$PROJECT_NUMBER-compute@developer.gserviceaccount.com'
+
+# Store images in Container Registry
+images:
+  - 'gcr.io/$PROJECT_ID/global-narrative-framework:$BUILD_ID'
+  - 'gcr.io/$PROJECT_ID/global-narrative-framework:latest'
+
+# Options for the build
+options:
+  logging: CLOUD_LOGGING_ONLY
+  
+# Timeout for the entire build
+timeout: '1200s'

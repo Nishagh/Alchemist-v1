@@ -439,7 +439,7 @@ const AgentsList = () => {
                   variant="contained"
                   size="large"
                   startIcon={<AddIcon />}
-                  onClick={() => navigate('/agent-editor')}
+                  onClick={() => navigate('/create-agent')}
                   sx={{ 
                     py: 1.5, 
                     px: 4,
@@ -799,7 +799,7 @@ const AgentsList = () => {
                       variant="contained"
                       size="large"
                       startIcon={<AddIcon />}
-                      onClick={() => navigate('/agent-editor')}
+                      onClick={() => navigate('/create-agent')}
                       sx={{ 
                         py: 2, 
                         px: 4,

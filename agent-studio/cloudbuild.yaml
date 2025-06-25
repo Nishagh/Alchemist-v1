@@ -1,11 +1,11 @@
 steps:
   # Build the container image
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'us-central1-docker.pkg.dev/${PROJECT_ID}/agent-studio-web/agent-studio-web:${SHORT_SHA}', '.']
+    args: ['build', '-t', 'us-central1-docker.pkg.dev/${PROJECT_ID}/alchemist-agent-studio/alchemist-agent-studio:${SHORT_SHA}', '.']
   
   # Push the container image to Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'us-central1-docker.pkg.dev/${PROJECT_ID}/agent-studio-web/agent-studio-web:${SHORT_SHA}']
+    args: ['push', 'us-central1-docker.pkg.dev/${PROJECT_ID}/alchemist-agent-studio/alchemist-agent-studio:${SHORT_SHA}']
   
   # Deploy container image to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
@@ -13,9 +13,9 @@ steps:
     args:
       - 'run'
       - 'deploy'
-      - 'agent-studio-web'
+      - 'alchemist-agent-studio'
       - '--image'
-      - 'us-central1-docker.pkg.dev/${PROJECT_ID}/agent-studio-web/agent-studio-web:${SHORT_SHA}'
+      - 'us-central1-docker.pkg.dev/${PROJECT_ID}/alchemist-agent-studio/alchemist-agent-studio:${SHORT_SHA}'
       - '--region'
       - 'us-central1'
       - '--platform'
@@ -23,6 +23,6 @@ steps:
       - '--allow-unauthenticated'
 
 images:
-  - 'us-central1-docker.pkg.dev/${PROJECT_ID}/agent-studio-web/agent-studio-web:${SHORT_SHA}'
+  - 'us-central1-docker.pkg.dev/${PROJECT_ID}/alchemist-agent-studio/alchemist-agent-studio:${SHORT_SHA}'
 
 timeout: '1200s' 

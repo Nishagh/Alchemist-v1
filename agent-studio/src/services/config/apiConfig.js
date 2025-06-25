@@ -11,6 +11,7 @@ export const KNOWLEDGE_BASE_URL = process.env.REACT_APP_KNOWLEDGE_BASE_URL;
 export const MCP_MANAGER_URL = process.env.REACT_APP_MCP_MANAGER_URL;
 export const TUNING_SERVICE_URL = process.env.REACT_APP_TUNING_SERVICE_URL;
 export const BILLING_SERVICE_URL = process.env.REACT_APP_BILLING_SERVICE_URL || 'https://billing-service-851487020021.us-central1.run.app';
+export const GNF_SERVICE_URL = process.env.REACT_APP_GNF_SERVICE_URL || 'https://global-narrative-framework-backend-851487020021.us-central1.run.app';
 
 // Create axios instances with default config
 export const api = axios.create({
@@ -46,6 +47,14 @@ export const tuningApi = axios.create({
 // Billing service axios instance
 export const billingApi = axios.create({
   baseURL: BILLING_SERVICE_URL,
+  headers: {
+    'Content-Type': 'application/json'
+  }
+});
+
+// Global Narrative Framework service axios instance
+export const gnfApi = axios.create({
+  baseURL: GNF_SERVICE_URL,
   headers: {
     'Content-Type': 'application/json'
   }
@@ -111,25 +120,41 @@ export const ENDPOINTS = {
 };
 
 // Get API configuration for services
-export const getApiConfig = () => ({
-  alchemist: {
-    url: API_BASE_URL,
-    timeout: 30000
-  },
-  knowledgeBase: {
-    url: KNOWLEDGE_BASE_URL,
-    timeout: 60000
-  },
-  mcpManager: {
-    url: MCP_MANAGER_URL,
-    timeout: 60000
-  },
-  tuningService: {
-    url: TUNING_SERVICE_URL || 'http://localhost:8080',
-    timeout: 60000
-  },
-  billingService: {
-    url: BILLING_SERVICE_URL,
-    timeout: 30000
-  }
-});
+export const getApiConfig = () => {
+  const config = {
+    baseUrl: GNF_SERVICE_URL || 'https://global-narrative-framework-backend-851487020021.us-central1.run.app', // For identity service compatibility
+    alchemist: {
+      url: API_BASE_URL,
+      timeout: 30000
+    },
+    knowledgeBase: {
+      url: KNOWLEDGE_BASE_URL,
+      timeout: 60000
+    },
+    mcpManager: {
+      url: MCP_MANAGER_URL,
+      timeout: 60000
+    },
+    tuningService: {
+      url: TUNING_SERVICE_URL || 'http://localhost:8080',
+      timeout: 60000
+    },
+    billingService: {
+      url: BILLING_SERVICE_URL,
+      timeout: 30000
+    },
+    globalNarrative: {
+      url: GNF_SERVICE_URL || 'https://global-narrative-framework-backend-851487020021.us-central1.run.app',
+      timeout: 30000
+    }
+  };
+  
+  // Debug logging
+  console.log('API Config Debug:', {
+    GNF_SERVICE_URL,
+    baseUrl: config.baseUrl,
+    env: process.env.REACT_APP_GNF_SERVICE_URL
+  });
+  
+  return config;
+};

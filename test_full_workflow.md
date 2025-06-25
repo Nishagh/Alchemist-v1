@@ -3,7 +3,7 @@
 ## ✅ Backend Service Verification
 
 ### Service Health Check
-- **Service URL**: https://agent-tuning-service-b3hpe34qdq-uc.a.run.app
+- **Service URL**: https://alchemist-agent-tuning-b3hpe34qdq-uc.a.run.app
 - **Status**: Healthy and running
 - **Version**: 1.0.0
 - **Environment**: Production
@@ -109,9 +109,9 @@
 
 ## 🚀 Deployment Status
 
-### Backend (agent-tuning-service):
+### Backend (alchemist-agent-tuning):
 - **Status**: Deployed and running
-- **URL**: https://agent-tuning-service-b3hpe34qdq-uc.a.run.app
+- **URL**: https://alchemist-agent-tuning-b3hpe34qdq-uc.a.run.app
 - **Authentication**: Firebase Auth required
 - **Health**: All systems operational
 
@@ -145,6 +145,6 @@
 
 ## ✅ Integration Test Results: PASSED
 
-The agent-tuning-service is successfully deployed and integrated with agent-studio. All connectivity tests pass, the frontend is properly configured, and the UI components are ready for production use.
+The alchemist-agent-tuning is successfully deployed and integrated with agent-studio. All connectivity tests pass, the frontend is properly configured, and the UI components are ready for production use.
 
 **Status**: Ready for end-to-end testing with authenticated users.

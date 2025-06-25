@@ -7,12 +7,16 @@ import logging
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timezone
 
-import firebase_admin
-from firebase_admin import credentials, firestore, auth
+from firebase_admin import auth
 from google.cloud.firestore import Client as FirestoreClient
-from google.cloud.firestore import FieldFilter, Query
+from google.cloud.firestore import FieldFilter, Query, SERVER_TIMESTAMP
+
+# Import centralized Firebase client
+from alchemist_shared.database.firebase_client import FirebaseClient
 
 from app.config.settings import settings
+# Import collection constants
+from app.constants.collections import Collections, DocumentFields, StatusValues
 
 logger = logging.getLogger(__name__)
 
@@ -22,31 +26,20 @@ class FirebaseService:
     
     def __init__(self):
         self.db: Optional[FirestoreClient] = None
+        self._firebase_client: Optional[FirebaseClient] = None
         self._initialized = False
     
     async def initialize(self):
-        """Initialize Firebase Admin SDK"""
+        """Initialize Firebase using centralized client"""
         if self._initialized:
             return
         
         try:
-            # Initialize Firebase Admin SDK
-            if not firebase_admin._apps:
-                if settings.FIREBASE_CREDENTIALS_PATH:
-                    cred = credentials.Certificate(settings.FIREBASE_CREDENTIALS_PATH)
-                else:
-                    # Use default credentials from environment
-                    cred = credentials.ApplicationDefault()
-                
-                firebase_admin.initialize_app(cred, {
-                    'projectId': settings.FIREBASE_PROJECT_ID
-                })
-                logger.info(f"Firebase Admin SDK initialized for project: {settings.FIREBASE_PROJECT_ID}")
-            
-            # Initialize Firestore client
-            self.db = firestore.client()
+            # Use centralized Firebase client
+            self._firebase_client = FirebaseClient()
+            self.db = self._firebase_client.db
             self._initialized = True
-            logger.info("Firestore client initialized successfully")
+            logger.info("Billing service Firebase client initialized successfully")
             
         except Exception as e:
             logger.error(f"Failed to initialize Firebase: {e}")
@@ -75,11 +68,11 @@ class FirebaseService:
         self._ensure_initialized()
         
         try:
-            doc_ref = self.db.collection(settings.USER_CREDITS_COLLECTION).document(user_id)
+            doc_ref = self.db.collection(Collections.USER_ACCOUNTS).document(user_id)
             doc = doc_ref.get()
             
             if doc.exists:
-                return {"id": doc.id, **doc.to_dict()}
+                return {DocumentFields.ID: doc.id, **doc.to_dict()}
             return None
             
         except Exception as e:
@@ -92,23 +85,17 @@ class FirebaseService:
         
         try:
             account_data = {
-                "user_id": user_id,
-                "balance": {
-                    "total_credits": initial_credits,
-                    "base_credits": initial_credits,
-                    "bonus_credits": 0.0
-                },
-                "settings": {
-                    "low_balance_threshold": settings.DEFAULT_LOW_BALANCE_THRESHOLD,
-                    "email_alerts": True,
-                    "usage_alerts": True
-                },
-                "status": "active",
-                "created_at": datetime.now(timezone.utc).isoformat(),
-                "updated_at": datetime.now(timezone.utc).isoformat()
+                DocumentFields.USER_ID: user_id,
+                DocumentFields.Billing.CREDIT_BALANCE: initial_credits,
+                DocumentFields.Billing.TOTAL_CREDITS_PURCHASED: 0.0,
+                DocumentFields.Billing.TOTAL_CREDITS_USED: 0.0,
+                DocumentFields.Billing.ACCOUNT_STATUS: StatusValues.Account.TRIAL,
+                "trial_credits_remaining": initial_credits,
+                DocumentFields.CREATED_AT: SERVER_TIMESTAMP,
+                DocumentFields.UPDATED_AT: SERVER_TIMESTAMP
             }
             
-            doc_ref = self.db.collection(settings.USER_CREDITS_COLLECTION).document(user_id)
+            doc_ref = self.db.collection(Collections.USER_ACCOUNTS).document(user_id)
             doc_ref.set(account_data)
             
             return {"id": user_id, **account_data}
@@ -154,7 +141,7 @@ class FirebaseService:
                 
                 # Update account
                 account_data["balance"] = new_balance
-                account_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+                account_data["updated_at"] = SERVER_TIMESTAMP
                 
                 transaction.update(user_doc_ref, account_data)
                 
@@ -165,7 +152,7 @@ class FirebaseService:
                     "type": tx_type,
                     "balance_before": current_balance.get("total_credits", 0.0),
                     "balance_after": new_total,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": SERVER_TIMESTAMP,
                     "transaction_data": tx_data
                 }
                 
@@ -215,8 +202,8 @@ class FirebaseService:
         self._ensure_initialized()
         
         try:
-            order_data["created_at"] = datetime.now(timezone.utc).isoformat()
-            order_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+            order_data["created_at"] = SERVER_TIMESTAMP
+            order_data["updated_at"] = SERVER_TIMESTAMP
             
             doc_ref = self.db.collection(settings.CREDIT_ORDERS_COLLECTION).document()
             doc_ref.set(order_data)
@@ -248,7 +235,7 @@ class FirebaseService:
         self._ensure_initialized()
         
         try:
-            update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+            update_data["updated_at"] = SERVER_TIMESTAMP
             
             doc_ref = self.db.collection(settings.CREDIT_ORDERS_COLLECTION).document(order_id)
             doc_ref.update(update_data)

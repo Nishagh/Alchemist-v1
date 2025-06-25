@@ -3,7 +3,7 @@
  * 
  * Handles all agent-related API operations
  */
-import { auth } from '../../utils/firebase';
+import { auth, Collections, DocumentFields, ErrorMessages } from '../../utils/firebase';
 import { api } from '../config/apiConfig';
 import { ENDPOINTS } from '../config/apiConfig';
 
@@ -17,12 +17,12 @@ export const createAgent = async (agentData) => {
     const userId = currentUser?.uid;
     
     if (!userId) {
-      throw new Error('User not authenticated');
+      throw new Error(ErrorMessages.USER_NOT_AUTHENTICATED);
     }
     
     // Add current user id as owner if not already set
-    if (!agentData.owner_id) {
-      agentData.owner_id = userId;
+    if (!agentData[DocumentFields.Agent.OWNER_ID]) {
+      agentData[DocumentFields.Agent.OWNER_ID] = userId;
     }
     
     const response = await api.post(ENDPOINTS.AGENTS, agentData);
@@ -64,30 +64,31 @@ export const getAgent = async (agentId) => {
     const userId = currentUser?.uid;
     
     if (!userId) {
-      throw new Error('User not authenticated');
+      throw new Error(ErrorMessages.USER_NOT_AUTHENTICATED);
     }
     
     // Get agent from Firestore directly since it's more reliable
     const { db } = await import('../../utils/firebase');
     const { doc, getDoc } = await import('firebase/firestore');
     
-    const agentRef = doc(db, 'alchemist_agents', agentId);
+    const agentRef = doc(db, Collections.AGENTS, agentId);
     const agentDoc = await getDoc(agentRef);
     
     if (!agentDoc.exists()) {
-      throw new Error('Agent not found');
+      throw new Error(ErrorMessages.AGENT_NOT_FOUND);
     }
     
     const agentData = agentDoc.data();
     
-    // Check if user owns this agent
-    if (agentData.userId !== userId) {
-      throw new Error('Access denied: You do not own this agent');
+    // Check if user owns this agent (check both owner_id and legacy userId field)
+    const ownerId = agentData[DocumentFields.Agent.OWNER_ID] || agentData.userId;
+    if (ownerId !== userId) {
+      throw new Error(ErrorMessages.AGENT_ACCESS_DENIED);
     }
     
     return {
-      id: agentDoc.id,
-      agent_id: agentDoc.id,
+      [DocumentFields.ID]: agentDoc.id,
+      [DocumentFields.AGENT_ID]: agentDoc.id,
       ...agentData
     };
   } catch (error) {

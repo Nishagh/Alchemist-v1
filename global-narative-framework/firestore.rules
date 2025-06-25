@@ -1,0 +1,33 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow read/write access to all documents for development
+    // WARNING: These rules are for development only!
+    // For production, implement proper authentication and authorization
+    
+    match /{document=**} {
+      allow read, write: if true;
+    }
+    
+    // Specific rules for GNF collections
+    match /agents/{agentId} {
+      allow read, write: if true;
+    }
+    
+    match /interactions/{interactionId} {
+      allow read, write: if true;
+    }
+    
+    match /memories/{memoryId} {
+      allow read, write: if true;
+    }
+    
+    match /evolution_events/{eventId} {
+      allow read, write: if true;
+    }
+    
+    match /global_timeline/{eventId} {
+      allow read, write: if true;
+    }
+  }
+}

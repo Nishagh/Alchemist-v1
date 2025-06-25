@@ -35,9 +35,21 @@ fi
 echo -e "${YELLOW}Setting Google Cloud project...${NC}"
 gcloud config set project ${PROJECT_ID}
 
-# Build the Docker image
+# Navigate to parent directory for build context (needed for shared module access)
+cd ..
+
+# Validate deployment security - ensure no credential files in build context
+echo -e "${YELLOW}Validating deployment security...${NC}"
+if [ -f "billing-service/firebase-credentials.json" ] || [ -f "billing-service/gcloud-credentials.json" ] || [ -f "billing-service/service-account-key.json" ]; then
+    echo -e "${RED}Security Error: Credential files found in deployment directory!${NC}"
+    echo -e "${RED}Firebase credentials should not be included in cloud deployments.${NC}"
+    echo -e "${RED}Please ensure .dockerignore excludes: firebase-credentials.json, gcloud-credentials.json, service-account-key.json${NC}"
+    exit 1
+fi
+
+# Build the Docker image with current directory as context (parent of billing-service)
 echo -e "${YELLOW}Building Docker image...${NC}"
-docker build --platform linux/amd64 -t ${IMAGE_NAME} .
+docker build --platform linux/amd64 -t ${IMAGE_NAME} -f billing-service/Dockerfile .
 
 # Tag the image with latest
 docker tag ${IMAGE_NAME} ${IMAGE_NAME}:latest

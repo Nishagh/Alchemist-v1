@@ -4,8 +4,11 @@ import tempfile
 from typing import Dict, List, Any
 from fastapi import UploadFile
 from datetime import datetime
+from firebase_admin import firestore
 from app.services.firebase_service import FirebaseService
 from app.services.indexing_service import IndexingService
+
+SERVER_TIMESTAMP = firestore.SERVER_TIMESTAMP
 
 class FileService:
     def __init__(self):
@@ -49,14 +52,14 @@ class FileService:
                 "agent_id": agent_id,
                 "content_type": content_type,
                 "size": len(file_content),
-                "upload_date": datetime.now(),
+                "upload_date": SERVER_TIMESTAMP,
                 "storage_path": storage_path,
                 "indexed": False,
                 "purpose": "knowledge base",
                 "chunk_count": 0,
                 "indexing_status": "pending",
                 "indexing_error": None,
-                "last_updated": datetime.now()
+                "last_updated": SERVER_TIMESTAMP
             }
             
             # Add file metadata to Firestore
@@ -82,7 +85,7 @@ class FileService:
             "indexing_status": "processing",
             "indexing_phase": "preparing",
             "progress_percent": 10,
-            "last_updated": datetime.now()
+            "last_updated": SERVER_TIMESTAMP
         })
         
         try:
@@ -95,7 +98,7 @@ class FileService:
             self.firebase_service.update_file(file_id, {
                 "indexing_phase": "extracting_text",
                 "progress_percent": 30,
-                "last_updated": datetime.now()
+                "last_updated": SERVER_TIMESTAMP
             })
             
             # Process the file and get chunks
@@ -111,7 +114,7 @@ class FileService:
             self.firebase_service.update_file(file_id, {
                 "indexing_phase": "storing_embeddings",
                 "progress_percent": 70,
-                "last_updated": datetime.now()
+                "last_updated": SERVER_TIMESTAMP
             })
             
             # Update file metadata
@@ -121,7 +124,7 @@ class FileService:
                 "indexing_status": "complete",
                 "indexing_phase": "complete",
                 "progress_percent": 100,
-                "last_updated": datetime.now()
+                "last_updated": SERVER_TIMESTAMP
             })
             
             # Clean up temporary file
@@ -135,7 +138,7 @@ class FileService:
                 "indexing_phase": "failed",
                 "indexing_error": str(e),
                 "progress_percent": 0,
-                "last_updated": datetime.now()
+                "last_updated": SERVER_TIMESTAMP
             })
             
             # Re-raise exception

@@ -36,7 +36,7 @@ function simulateTuningServiceCall() {
 async function simulateBackendCall(agentContext, querySettings) {
   console.log('2. 🔄 TuningService makes API call to backend');
   
-  const TUNING_SERVICE_URL = 'https://agent-tuning-service-b3hpe34qdq-uc.a.run.app';
+  const TUNING_SERVICE_URL = 'https://alchemist-agent-tuning-b3hpe34qdq-uc.a.run.app';
   
   try {
     // This would normally include Firebase auth token

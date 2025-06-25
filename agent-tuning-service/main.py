@@ -121,7 +121,7 @@ def create_app() -> FastAPI:
     async def root():
         """Root endpoint"""
         return {
-            "service": "agent-tuning-service",
+            "service": "alchemist-agent-tuning",
             "version": "1.0.0",
             "status": "running",
             "environment": settings.environment

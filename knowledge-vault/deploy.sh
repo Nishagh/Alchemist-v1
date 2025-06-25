@@ -38,6 +38,22 @@ gcloud config set project ${PROJECT_ID}
 echo -e "${YELLOW}Ensuring Cloud Build API is enabled...${NC}"
 gcloud services enable cloudbuild.googleapis.com
 
+# Validate deployment security - ensure no credential files in build context
+echo -e "${YELLOW}Validating deployment security...${NC}"
+if [ -f "firebase-credentials.json" ] || [ -f "gcloud-credentials.json" ] || [ -f "service-account-key.json" ]; then
+    echo -e "${RED}Security Error: Credential files found in deployment directory!${NC}"
+    echo -e "${RED}Firebase credentials should not be included in cloud deployments.${NC}"
+    echo -e "${RED}Please ensure .dockerignore excludes: firebase-credentials.json, gcloud-credentials.json, service-account-key.json${NC}"
+    exit 1
+fi
+
+# Copy shared module to local directory for Docker context
+echo -e "${YELLOW}📦 Preparing shared module...${NC}"
+if [ -d "./shared" ]; then
+    rm -rf ./shared
+fi
+cp -r ../shared ./shared
+
 # Build the Docker image using Cloud Build
 echo -e "${YELLOW}Building and pushing Docker image with Cloud Build...${NC}"
 gcloud builds submit --tag gcr.io/${PROJECT_ID}/${IMAGE_NAME} .

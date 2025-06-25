@@ -8,7 +8,7 @@ The query generation functionality has been **successfully migrated** from front
 
 ## 🔄 **WHAT WAS CHANGED**
 
-### **Backend (agent-tuning-service)**
+### **Backend (alchemist-agent-tuning)**
 
 #### ✅ **New API Endpoints Added**
 ```
@@ -79,7 +79,7 @@ getQueryDifficulties()
 
 ### **Request Flow**
 ```
-Frontend UI → TuningService → agent-tuning-service → OpenAI API
+Frontend UI → TuningService → alchemist-agent-tuning → OpenAI API
      ↓              ↓               ↓                    ↓
 User Training → API Client → FastAPI Backend → GPT-4 Generation
      ↓              ↓               ↓                    ↓
@@ -147,7 +147,7 @@ Query Display ← JSON Response ← Structured Data ← AI-Generated Query
 
 ### **Backend Deployment**
 ```bash
-# Update agent-tuning-service with new endpoints
+# Update alchemist-agent-tuning with new endpoints
 # Service includes OpenAI integration
 # Ready for Cloud Run deployment
 ```
@@ -160,7 +160,7 @@ Query Display ← JSON Response ← Structured Data ← AI-Generated Query
 ```
 
 ### **Production Verification**
-1. Deploy updated agent-tuning-service
+1. Deploy updated alchemist-agent-tuning
 2. Test query generation in training session
 3. Monitor API performance and error rates
 4. Verify query quality and variety
@@ -169,7 +169,7 @@ Query Display ← JSON Response ← Structured Data ← AI-Generated Query
 
 ## 📋 **FILES MODIFIED**
 
-### **Backend (agent-tuning-service)**
+### **Backend (alchemist-agent-tuning)**
 ```
 ✅ app/models/training_models.py          # New query models
 ✅ app/models/__init__.py                 # Export new models
@@ -213,7 +213,7 @@ Query Display ← JSON Response ← Structured Data ← AI-Generated Query
 
 ## ✨ **NEXT STEPS**
 
-1. **Deploy** updated agent-tuning-service to production
+1. **Deploy** updated alchemist-agent-tuning to production
 2. **Test** with authenticated users in real training sessions  
 3. **Monitor** query quality and generation performance
 4. **Iterate** based on user feedback and usage patterns

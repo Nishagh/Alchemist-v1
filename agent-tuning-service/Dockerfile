@@ -16,6 +16,12 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy shared module first
+COPY shared/ /app/shared/
+
+# Install shared module
+RUN pip install -e /app/shared/
+
 # Copy application code
 COPY . .
 

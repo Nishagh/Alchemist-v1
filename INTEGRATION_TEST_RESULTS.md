@@ -2,7 +2,7 @@
 
 ## ✅ **INTEGRATION STATUS: FULLY FUNCTIONAL**
 
-The query generation integration between the deployed agent-tuning-service and frontend fine-tuning interface has been **successfully tested and verified**.
+The query generation integration between the deployed alchemist-agent-tuning and frontend fine-tuning interface has been **successfully tested and verified**.
 
 ---
 
@@ -68,7 +68,7 @@ const generateDynamicQuery = async () => {
 
 ### **3. Backend Query Generation (NEW)**
 ```python
-# Backend: agent-tuning-service
+# Backend: alchemist-agent-tuning
 POST /api/training/queries/generate
 - Analyzes agent context (domain, business type, audience)
 - Uses OpenAI GPT-4 for intelligent query generation
@@ -132,7 +132,7 @@ companies like mine?"
 
 ### **Data Flow Validated**
 ```
-Frontend UI → TuningService.generateQueries() → agent-tuning-service
+Frontend UI → TuningService.generateQueries() → alchemist-agent-tuning
      ↓              ↓                                    ↓
    React State ← JSON Response ← OpenAI GPT-4 ← Agent Context Analysis
 ```
@@ -149,7 +149,7 @@ Frontend UI → TuningService.generateQueries() → agent-tuning-service
 
 ### **Deployment Status**
 ```
-✅ Backend: agent-tuning-service deployed and running
+✅ Backend: alchemist-agent-tuning deployed and running
 ✅ Frontend: Updated with backend integration  
 ✅ Environment: REACT_APP_TUNING_SERVICE_URL configured
 ✅ Authentication: Firebase Auth integration ready
@@ -236,13 +236,13 @@ The query generation integration is **fully functional** and ready for productio
 
 ### **Test Backend Health**
 ```bash
-curl https://agent-tuning-service-b3hpe34qdq-uc.a.run.app/health/
+curl https://alchemist-agent-tuning-b3hpe34qdq-uc.a.run.app/health/
 # Expected: {"status": "healthy"}
 ```
 
 ### **Test Query Categories**
 ```bash
-curl https://agent-tuning-service-b3hpe34qdq-uc.a.run.app/api/training/queries/categories
+curl https://alchemist-agent-tuning-b3hpe34qdq-uc.a.run.app/api/training/queries/categories
 # Expected: ["general","support","pricing","features","billing","compliance","urgent","sales"]
 ```
 
@@ -257,7 +257,7 @@ curl https://agent-tuning-service-b3hpe34qdq-uc.a.run.app/api/training/queries/c
 
 ## ✨ **SUCCESS METRICS**
 
-- ✅ **Backend Deployment**: agent-tuning-service running successfully
+- ✅ **Backend Deployment**: alchemist-agent-tuning running successfully
 - ✅ **API Integration**: All endpoints responding correctly
 - ✅ **Frontend Update**: Query generation migrated to backend
 - ✅ **Code Quality**: 115+ lines of templates removed

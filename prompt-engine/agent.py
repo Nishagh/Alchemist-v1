@@ -11,6 +11,7 @@ from typing import Dict, Any, Optional, Tuple, List
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from firebase_admin import firestore
+from firebase_admin.firestore import SERVER_TIMESTAMP
 import config.firebase_config as firebase_config
 
 logger = logging.getLogger(__name__)

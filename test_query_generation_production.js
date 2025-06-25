@@ -4,7 +4,7 @@
  */
 
 // Simulate frontend API client calls
-const TUNING_SERVICE_URL = 'https://agent-tuning-service-b3hpe34qdq-uc.a.run.app';
+const TUNING_SERVICE_URL = 'https://alchemist-agent-tuning-b3hpe34qdq-uc.a.run.app';
 
 console.log('🧪 Testing Query Generation Production Integration\n');
 

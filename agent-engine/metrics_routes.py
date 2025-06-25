@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
+from firebase_admin.firestore import SERVER_TIMESTAMP
 
 logger = logging.getLogger(__name__)
 

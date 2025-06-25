@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional, List
 import firebase_admin
 from firebase_admin import credentials, firestore
+from firebase_admin.firestore import SERVER_TIMESTAMP
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 from models.account_models import ManagedAccount

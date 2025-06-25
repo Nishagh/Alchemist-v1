@@ -4,7 +4,7 @@ FROM --platform=linux/amd64 python:3.11-slim
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app \
+    PYTHONPATH=/app:/app/shared \
     PORT=8080
 
 # Set work directory
@@ -22,12 +22,15 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python dependencies
-COPY requirements.txt .
+COPY billing-service/requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
+# Copy shared module first
+COPY shared /app/shared
+
 # Copy application code
-COPY . .
+COPY billing-service .
 
 # Create non-root user for security
 RUN adduser --disabled-password --gecos '' --shell /bin/bash user \

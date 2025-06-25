@@ -65,12 +65,13 @@ const Layout = ({ children }) => {
     <>
       {showFullAppBar && (
         <AppBar 
-          position="static" 
+          position="sticky" 
           elevation={0}
           sx={{
             background: theme.palette.mode === 'dark' ? '#000000' : '#ffffff',
             borderBottom: `1px solid ${theme.palette.mode === 'dark' ? '#333333' : '#e5e7eb'}`,
-            position: 'static',
+            position: 'sticky',
+            top: 0,
             zIndex: 1100,
             boxShadow: 'none'
           }}
@@ -154,15 +155,15 @@ const Layout = ({ children }) => {
                 
                 <Button
                   component={Link}
-                  to="/agent-editor"
+                  to="/create-agent"
                   startIcon={<RocketLaunchIcon />}
                   color="inherit"
-                  variant={location.pathname === '/agent-editor' || location.pathname.startsWith('/agent-editor/') ? 'contained' : 'text'}
+                  variant={location.pathname === '/create-agent' || location.pathname === '/agent-editor' || location.pathname.startsWith('/agent-editor/') ? 'contained' : 'text'}
                   sx={{
                     borderRadius: 2,
                     fontWeight: 'bold',
-                    bgcolor: (location.pathname === '/agent-editor' || location.pathname.startsWith('/agent-editor/')) ? (theme.palette.mode === 'dark' ? '#ffffff' : '#000000') : 'transparent',
-                    color: (location.pathname === '/agent-editor' || location.pathname.startsWith('/agent-editor/')) ? (theme.palette.mode === 'dark' ? '#000000' : '#ffffff') : theme.palette.text.primary,
+                    bgcolor: (location.pathname === '/create-agent' || location.pathname === '/agent-editor' || location.pathname.startsWith('/agent-editor/')) ? (theme.palette.mode === 'dark' ? '#ffffff' : '#000000') : 'transparent',
+                    color: (location.pathname === '/create-agent' || location.pathname === '/agent-editor' || location.pathname.startsWith('/agent-editor/')) ? (theme.palette.mode === 'dark' ? '#000000' : '#ffffff') : theme.palette.text.primary,
                     '&:hover': {
                       bgcolor: theme.palette.mode === 'dark' ? '#1a1a1a' : '#f9fafb'
                     }
@@ -331,7 +332,7 @@ const Layout = ({ children }) => {
       
       <Box 
         sx={{ 
-          mt: showFullAppBar ? 3 : 0, 
+          mt: 0, // Remove margin-top since header is now sticky
           mb: 3, 
           px: showFullAppBar ? 3 : 0,
           width: '100%',

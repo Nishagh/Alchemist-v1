@@ -1,0 +1,1 @@
+"""FastAPI REST API endpoints and application setup."""

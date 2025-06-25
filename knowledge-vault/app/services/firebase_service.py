@@ -1,11 +1,14 @@
 import os
 import json
-import firebase_admin
-from firebase_admin import credentials, firestore, storage
 from dotenv import load_dotenv
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 import uuid
+
+# Import centralized Firebase client
+from alchemist_shared.database.firebase_client import FirebaseClient
+from alchemist_shared.constants.collections import Collections
+from firebase_admin.firestore import SERVER_TIMESTAMP
 
 # Load environment variables
 load_dotenv()
@@ -20,88 +23,21 @@ class FirebaseService:
         return cls._instance
     
     def _initialize(self):
-        """Initialize Firebase client"""
+        """Initialize Firebase using centralized client"""
         try:
-            # Get storage bucket name from environment variable
-            # Try multiple possible environment variable names
-            storage_bucket = (
-                os.environ.get('FIREBASE_STORAGE_BUCKET') or
-                os.environ.get('GCS_BUCKET') or
-                os.environ.get('STORAGE_BUCKET')
-            )
+            # Use centralized Firebase client
+            self._firebase_client = FirebaseClient()
+            self.db = self._firebase_client.db
+            self.bucket = self._firebase_client.storage
             
-            # If still not found, try to construct from project ID
-            if not storage_bucket:
-                project_id = (
-                    os.environ.get('FIREBASE_PROJECT_ID') or
-                    os.environ.get('PROJECT_ID') or
-                    os.environ.get('GOOGLE_CLOUD_PROJECT') or
-                    os.environ.get('GCP_PROJECT')
-                )
-                if project_id:
-                    storage_bucket = f"{project_id}.appspot.com"
-                    print(f"No explicit storage bucket set, using default: {storage_bucket}")
+            # Initialize collection references using centralized constants
+            self.files_collection = self._firebase_client.get_knowledge_files_collection()
+            self.embeddings_base_collection = Collections.KNOWLEDGE_EMBEDDINGS
             
-            if not storage_bucket:
-                raise ValueError("Storage bucket name not specified. Set FIREBASE_STORAGE_BUCKET environment variable or ensure FIREBASE_PROJECT_ID is set.")
-            
-            print(f"Initializing Firebase with storage bucket: {storage_bucket}")
-                
-            if not firebase_admin._apps:
-                # Handle credentials properly for both local and Cloud Run environments
-                credentials_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
-                print(f"Credentials path from env: {credentials_path}")
-                
-                # Check if we're in Cloud Run (no credentials file) or local development
-                use_default_credentials = True
-                
-                if credentials_path and os.path.exists(credentials_path):
-                    # Local development with credentials file
-                    try:
-                        print(f"Using credentials file: {credentials_path}")
-                        cred = credentials.Certificate(credentials_path)
-                        firebase_admin.initialize_app(cred, options={
-                            'storageBucket': storage_bucket
-                        })
-                        print(f"Successfully initialized Firebase with credentials file: {credentials_path}")
-                        use_default_credentials = False
-                    except Exception as e:
-                        print(f"Failed to use credentials file: {e}, falling back to default credentials")
-                        use_default_credentials = True
-                
-                if use_default_credentials:
-                    # Cloud Run with default service account - unset the env var to avoid conflicts
-                    print("Using default service account authentication")
-                    
-                    # Temporarily unset the credentials path to force default credentials
-                    original_creds_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
-                    if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
-                        del os.environ['GOOGLE_APPLICATION_CREDENTIALS']
-                        print("Temporarily removed GOOGLE_APPLICATION_CREDENTIALS env var")
-                    
-                    try:
-                        firebase_admin.initialize_app(options={
-                            'storageBucket': storage_bucket
-                        })
-                        print("Successfully initialized Firebase with default service account")
-                    except Exception as e:
-                        # Restore the original environment variable if initialization failed
-                        if original_creds_path:
-                            os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = original_creds_path
-                        raise e
-                
-            # Initialize Firestore and Storage
-            self.db = firestore.client()
-            self.bucket = storage.bucket()
-            self.files_collection = self.db.collection('knowledge_base_files')
-            # Using new collection structure for embeddings: knowledge_base_embeddings/{agent_id}_embeddings/{chunk_id}
-            self.embeddings_base_collection = 'knowledge_base_embeddings'
-            
-            print("Firebase successfully initialized")
+            print("Knowledge Vault Firebase service initialized successfully using centralized client")
             
         except Exception as e:
             print(f"Error initializing Firebase: {str(e)}")
-            print(f"Environment variables: FIREBASE_STORAGE_BUCKET={os.environ.get('FIREBASE_STORAGE_BUCKET')}, FIREBASE_PROJECT_ID={os.environ.get('FIREBASE_PROJECT_ID')}, PROJECT_ID={os.environ.get('PROJECT_ID')}")
             raise e
     
     def add_file(self, file_data: Dict[str, Any]) -> str:
@@ -112,7 +48,7 @@ class FirebaseService:
         
         # Set upload date if not provided
         if 'upload_date' not in file_data:
-            file_data['upload_date'] = datetime.now()
+            file_data['upload_date'] = SERVER_TIMESTAMP
         
         # Store in Firestore - create new document
         self.files_collection.document(file_id).set(file_data)
@@ -171,8 +107,8 @@ class FirebaseService:
                 'content': chunk.get('content'),
                 'page_number': chunk.get('page_number', 1),
                 'embedding': chunk.get('embedding'),
-                'created_at': chunk.get('created_at', datetime.now()),
-                'updated_at': datetime.now()
+                'created_at': chunk.get('created_at', SERVER_TIMESTAMP),
+                'updated_at': SERVER_TIMESTAMP
             }
             
             batch.set(doc_ref, embedding_doc)

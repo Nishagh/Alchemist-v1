@@ -1,14 +1,18 @@
 """
 Firebase service for the Agent Tuning Service
+
+Updated to use centralized Firebase client for consistent authentication.
 """
 
 import asyncio
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
-import firebase_admin
-from firebase_admin import credentials, firestore
 from google.cloud import storage
 import structlog
+
+# Import centralized Firebase client
+from alchemist_shared.database.firebase_client import FirebaseClient
+from firebase_admin.firestore import SERVER_TIMESTAMP
 
 from app.config.settings import get_settings
 from app.models import TrainingJob, TrainingPair, FineTunedModel, JobStatus
@@ -21,32 +25,22 @@ class FirebaseService:
     
     def __init__(self):
         self.settings = get_settings()
-        self.db: Optional[firestore.AsyncClient] = None
+        self.db = None
         self.storage_client: Optional[storage.Client] = None
+        self._firebase_client: Optional[FirebaseClient] = None
         self._initialized = False
     
     async def initialize(self):
-        """Initialize Firebase services"""
+        """Initialize Firebase services using centralized client"""
         if self._initialized:
             return
         
         try:
-            # Initialize Firebase Admin SDK
-            if not firebase_admin._apps:
-                if self.settings.firebase_credentials_path:
-                    cred = credentials.Certificate(self.settings.firebase_credentials_path)
-                else:
-                    # Use default credentials (service account key)
-                    cred = credentials.ApplicationDefault()
-                
-                firebase_admin.initialize_app(cred, {
-                    'projectId': self.settings.firebase_project_id,
-                })
+            # Use centralized Firebase client
+            self._firebase_client = FirebaseClient()
+            self.db = self._firebase_client.db
             
-            # Initialize Firestore client
-            self.db = firestore.AsyncClient(project=self.settings.firebase_project_id)
-            
-            # Initialize Cloud Storage client
+            # Initialize Cloud Storage client using the same authentication
             self.storage_client = storage.Client(project=self.settings.firebase_project_id)
             
             self._initialized = True
@@ -115,7 +109,7 @@ class FirebaseService:
             doc_ref = self.db.collection(self.settings.firestore_collection_training_jobs).document(job_id)
             
             # Add updated timestamp
-            updates['updated_at'] = datetime.now(timezone.utc)
+            updates['updated_at'] = SERVER_TIMESTAMP
             
             await doc_ref.update(updates)
             
@@ -196,7 +190,7 @@ class FirebaseService:
                 'id': batch_id,
                 'agent_id': agent_id,
                 'total_pairs': len(training_pairs),
-                'created_at': datetime.now(timezone.utc)
+                'created_at': SERVER_TIMESTAMP
             }
             await batch_doc_ref.set(batch_data)
             
@@ -379,7 +373,7 @@ class FirebaseService:
                     'training_frequency': session.auto_training_config.training_frequency,
                     'model_config': session.auto_training_config.model_config.dict() if session.auto_training_config.model_config else None
                 } if session.auto_training_config else None,
-                'updated_at': datetime.now(timezone.utc)
+                'updated_at': SERVER_TIMESTAMP
             }
             
             # Save to Firestore
@@ -546,7 +540,7 @@ class FirebaseService:
                 'auto_trigger_enabled': config.auto_trigger_enabled,
                 'training_frequency': config.training_frequency,
                 'model_config': config.model_config.dict() if config.model_config else None,
-                'updated_at': datetime.now(timezone.utc)
+                'updated_at': SERVER_TIMESTAMP
             }
             
             doc_ref = self.db.collection('auto_training_configs').document(agent_id)

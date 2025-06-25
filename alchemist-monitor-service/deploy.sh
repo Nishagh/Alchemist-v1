@@ -45,13 +45,35 @@ print_status "Project: $PROJECT_ID"
 print_status "Region: $REGION"
 print_status "Environment: $ENVIRONMENT"
 
-# Build and deploy using Cloud Build
-print_status "📦 Building and deploying with Cloud Build..."
+# Navigate to parent directory for build context (needed for shared module access)
+cd ..
 
-gcloud builds submit \
-    --config=cloudbuild.yaml \
-    --timeout=1200s \
-    --project=$PROJECT_ID
+# Build and deploy using local Docker
+print_status "📦 Building Docker image locally..."
+IMAGE_TAG="gcr.io/$PROJECT_ID/alchemist-monitor-service:latest"
+
+# Build the Docker image
+docker build --platform linux/amd64 -t $IMAGE_TAG -f alchemist-monitor-service/Dockerfile .
+
+# Push the image to Google Container Registry
+print_status "📤 Pushing image to Container Registry..."
+docker push $IMAGE_TAG
+
+# Deploy to Cloud Run
+print_status "🚀 Deploying to Cloud Run..."
+gcloud run deploy alchemist-monitor-service \
+    --image $IMAGE_TAG \
+    --platform managed \
+    --region $REGION \
+    --allow-unauthenticated \
+    --memory 1Gi \
+    --cpu 1 \
+    --concurrency 100 \
+    --max-instances 10 \
+    --min-instances 1 \
+    --timeout 300 \
+    --set-env-vars "ENVIRONMENT=production" \
+    --project $PROJECT_ID
 
 if [[ $? -eq 0 ]]; then
     print_success "✅ Cloud Build completed successfully!"

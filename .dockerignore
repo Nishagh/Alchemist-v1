@@ -1,13 +1,13 @@
 # Dockerignore for Agent Launcher
 # Only include agent-launcher directory, exclude everything else
 
-# Exclude all other services
+# Exclude all other services (except when building specific services)
 admin-dashboard/
 agent-bridge/
 agent-engine/
 agent-studio/
 agent-tuning-service/
-alchemist-monitor-service/
+# alchemist-monitor-service/ - Allow for monitor service builds
 banking-api-service/
 knowledge-vault/
 mcp_config_generator/
@@ -85,6 +85,14 @@ Thumbs.db
 # Exclude credentials and config files that shouldn't be in container
 firebase-credentials.json
 **/firebase-credentials.json
+gcloud-credentials.json
+**/gcloud-credentials.json
+service-account-key.json
+**/service-account-key.json
+**/secrets/
+**/credentials/
+**/keys/
+**/certificates/
 
 # Exclude shared libraries build artifacts
 shared/build/

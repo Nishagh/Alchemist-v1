@@ -6,7 +6,7 @@
  */
 
 import { apiConfig } from '../config/apiConfig';
-import { db } from '../../utils/firebase';
+import { db, Collections, DocumentFields, StatusValues, serverTimestamp } from '../../utils/firebase';
 import { collection, query, where, orderBy, getDocs, doc, getDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 
 const DEPLOYMENT_SERVICE_URL = process.env.REACT_APP_DEPLOYMENT_SERVICE_URL || 'http://0.0.0.0:8080';
@@ -56,17 +56,17 @@ class DeploymentService {
   async getDeploymentStatus(deploymentId) {
     try {
       // First try to get from Firestore
-      const deploymentDoc = doc(db, 'agent_deployments', deploymentId);
+      const deploymentDoc = doc(db, Collections.AGENT_DEPLOYMENTS, deploymentId);
       const docSnapshot = await getDoc(deploymentDoc);
       
       if (docSnapshot.exists()) {
         const data = docSnapshot.data();
         return {
-          deployment_id: deploymentId,
+          [DocumentFields.DEPLOYMENT_ID]: deploymentId,
           ...data,
           // Convert Firestore timestamps to ISO strings for consistency
-          created_at: data.created_at?.toDate?.()?.toISOString() || data.created_at,
-          updated_at: data.updated_at?.toDate?.()?.toISOString() || data.updated_at
+          [DocumentFields.CREATED_AT]: data[DocumentFields.CREATED_AT]?.toDate?.()?.toISOString() || data[DocumentFields.CREATED_AT],
+          [DocumentFields.UPDATED_AT]: data[DocumentFields.UPDATED_AT]?.toDate?.()?.toISOString() || data[DocumentFields.UPDATED_AT]
         };
       }
     } catch (error) {
@@ -370,8 +370,8 @@ class DeploymentService {
       const agentUpdates = {
         deployment_status: 'completed',
         active_deployment_id: deploymentData.deployment_id,
-        last_deployment_at: new Date(),
-        updated_at: new Date()
+        last_deployment_at: serverTimestamp(),
+        updated_at: serverTimestamp()
       };
       
       // Add service URL if available

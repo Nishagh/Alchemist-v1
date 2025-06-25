@@ -123,7 +123,7 @@ class MonitoringScheduler:
             logger.debug(f"Scheduler heartbeat: {active_jobs} active jobs")
             
             # Store heartbeat in Firestore to track scheduler health
-            await self.health_monitor.firebase_client.db.collection('monitoring').document('scheduler').set({
+            self.health_monitor.firebase_client.db.collection('monitoring').document('scheduler').set({
                 'last_heartbeat': datetime.utcnow(),
                 'active_jobs': active_jobs,
                 'status': 'running'

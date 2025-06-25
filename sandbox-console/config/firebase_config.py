@@ -1,15 +1,51 @@
 """
-Firebase Configuration - V9 Modular Approach
+Firebase Configuration - Updated to use centralized client
 
-Centralized configuration management for Firebase services.
+Centralized configuration management for Firebase services using shared Firebase client.
 """
-import os
+import logging
 from typing import Optional
-from dataclasses import dataclass
-from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Import centralized Firebase client
+from alchemist_shared.database.firebase_client import FirebaseClient
+
+logger = logging.getLogger(__name__)
+
+# Cache for the centralized Firebase client
+_firebase_client = None
+
+def get_firebase_client() -> FirebaseClient:
+    """
+    Get centralized Firebase client instance.
+    
+    Returns:
+        FirebaseClient instance
+    """
+    global _firebase_client
+    
+    if not _firebase_client:
+        _firebase_client = FirebaseClient()
+        logger.info("Sandbox Console: Firebase client initialized using centralized authentication")
+    
+    return _firebase_client
+
+def get_firestore_client():
+    """
+    Get Firestore client using centralized authentication.
+    
+    Returns:
+        Firestore client instance
+    """
+    return get_firebase_client().db
+
+def get_storage_bucket():
+    """
+    Get Firebase Storage bucket using centralized client.
+    
+    Returns:
+        Firebase Storage bucket instance
+    """
+    return get_firebase_client().storage
 
 @dataclass
 class FirebaseSettings:

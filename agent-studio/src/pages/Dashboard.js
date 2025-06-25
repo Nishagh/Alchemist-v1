@@ -187,7 +187,7 @@ const Dashboard = () => {
       let unsubscribePhones;
       
       // Load agents from correct collection
-      const agentsRef = collection(db, 'alchemist_agents');
+      const agentsRef = collection(db, 'agents');
       const agentsQuery = query(
         agentsRef, 
         where('userId', '==', currentUser.uid),
@@ -306,7 +306,7 @@ const Dashboard = () => {
       description: 'Build a new AI agent',
       icon: <SmartToyIcon />,
       color: '#6366f1',
-      action: () => navigate('/agent-editor')
+      action: () => navigate('/create-agent')
     },
     {
       title: 'My Agents',
@@ -327,7 +327,7 @@ const Dashboard = () => {
           navigate(`/agent/${recentAgents[0].id}`);
         } else {
           // If no agents, suggest creating one first
-          navigate('/agent-editor');
+          navigate('/create-agent');
         }
       }
     },
@@ -589,7 +589,7 @@ const Dashboard = () => {
                       <Button
                         variant="contained"
                         startIcon={<AddIcon />}
-                        onClick={() => navigate('/agent-editor')}
+                        onClick={() => navigate('/create-agent')}
                       >
                         Create Agent
                       </Button>

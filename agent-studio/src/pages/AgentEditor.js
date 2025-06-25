@@ -32,6 +32,13 @@ const AgentEditor = () => {
   const { agentId } = useParams();
   const location = useLocation();
   
+  // Redirect to create agent if no agentId
+  React.useEffect(() => {
+    if (!agentId) {
+      navigate('/create-agent');
+    }
+  }, [agentId, navigate]);
+  
   // Core state management
   const { 
     agent, 
@@ -117,9 +124,12 @@ const AgentEditor = () => {
       'fine-tuning': 'fine-tuning'
     };
 
+    // Always allow section changes for better UX
+    setActiveSection(newSection);
+    
+    // Update workflow stage if available
     const stageId = sectionToStageMap[newSection];
-    if (stageId && workflow.canAccessStage(stageId)) {
-      setActiveSection(newSection);
+    if (stageId && workflow && workflow.navigateToStage) {
       workflow.navigateToStage(stageId);
     }
   };
@@ -175,80 +185,23 @@ const AgentEditor = () => {
       case 'definition':
         return (
           <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-            {/* Sticky Header */}
-            <Box sx={{ 
-              position: 'sticky',
-              top: 0,
-              zIndex: 100,
-              p: 3, 
-              pb: 2,
-              borderBottom: 1, 
-              borderColor: 'divider',
-              bgcolor: 'background.paper',
-              display: 'flex',
-              alignItems: 'center',
-              backdropFilter: 'blur(8px)',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-            }}>
-              <IconButton 
-                onClick={handleBackClick} 
-                sx={{ 
-                  mr: 2,
-                  color: '#6366f1',
-                  '&:hover': {
-                    bgcolor: '#6366f115',
-                    color: '#4f46e5'
-                  }
-                }}
-              >
-                <ArrowBackIcon />
-              </IconButton>
-              <Typography variant="h5" sx={{ fontWeight: 600 }}>
-                {loading ? 'Loading...' : (agent?.name || 'New Agent')}
-              </Typography>
-            </Box>
-
-            {/* Workflow Progress Indicator */}
-            <Box sx={{ px: 3, pt: 2 }}>
-              <WorkflowProgressIndicator 
-                workflow={workflow}
-                agentId={agentId}
-                compact={true}
-                onStageClick={handleWorkflowStageClick}
-              />
-            </Box>
-
-            {/* Main Content */}
+            {/* Full Height Conversation - No headers */}
             <Box sx={{ 
               flex: 1,
-              display: 'flex', 
-              gap: 3, 
-              p: 3,
+              display: 'flex',
               overflow: 'hidden',
-              minHeight: 0
+              minHeight: 0,
+              width: '100%'
             }}>
-              {/* Left Panel - Alchemist Conversation */}
-              <Box sx={{ flex: 1, minHeight: 0 }}>
-                <AgentConversationPanel
-                  agentId={agentId}
-                  messages={messages}
-                  onMessagesUpdate={setMessages}
-                  thoughtProcess={thoughtProcess}
-                  onThoughtProcessUpdate={setThoughtProcess}
-                  disabled={saving}
-                />
-              </Box>
-              
-              {/* Right Panel - Agent Configuration */}
-              <Box sx={{ width: '400px', minHeight: 0 }}>
-                <AgentConfigurationForm
-                  agent={agent}
-                  onAgentUpdate={handleAgentUpdate}
-                  onSave={handleAgentSave}
-                  saving={saving}
-                  disabled={loading}
-                />
-              </Box>
+              <AgentConversationPanel
+                agentId={agentId}
+                messages={messages}
+                onMessagesUpdate={setMessages}
+                thoughtProcess={thoughtProcess}
+                onThoughtProcessUpdate={setThoughtProcess}
+                disabled={saving}
+                fullHeight={true}
+              />
             </Box>
           </Box>
         );
@@ -348,6 +301,10 @@ const AgentEditor = () => {
         onSectionChange={handleSectionChange}
         disabled={saving}
         workflow={workflow}
+        agent={agent}
+        onAgentUpdate={handleAgentUpdate}
+        onAgentSave={handleAgentSave}
+        saving={saving}
       >
         {renderSectionContent()}
       </AgentSidebarNavigation>

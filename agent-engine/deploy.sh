@@ -1,5 +1,5 @@
 #!/bin/bash
-# Deployment script for Alchemist backend to Google Cloud Run
+# Deployment script for Alchemist agent engine to Google Cloud Run
 
 set -e
 
@@ -9,7 +9,7 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-echo -e "${YELLOW}Deploying Alchemist backend to Google Cloud Run...${NC}"
+echo -e "${YELLOW}Deploying Alchemist agent engine to Google Cloud Run...${NC}"
 
 # Check if .env file exists and load it
 if [ -f ".env" ]; then
@@ -86,4 +86,4 @@ echo -e "\n${YELLOW}Starting Cloud Build deployment...${NC}"
 gcloud builds submit --config=cloudbuild.yaml
 
 echo -e "\n${GREEN}Deployment initiated! Build and deployment progress can be monitored in the Google Cloud Console.${NC}"
-echo -e "Once complete, your service will be available at: https://alchemist-backend-[hash].run.app" 
+echo -e "Once complete, your service will be available at: https://alchemist-agent-engine-[hash].run.app" 

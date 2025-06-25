@@ -1,0 +1,1 @@
+"""Core narrative and identity management modules."""

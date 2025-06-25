@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, Tuple
 import openai
 import structlog
+from firebase_admin import firestore
 
 from app.config.settings import get_settings
 from app.models import (
@@ -16,6 +17,8 @@ from app.models import (
     ModelProvider, TrainingDataFormat
 )
 from app.services.firebase_service import FirebaseService
+
+SERVER_TIMESTAMP = firestore.SERVER_TIMESTAMP
 
 logger = structlog.get_logger(__name__)
 
@@ -263,7 +266,7 @@ class TrainingService:
             config=config,
             total_training_pairs=len(training_pairs),
             training_data_url=processed_response.processed_data_url,
-            created_at=datetime.now(timezone.utc),
+            created_at=SERVER_TIMESTAMP,
             cost_estimate=processed_response.estimated_cost
         )
         
@@ -295,7 +298,7 @@ class TrainingService:
             # Update status to queued
             await self.firebase_service.update_training_job(job_id, {
                 'status': JobStatus.QUEUED.value,
-                'started_at': datetime.now(timezone.utc)
+                'started_at': SERVER_TIMESTAMP
             })
             
             # Start training based on provider
@@ -408,7 +411,7 @@ class TrainingService:
             # Handle completion
             if new_status == JobStatus.COMPLETED:
                 updates.update({
-                    'completed_at': datetime.now(timezone.utc),
+                    'completed_at': SERVER_TIMESTAMP,
                     'external_model_id': openai_job.fine_tuned_model,
                     'result_model_id': openai_job.fine_tuned_model,
                     'progress_percentage': 100.0
@@ -463,9 +466,9 @@ class TrainingService:
             external_model_id=openai_job.fine_tuned_model,
             training_job_id=job.id,
             training_pairs_count=job.total_training_pairs,
-            training_completed_at=datetime.now(timezone.utc),
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc)
+            training_completed_at=SERVER_TIMESTAMP,
+            created_at=SERVER_TIMESTAMP,
+            updated_at=SERVER_TIMESTAMP
         )
         
         await self.firebase_service.store_fine_tuned_model(model)
@@ -493,7 +496,7 @@ class TrainingService:
             # Update job status
             await self.firebase_service.update_training_job(job_id, {
                 'status': JobStatus.CANCELLED.value,
-                'completed_at': datetime.now(timezone.utc)
+                'completed_at': SERVER_TIMESTAMP
             })
             
             logger.info("Training job cancelled", job_id=job_id)

@@ -5,7 +5,7 @@
  * Only handles webhook configuration - no complex Business API setup.
  */
 
-import { db } from '../../utils/firebase';
+import { db, serverTimestamp } from '../../utils/firebase';
 import { 
   collection, 
   doc, 
@@ -37,8 +37,8 @@ class WhatsAppWebhookService {
         app_secret: config.app_secret || null, // Optional for existing users
         webhook_url: config.webhook_url,
         status: 'configured',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        created_at: serverTimestamp(),
+        updated_at: serverTimestamp()
       };
 
       // Save to webhook configs collection
@@ -73,7 +73,7 @@ class WhatsAppWebhookService {
       // Update the agent configuration with WhatsApp webhook settings
       await updateDoc(agentRef, {
         'whatsapp_webhook': whatsappConfig,
-        'updated_at': new Date().toISOString()
+        'updated_at': serverTimestamp()
       });
       
       console.log('Agent WhatsApp configuration updated');
@@ -119,7 +119,7 @@ class WhatsAppWebhookService {
       const docRef = doc(db, this.collectionName, configId);
       await updateDoc(docRef, {
         ...updates,
-        updated_at: new Date().toISOString()
+        updated_at: serverTimestamp()
       });
       
       return true;

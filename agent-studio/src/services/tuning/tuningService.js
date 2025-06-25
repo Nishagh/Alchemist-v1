@@ -1,7 +1,7 @@
 /**
  * Agent Tuning Service API Client
  * 
- * Service for communicating with the agent-tuning-service backend
+ * Service for communicating with the alchemist-agent-tuning backend
  */
 
 import { getApiConfig } from '../config/apiConfig';

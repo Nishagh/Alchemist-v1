@@ -34,7 +34,8 @@ const AgentConversationPanel = ({
   onMessagesUpdate,
   thoughtProcess = [],
   onThoughtProcessUpdate,
-  disabled = false 
+  disabled = false,
+  fullHeight = false
 }) => {
   const [userInput, setUserInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -190,23 +191,25 @@ const AgentConversationPanel = ({
           }}
         >
           <Paper
-            elevation={1}
+            elevation={0}
             sx={{
               p: 2,
               maxWidth: '80%',
               bgcolor: isUser 
-                ? 'primary.main' 
+                ? (theme) => theme.palette.mode === 'dark' ? '#000000' : '#ffffff'
                 : isError 
-                  ? 'error.light' 
-                  : 'background.paper',
+                  ? (theme) => theme.palette.mode === 'dark' ? '#444444' : '#f0f0f0'
+                  : (theme) => theme.palette.mode === 'dark' ? '#333333' : '#f8f9fa',
               color: isUser 
-                ? 'primary.contrastText' 
+                ? (theme) => theme.palette.mode === 'dark' ? '#ffffff' : '#000000'
                 : isError 
-                  ? 'error.contrastText' 
-                  : 'text.primary',
+                  ? (theme) => theme.palette.mode === 'dark' ? '#ffffff' : '#000000'
+                  : (theme) => theme.palette.mode === 'dark' ? '#ffffff' : '#000000',
               borderRadius: 2,
-              border: isUser ? 'none' : '1px solid',
-              borderColor: isUser ? 'transparent' : 'divider'
+              border: '1px solid',
+              borderColor: isUser 
+                ? (theme) => theme.palette.mode === 'dark' ? '#555555' : '#dddddd'
+                : (theme) => theme.palette.mode === 'dark' ? '#555555' : '#dddddd'
             }}
           >
             <Typography
@@ -237,6 +240,217 @@ const AgentConversationPanel = ({
     );
   };
 
+  if (fullHeight) {
+    // Full height layout with fixed input at bottom
+    return (
+      <Box 
+        sx={{ 
+          height: '100vh',
+          width: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          bgcolor: 'background.default',
+          position: 'relative'
+        }}
+      >
+        {/* Messages Area - Takes full height minus input */}
+        <Box 
+          sx={{ 
+            flex: 1,
+            overflowY: 'auto',
+            px: 3,
+            py: 2,
+            pb: '120px', // Space for fixed input area
+            minHeight: 0,
+            width: '100%'
+          }}
+        >
+          {loadingConversations ? (
+            <Box 
+              sx={{ 
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%',
+                textAlign: 'center',
+                color: 'text.secondary'
+              }}
+            >
+              <CircularProgress sx={{ mb: 2 }} />
+              <Typography variant="h6" sx={{ mb: 1 }}>
+                Loading conversation history...
+              </Typography>
+              <Typography variant="body2">
+                Fetching your previous conversations with Alchemist
+              </Typography>
+            </Box>
+          ) : messages.length === 0 ? (
+            <Box 
+              sx={{ 
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%',
+                textAlign: 'center',
+                color: 'text.secondary'
+              }}
+            >
+              <PsychologyIcon sx={{ fontSize: 48, mb: 2, opacity: 0.5 }} />
+              <Typography variant="h6" sx={{ mb: 1 }}>
+                Start a conversation
+              </Typography>
+              <Typography variant="body2">
+                Ask Alchemist to help you configure your agent
+              </Typography>
+            </Box>
+          ) : (
+            <>
+              {messages.map(renderMessage)}
+              {loading && (
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                  <Paper
+                    elevation={1}
+                    sx={{
+                      p: 2,
+                      bgcolor: 'background.paper',
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      borderRadius: 2
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <CircularProgress size={16} sx={{ mr: 1 }} />
+                      <Typography variant="body2" color="text.secondary">
+                        Alchemist is thinking...
+                      </Typography>
+                    </Box>
+                  </Paper>
+                </Box>
+              )}
+              <div ref={messagesEndRef} />
+            </>
+          )}
+        </Box>
+
+        {/* Thought Process - Fixed above input */}
+        {thoughtProcess.length > 0 && (
+          <Box sx={{ 
+            borderTop: 1, 
+            borderColor: 'divider',
+            position: 'fixed',
+            bottom: '80px',
+            left: { xs: 0, md: '420px' },
+            right: 0,
+            bgcolor: 'background.paper',
+            zIndex: 999
+          }}>
+            <ThoughtProcessDisplay thoughtProcess={thoughtProcess} />
+          </Box>
+        )}
+
+        {/* Error Display - Fixed above input */}
+        {error && (
+          <Box sx={{ 
+            p: 2, 
+            borderTop: 1, 
+            borderColor: 'divider',
+            position: 'fixed',
+            bottom: '80px',
+            left: { xs: 0, md: '420px' },
+            right: 0,
+            bgcolor: 'background.paper',
+            zIndex: 999
+          }}>
+            <Alert severity="error" onClose={() => setError('')}>
+              {error}
+            </Alert>
+          </Box>
+        )}
+
+        {/* File Upload Area - Fixed above input */}
+        {showFileUpload && (
+          <Box sx={{ 
+            p: 3, 
+            borderTop: 1, 
+            borderColor: 'divider',
+            position: 'fixed',
+            bottom: '80px',
+            left: { xs: 0, md: '420px' },
+            right: 0,
+            bgcolor: 'background.paper',
+            zIndex: 999
+          }}>
+            <FileUploadArea
+              onFilesUploaded={handleFileUpload}
+              onCancel={() => setShowFileUpload(false)}
+              accept=".txt,.md,.json,.yaml,.yml"
+              maxFiles={5}
+            />
+          </Box>
+        )}
+
+        {/* Fixed Input Area at Bottom */}
+        <Box sx={{ 
+          p: 3,
+          borderTop: 1, 
+          borderColor: 'divider',
+          bgcolor: 'background.paper',
+          position: 'fixed',
+          bottom: 0,
+          left: { xs: 0, md: '420px' }, // Account for sidebar width
+          right: 0,
+          zIndex: 1200, // Higher than sticky header (1100)
+          boxSizing: 'border-box'
+        }}>
+          <TextField
+            ref={inputRef}
+            fullWidth
+            multiline
+            maxRows={4}
+            value={userInput}
+            onChange={(e) => setUserInput(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder="Ask Alchemist to help configure your agent..."
+            disabled={disabled || loading}
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <IconButton
+                      onClick={() => setShowFileUpload(!showFileUpload)}
+                      disabled={disabled || loading}
+                      size="small"
+                      color={showFileUpload ? 'primary' : 'default'}
+                    >
+                      <AttachFileIcon />
+                    </IconButton>
+                    <IconButton
+                      onClick={handleSendMessage}
+                      disabled={disabled || loading || !userInput.trim()}
+                      color="primary"
+                      size="small"
+                    >
+                      {loading ? <CircularProgress size={20} /> : <SendIcon />}
+                    </IconButton>
+                  </Box>
+                </InputAdornment>
+              )
+            }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                borderRadius: 2,
+                bgcolor: 'background.default'
+              }
+            }}
+          />
+        </Box>
+      </Box>
+    );
+  }
+
+  // Original layout for other sections
   return (
     <Paper 
       elevation={0} 

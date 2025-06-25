@@ -26,6 +26,7 @@ import Signup from './pages/Signup';
 import ForgotPassword from './pages/ForgotPassword';
 import LandingPage from './pages/LandingPage';
 import AgentCreationRedirect from './pages/AgentCreationRedirect';
+import CreateAgent from './pages/CreateAgent';
 import Credits from './pages/Credits';
 import Account from './pages/Account';
 
@@ -519,6 +520,10 @@ function App() {
     {
       path: '/agent/:agentId',
       element: <ProtectedRoute><AgentDashboard /></ProtectedRoute>
+    },
+    {
+      path: '/create-agent',
+      element: <ProtectedRoute><CreateAgent /></ProtectedRoute>
     },
     {
       path: '/agent-editor',

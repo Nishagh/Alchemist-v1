@@ -5,6 +5,9 @@
  * and provide a single import point for all API operations
  */
 
+// Identity service import
+import identityService from './identity/identityService';
+
 // Core services
 export { initializeAuthInterceptors, getAuthToken, verifyTokenWithServer } from './auth/authService';
 export { API_BASE_URL, KNOWLEDGE_BASE_URL, MCP_MANAGER_URL, TUNING_SERVICE_URL, ENDPOINTS, api, kbApi, mcpApi, tuningApi, getApiConfig } from './config/apiConfig';
@@ -141,3 +144,10 @@ export * from './apiIntegration/apiIntegrationService';
 export * from './mcpServer/mcpServerService';
 export * from './deployment/deploymentService';
 export * from './tuning/tuningService';
+
+// Identity services (GNF integration)
+export const getAgentIdentity = (...args) => identityService.getAgentIdentity(...args);
+export const getAgentInteractions = (...args) => identityService.getAgentInteractions(...args);
+export const getResponsibilityReport = (...args) => identityService.getResponsibilityReport(...args);
+export const createAgentIdentity = (...args) => identityService.createAgentIdentity(...args);
+export const updateAgentIdentity = (...args) => identityService.updateAgentIdentity(...args);

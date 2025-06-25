@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     debug: bool = True
     
     # Service configuration
-    service_name: str = "agent-tuning-service"
+    service_name: str = "alchemist-agent-tuning"
     port: int = 8080
     host: str = "0.0.0.0"
     
@@ -117,5 +117,5 @@ def get_production_settings() -> Settings:
     settings = get_settings()
     settings.debug = False
     settings.log_level = "INFO"
-    settings.allowed_hosts = ["agent-tuning-service-*", "*.run.app"]
+    settings.allowed_hosts = ["alchemist-agent-tuning-*", "*.run.app"]
     return settings

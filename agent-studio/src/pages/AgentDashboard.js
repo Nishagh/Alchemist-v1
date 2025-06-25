@@ -39,12 +39,14 @@ import {
   Warning as WarningIcon,
   Launch as LaunchIcon,
   WhatsApp as WhatsAppIcon,
-  Language as WebsiteIcon
+  Language as WebsiteIcon,
+  Psychology as PsychologyIcon
 } from '@mui/icons-material';
 
 // Import components
 import WorkflowProgressIndicator from '../components/AgentEditor/WorkflowProgress/WorkflowProgressIndicator';
 import NotificationSystem, { createNotification } from '../components/shared/NotificationSystem';
+import { AgentIdentityPanel } from '../components/AgentEditor/AgentIdentity';
 
 // Import hooks and services
 import useAgentState from '../hooks/useAgentState';
@@ -65,6 +67,7 @@ const AgentDashboard = () => {
   const [notification, setNotification] = useState(null);
   const [deployments, setDeployments] = useState([]);
   const [loadingDeployments, setLoadingDeployments] = useState(true);
+  const [showIdentityPanel, setShowIdentityPanel] = useState(false);
 
   // Load deployments when agentId changes
   useEffect(() => {
@@ -141,6 +144,16 @@ const AgentDashboard = () => {
       route: `/agent-editor/${agentId}`,
       stage: 'definition',
       features: ['Agent Definition', 'Knowledge Base', 'API Integration', 'Pre-testing', 'Fine-tuning']
+    },
+    {
+      id: 'identity',
+      title: 'Agent Identity',
+      description: 'View agent personality, narrative arc, and responsibility metrics',
+      icon: PsychologyIcon,
+      color: '#6366f1',
+      stage: 'identity',
+      features: ['Personality Metrics', 'Narrative Arc', 'Responsibility Report', 'Interaction Analysis'],
+      isPanel: true
     },
     {
       id: 'deployment',
@@ -449,7 +462,14 @@ const AgentDashboard = () => {
                   } : {},
                   border: '2px solid transparent'
                 }}
-                onClick={() => isAccessible && navigate(feature.route)}
+                onClick={() => {
+                  if (!isAccessible) return;
+                  if (feature.isPanel) {
+                    setShowIdentityPanel(true);
+                  } else {
+                    navigate(feature.route);
+                  }
+                }}
               >
                 <CardContent sx={{ flex: 1, p: 3 }}>
                   {/* Header */}
@@ -553,6 +573,68 @@ const AgentDashboard = () => {
           onStageClick={handleWorkflowStageClick}
         />
       </Paper>
+
+      {/* Agent Identity Panel Dialog */}
+      {showIdentityPanel && (
+        <Box
+          sx={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            bgcolor: 'rgba(0, 0, 0, 0.5)',
+            zIndex: 1300,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            p: 2
+          }}
+          onClick={() => setShowIdentityPanel(false)}
+        >
+          <Paper
+            sx={{
+              width: '90%',
+              maxWidth: 1200,
+              height: '80%',
+              overflow: 'auto',
+              p: 0,
+              borderRadius: 2
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Box sx={{ 
+              p: 3, 
+              borderBottom: 1, 
+              borderColor: 'divider',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <Typography variant="h5" fontWeight="bold">
+                Agent Identity - {agent?.name}
+              </Typography>
+              <Button onClick={() => setShowIdentityPanel(false)}>
+                Close
+              </Button>
+            </Box>
+            <Box sx={{ p: 3 }}>
+              <AgentIdentityPanel
+                agentId={agentId}
+                showPersonality={true}
+                showNarrativeArc={true}
+                showResponsibility={true}
+                onError={(error) => {
+                  setNotification(createNotification(
+                    `Identity Error: ${error}`,
+                    'error'
+                  ));
+                }}
+              />
+            </Box>
+          </Paper>
+        </Box>
+      )}
 
       {/* Notification System */}
       <NotificationSystem

@@ -1,0 +1,614 @@
+# Alchemist Optimized Firebase/Firestore Database Structure
+# This file documents the optimized database schema eliminating redundancy and standardizing naming
+
+firebase_project:
+  project_id: "alchemist-e69bb"
+  auth_domain: "alchemist-e69bb.firebaseapp.com"
+  storage_bucket: "alchemist-e69bb.appspot.com"
+  messaging_sender_id: "103214520240448237488"
+  app_id: "1:851487020021:web:527efbdbe1ded9aa2686bc"
+
+# ============================================================================
+# STANDARDIZED COLLECTION NAMES (snake_case convention)
+# ============================================================================
+
+collections:
+  # ============================================================================
+  # CORE AGENT MANAGEMENT
+  # ============================================================================
+  
+  agents:
+    description: "Primary collection for AI agent definitions and metadata"
+    document_id: "agent_id (string)"
+    old_names: ["alchemist_agents"]
+    fields:
+      agent_id: "string - Unique agent identifier"
+      name: "string - Agent display name"
+      description: "string - Agent description and purpose"
+      type: "string - Agent type (general, code, research, writing, data, customer)"
+      owner_id: "string - Firebase Auth UID of agent owner"
+      deployment_status: "string - current deployment state (pending, deployed, failed)"
+      active_deployment_id: "string - Reference to agent_deployments document"
+      service_url: "string - URL of deployed agent service"
+      created_at: "timestamp - Agent creation time"
+      updated_at: "timestamp - Last modification time"
+      last_deployed_at: "timestamp - Last successful deployment time"
+    
+    indexes:
+      - fields: ["owner_id", "created_at"]
+        order: "desc"
+      - fields: ["deployment_status", "updated_at"]
+        order: "desc"
+
+  # ============================================================================
+  # DEPLOYMENT MANAGEMENT
+  # ============================================================================
+  
+  agent_deployments:
+    description: "Deployment tracking and history for agents"
+    document_id: "deployment_id (auto-generated)"
+    fields:
+      deployment_id: "string - Unique deployment identifier"
+      agent_id: "string - Reference to agents document"
+      project_id: "string - Google Cloud Project ID (alchemist-e69bb)"
+      region: "string - Deployment region (us-central1)"
+      status: "string - pending|building|deployed|failed|cancelled"
+      service_url: "string - Deployed service endpoint URL"
+      webhook_url: "string - Optional webhook URL for notifications"
+      error_message: "string - Error details if deployment failed"
+      priority: "number - Deployment priority (1-10)"
+      created_at: "timestamp - Deployment initiation time"
+      updated_at: "timestamp - Last status update time"
+    
+    indexes:
+      - fields: ["agent_id", "created_at"]
+        order: "desc"
+      - fields: ["status", "created_at"]
+        order: "desc"
+      - fields: ["agent_id", "status", "created_at"]
+        order: "desc"
+
+  # ============================================================================
+  # UNIFIED CONVERSATION MANAGEMENT
+  # ============================================================================
+  
+  conversations:
+    description: "All conversation logs with production/development separation"
+    document_id: "auto-generated"
+    old_names: ["conversations", "dev_conversations"]
+    fields:
+      conversation_id: "string - External conversation identifier"
+      agent_id: "string - Reference to agents document"
+      user_id: "string - User identifier (for multi-tenant)"
+      message_content: "string - User input message"
+      agent_response: "string - Agent response message"
+      is_production: "boolean - true for deployed agents, false for testing"
+      deployment_type: "string - 'deployed' | 'pre_deployment'"
+      
+      # Token and billing tracking
+      tokens:
+        type: "object"
+        fields:
+          prompt_tokens: "number - Input tokens used"
+          completion_tokens: "number - Output tokens generated"
+          total_tokens: "number - Total tokens (prompt + completion)"
+      
+      cost_usd: "number - Calculated cost in USD"
+      
+      # Metadata
+      timestamp: "timestamp - Interaction time"
+      created_at: "timestamp - Record creation time"
+      
+      # Optional context
+      context:
+        type: "object"
+        fields:
+          session_id: "string - Optional session grouping"
+          conversation_title: "string - Optional conversation title"
+          metadata: "object - Additional context data"
+    
+    indexes:
+      - fields: ["agent_id", "is_production", "created_at"]
+        order: "desc"
+      - fields: ["user_id", "created_at"]
+        order: "desc"
+      - fields: ["is_production", "created_at"]
+        order: "desc"
+      - fields: ["agent_id", "timestamp"]
+        order: "desc"
+
+  # ============================================================================
+  # UNIFIED BILLING & CREDITS SYSTEM
+  # ============================================================================
+  
+  user_accounts:
+    description: "User account information and current balances"
+    document_id: "user_id (Firebase Auth UID)"
+    old_names: ["user_credits", "users"]
+    fields:
+      user_id: "string - Firebase Auth UID"
+      email: "string - User email address"
+      display_name: "string - User display name"
+      
+      # Current balances
+      credit_balance: "number - Current available credits"
+      total_credits_purchased: "number - Lifetime credits purchased"
+      total_credits_used: "number - Lifetime credits consumed"
+      
+      # Account status
+      account_status: "string - active|suspended|trial"
+      trial_credits_remaining: "number - Free trial credits left"
+      
+      # Timestamps
+      created_at: "timestamp - Account creation"
+      updated_at: "timestamp - Last balance update"
+      last_activity_at: "timestamp - Last usage activity"
+    
+    indexes:
+      - fields: ["account_status", "created_at"]
+        order: "desc"
+      - fields: ["last_activity_at"]
+        order: "desc"
+
+  credit_transactions:
+    description: "All credit purchases, usage, and adjustments"
+    document_id: "auto-generated"
+    fields:
+      transaction_id: "string - Unique transaction identifier"
+      user_id: "string - Reference to user_accounts"
+      transaction_type: "string - purchase|usage|adjustment|refund"
+      
+      # Transaction details
+      amount: "number - Credit amount (positive for additions, negative for usage)"
+      cost_usd: "number - USD cost (for purchases)"
+      description: "string - Transaction description"
+      
+      # Related entities
+      agent_id: "string - Agent ID for usage transactions"
+      conversation_id: "string - Conversation ID for usage transactions"
+      order_id: "string - Order ID for purchases"
+      
+      # Provider details (for purchases)
+      payment_provider: "string - stripe|paypal|apple|google"
+      provider_transaction_id: "string - External transaction ID"
+      
+      # Metadata
+      metadata: "object - Additional transaction data"
+      created_at: "timestamp - Transaction time"
+    
+    indexes:
+      - fields: ["user_id", "created_at"]
+        order: "desc"
+      - fields: ["transaction_type", "created_at"]
+        order: "desc"
+      - fields: ["agent_id", "created_at"]
+        order: "desc"
+      - fields: ["user_id", "transaction_type", "created_at"]
+        order: "desc"
+
+  agent_usage_summary:
+    description: "Pre-computed usage statistics per agent for performance"
+    document_id: "agent_id (string)"
+    old_names: ["agent_billing_summary"]
+    fields:
+      agent_id: "string - Agent identifier"
+      owner_id: "string - Agent owner ID"
+      
+      # Usage totals (all time)
+      total_conversations: "number - Total conversation count"
+      total_production_conversations: "number - Production conversations only"
+      total_tokens_used: "number - Cumulative token usage"
+      total_cost_usd: "number - Cumulative cost in USD"
+      
+      # Recent activity (last 30 days)
+      recent_conversations: "number - Conversations in last 30 days"
+      recent_tokens_used: "number - Tokens used in last 30 days"
+      recent_cost_usd: "number - Cost in last 30 days"
+      
+      # Timestamps
+      first_conversation_at: "timestamp - First ever conversation"
+      last_conversation_at: "timestamp - Most recent conversation"
+      last_updated_at: "timestamp - Last summary update"
+    
+    indexes:
+      - fields: ["owner_id", "last_conversation_at"]
+        order: "desc"
+      - fields: ["total_conversations"]
+        order: "desc"
+
+  # ============================================================================
+  # KNOWLEDGE BASE MANAGEMENT
+  # ============================================================================
+  
+  knowledge_files:
+    description: "File metadata for agent knowledge bases"
+    document_id: "file_id (string)"
+    old_names: ["knowledge_base_files"]
+    fields:
+      file_id: "string - Unique file identifier"
+      agent_id: "string - Owner agent reference"
+      original_filename: "string - Original uploaded filename"
+      storage_path: "string - Firebase Storage path"
+      file_size_bytes: "number - File size in bytes"
+      file_type: "string - MIME type or extension"
+      processing_status: "string - pending|processing|completed|failed"
+      processing_error: "string - Error message if processing failed"
+      chunk_count: "number - Number of text chunks extracted"
+      uploaded_at: "timestamp - File upload time"
+      processed_at: "timestamp - Processing completion time"
+    
+    indexes:
+      - fields: ["agent_id", "uploaded_at"]
+        order: "desc"
+      - fields: ["processing_status", "uploaded_at"]
+        order: "desc"
+
+  knowledge_embeddings:
+    description: "Text chunks and embeddings organized by agent"
+    document_id: "{agent_id}_{chunk_id}"
+    old_names: ["knowledge_base_embeddings/{agent_id}/embeddings"]
+    fields:
+      chunk_id: "string - Unique chunk identifier"
+      agent_id: "string - Owner agent reference"
+      file_id: "string - Reference to knowledge_files"
+      
+      # Content data
+      text_content: "string - Text content of chunk"
+      page_number: "number - Page number in source document"
+      chunk_index: "number - Sequential chunk number in file"
+      
+      # Vector data
+      embedding_vector: "array - Vector embedding (1536 dimensions)"
+      embedding_model: "string - Model used for embedding (e.g., text-embedding-ada-002)"
+      
+      # Metadata
+      created_at: "timestamp - Chunk creation time"
+      updated_at: "timestamp - Last modification time"
+    
+    indexes:
+      - fields: ["agent_id", "file_id", "chunk_index"]
+      - fields: ["file_id", "created_at"]
+        order: "asc"
+
+  # ============================================================================
+  # TRAINING & TUNING MANAGEMENT
+  # ============================================================================
+  
+  training_jobs:
+    description: "Agent training and fine-tuning job tracking"
+    document_id: "job_id (auto-generated)"
+    fields:
+      job_id: "string - Unique job identifier"
+      agent_id: "string - Reference to agents document"
+      user_id: "string - Job creator ID"
+      
+      # Job configuration
+      job_type: "string - fine_tuning|embedding_update|model_training"
+      training_data_source: "string - Source of training data"
+      model_config: "object - Training parameters and settings"
+      
+      # Status tracking
+      status: "string - pending|running|completed|failed|cancelled"
+      progress_percentage: "number - Job completion percentage (0-100)"
+      
+      # Results
+      output_model_id: "string - Resulting model identifier"
+      performance_metrics: "object - Training results and metrics"
+      error_message: "string - Error details if job failed"
+      
+      # Resource usage
+      compute_time_minutes: "number - Total compute time used"
+      cost_usd: "number - Training cost"
+      
+      # Timestamps
+      created_at: "timestamp - Job creation time"
+      started_at: "timestamp - Job start time"
+      completed_at: "timestamp - Job completion time"
+    
+    indexes:
+      - fields: ["agent_id", "created_at"]
+        order: "desc"
+      - fields: ["user_id", "status", "created_at"]
+        order: "desc"
+      - fields: ["status", "created_at"]
+        order: "desc"
+
+  # ============================================================================
+  # COMMUNICATION & INTEGRATION MANAGEMENT
+  # ============================================================================
+  
+  integration_channels:
+    description: "External communication channels (WhatsApp, Slack, etc.)"
+    document_id: "channel_id (auto-generated)"
+    old_names: ["managed_accounts", "whatsapp_managed_accounts"]
+    fields:
+      channel_id: "string - Unique channel identifier"
+      agent_id: "string - Connected agent reference"
+      deployment_id: "string - Agent deployment reference"
+      
+      # Channel details
+      platform: "string - whatsapp|slack|discord|telegram|webhook"
+      platform_account_id: "string - Platform-specific account ID"
+      channel_name: "string - Human-readable channel name"
+      
+      # Configuration
+      configuration: "object - Platform-specific settings"
+      webhook_url: "string - Webhook endpoint URL"
+      api_credentials: "object - Encrypted API keys/tokens"
+      
+      # Status
+      status: "string - active|pending|verification_failed|suspended"
+      verification_code: "string - Platform verification code"
+      verified_at: "timestamp - Verification completion time"
+      
+      # Activity tracking
+      last_message_at: "timestamp - Last message processed"
+      total_messages_processed: "number - Lifetime message count"
+      
+      # Timestamps
+      created_at: "timestamp - Channel creation time"
+      updated_at: "timestamp - Last modification time"
+    
+    indexes:
+      - fields: ["agent_id", "platform", "status"]
+      - fields: ["deployment_id", "created_at"]
+        order: "desc"
+      - fields: ["platform", "status", "created_at"]
+        order: "desc"
+
+  communication_logs:
+    description: "External communication processing logs"
+    document_id: "auto-generated"
+    old_names: ["webhook_logs", "whatsapp_webhook_logs"]
+    fields:
+      log_id: "string - Unique log identifier"
+      channel_id: "string - Reference to integration_channels"
+      agent_id: "string - Reference to agents document"
+      
+      # Message details
+      platform_message_id: "string - Platform-specific message ID"
+      direction: "string - inbound|outbound"
+      message_type: "string - text|image|file|audio|video"
+      message_content: "string - Message text content"
+      
+      # Processing details
+      processing_status: "string - received|processing|completed|failed"
+      response_generated: "boolean - Whether agent response was generated"
+      response_content: "string - Agent response text"
+      processing_time_ms: "number - Processing duration in milliseconds"
+      error_message: "string - Error details if processing failed"
+      
+      # Billing
+      tokens_used: "number - Tokens consumed for this message"
+      cost_usd: "number - Processing cost"
+      
+      # Metadata
+      metadata: "object - Platform-specific metadata"
+      created_at: "timestamp - Log entry time"
+    
+    indexes:
+      - fields: ["channel_id", "created_at"]
+        order: "desc"
+      - fields: ["agent_id", "processing_status", "created_at"]
+        order: "desc"
+      - fields: ["platform_message_id", "direction"]
+
+# ============================================================================
+# FIREBASE STORAGE STRUCTURE (Optimized)
+# ============================================================================
+
+storage_buckets:
+  default:
+    name: "alchemist-e69bb.appspot.com"
+    structure:
+      # Knowledge base files organized by agent
+      knowledge:
+        path_pattern: "knowledge/{agent_id}/{file_id}/{original_filename}"
+        description: "Uploaded documents for agent knowledge bases"
+      
+      # Agent assets and configurations
+      agents:
+        path_pattern: "agents/{agent_id}/assets/{filename}"
+        description: "Agent configuration files and assets"
+      
+      # Training data and models
+      training:
+        path_pattern: "training/{agent_id}/{job_id}/{filename}"
+        description: "Training datasets and model artifacts"
+      
+      # Temporary files and uploads
+      temp:
+        path_pattern: "temp/{user_id}/{timestamp}/{filename}"
+        description: "Temporary file storage (auto-cleanup after 24h)"
+
+# ============================================================================
+# OPTIMIZATION FEATURES
+# ============================================================================
+
+performance_optimizations:
+  aggregation_triggers:
+    description: "Cloud Functions to maintain aggregate collections"
+    triggers:
+      - name: "updateAgentUsageSummary"
+        trigger: "conversations document created"
+        action: "Update agent_usage_summary with new usage data"
+      
+      - name: "updateUserAccountBalance"
+        trigger: "credit_transactions document created"
+        action: "Update user_accounts credit_balance"
+      
+      - name: "cleanupOldLogs"
+        trigger: "Scheduled daily"
+        action: "Archive old communication_logs (>90 days)"
+
+  real_time_listeners:
+    description: "Firestore listeners for real-time updates"
+    patterns:
+      - collection: "agent_deployments"
+        filter: "status changes"
+        purpose: "Real-time deployment status updates"
+      
+      - collection: "training_jobs"
+        filter: "status or progress changes"
+        purpose: "Training job progress monitoring"
+      
+      - collection: "conversations"
+        filter: "agent_id and is_production = true"
+        purpose: "Live conversation monitoring"
+
+  caching_strategy:
+    description: "Redis caching for frequently accessed data"
+    cache_patterns:
+      agent_configs:
+        key_pattern: "agent:{agent_id}:config"
+        ttl: "1 hour"
+        source: "agents collection"
+      
+      user_balances:
+        key_pattern: "user:{user_id}:balance"
+        ttl: "5 minutes"
+        source: "user_accounts collection"
+      
+      usage_summaries:
+        key_pattern: "agent:{agent_id}:usage"
+        ttl: "15 minutes"
+        source: "agent_usage_summary collection"
+
+# ============================================================================
+# MIGRATION STRATEGY
+# ============================================================================
+
+migration_plan:
+  phase_1_collection_rename:
+    description: "Rename existing collections to new standardized names"
+    mappings:
+      "alchemist_agents": "agents"
+      "dev_conversations": "conversations (with is_production=false)"
+      "knowledge_base_files": "knowledge_files"
+      "user_credits": "user_accounts"
+      "agent_billing_summary": "agent_usage_summary"
+      "managed_accounts": "integration_channels"
+      "webhook_logs": "communication_logs"
+  
+  phase_2_data_consolidation:
+    description: "Merge duplicate data and standardize schemas"
+    consolidations:
+      conversations:
+        - merge: "conversations + dev_conversations"
+        - add_field: "is_production boolean"
+        - standardize: "field names and token structure"
+      
+      billing:
+        - merge: "user_credits + credit_transactions data"
+        - create: "unified user_accounts with current balances"
+        - aggregate: "usage data into agent_usage_summary"
+  
+  phase_3_index_optimization:
+    description: "Create optimized composite indexes"
+    new_indexes:
+      - collection: "conversations"
+        fields: ["agent_id", "is_production", "created_at desc"]
+      - collection: "credit_transactions"
+        fields: ["user_id", "transaction_type", "created_at desc"]
+      - collection: "knowledge_embeddings"
+        fields: ["agent_id", "file_id", "chunk_index"]
+
+# ============================================================================
+# SECURITY RULES (Optimized)
+# ============================================================================
+
+security_model:
+  authentication:
+    provider: "Firebase Auth"
+    methods: ["email/password", "google", "github"]
+  
+  authorization_rules:
+    agents:
+      read: "resource.data.owner_id == request.auth.uid"
+      write: "resource.data.owner_id == request.auth.uid"
+      create: "request.auth != null"
+    
+    conversations:
+      read: "get(/databases/$(database)/documents/agents/$(resource.data.agent_id)).data.owner_id == request.auth.uid"
+      write: "false" # Only system can write conversations
+    
+    user_accounts:
+      read: "resource.id == request.auth.uid"
+      write: "resource.id == request.auth.uid && onlyUpdatingAllowedFields()"
+    
+    credit_transactions:
+      read: "resource.data.user_id == request.auth.uid"
+      write: "false" # Only system can create transactions
+    
+    knowledge_files:
+      read: "get(/databases/$(database)/documents/agents/$(resource.data.agent_id)).data.owner_id == request.auth.uid"
+      write: "get(/databases/$(database)/documents/agents/$(resource.data.agent_id)).data.owner_id == request.auth.uid"
+
+# ============================================================================
+# COLLECTION CONSTANTS (For Code Generation)
+# ============================================================================
+
+collection_constants:
+  # Main collections
+  AGENTS: "agents"
+  AGENT_DEPLOYMENTS: "agent_deployments"
+  CONVERSATIONS: "conversations"
+  USER_ACCOUNTS: "user_accounts"
+  CREDIT_TRANSACTIONS: "credit_transactions"
+  AGENT_USAGE_SUMMARY: "agent_usage_summary"
+  KNOWLEDGE_FILES: "knowledge_files"
+  KNOWLEDGE_EMBEDDINGS: "knowledge_embeddings"
+  TRAINING_JOBS: "training_jobs"
+  INTEGRATION_CHANNELS: "integration_channels"
+  COMMUNICATION_LOGS: "communication_logs"
+  
+  # Deprecated collections (for migration reference)
+  DEPRECATED:
+    ALCHEMIST_AGENTS: "alchemist_agents"
+    DEV_CONVERSATIONS: "dev_conversations"
+    KNOWLEDGE_BASE_FILES: "knowledge_base_files"
+    USER_CREDITS: "user_credits"
+    AGENT_BILLING_SUMMARY: "agent_billing_summary"
+    MANAGED_ACCOUNTS: "managed_accounts"
+    WEBHOOK_LOGS: "webhook_logs"
+
+# ============================================================================
+# API RESPONSE SCHEMAS (Standardized)
+# ============================================================================
+
+api_schemas:
+  agent_response:
+    agent_id: "string"
+    name: "string"
+    description: "string"
+    type: "string"
+    deployment_status: "string"
+    service_url: "string"
+    created_at: "ISO timestamp"
+    updated_at: "ISO timestamp"
+    usage_summary:
+      total_conversations: "number"
+      recent_cost_usd: "number"
+      last_conversation_at: "ISO timestamp"
+  
+  conversation_response:
+    conversation_id: "string"
+    agent_id: "string"
+    message_content: "string"
+    agent_response: "string"
+    is_production: "boolean"
+    tokens:
+      prompt_tokens: "number"
+      completion_tokens: "number"
+      total_tokens: "number"
+    cost_usd: "number"
+    timestamp: "ISO timestamp"
+  
+  user_account_response:
+    user_id: "string"
+    email: "string"
+    display_name: "string"
+    credit_balance: "number"
+    account_status: "string"
+    created_at: "ISO timestamp"
+    last_activity_at: "ISO timestamp"

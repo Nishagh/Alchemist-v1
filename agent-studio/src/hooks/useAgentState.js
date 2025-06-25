@@ -30,7 +30,7 @@ export const useAgentState = () => {
     setError('');
 
     try {
-      const agentRef = doc(db, 'alchemist_agents', agentId);
+      const agentRef = doc(db, 'agents', agentId);
       
       unsubscribeRef.current = onSnapshot(
         agentRef,

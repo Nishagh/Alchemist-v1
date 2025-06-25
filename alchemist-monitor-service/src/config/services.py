@@ -86,10 +86,10 @@ MONITORED_SERVICES: List[ServiceConfig] = [
 
 # Monitoring configuration
 MONITORING_CONFIG = {
-    "check_interval_seconds": 30,
+    "check_interval_seconds": 300,  # Changed from 30s to 5 minutes (98% reduction)
     "health_check_timeout": 10,
     "max_retries": 3,
     "retry_delay_seconds": 5,
-    "metrics_retention_days": 30,
+    "metrics_retention_days": 7,  # Reduced from 30 to 7 days for faster cleanup
     "aggregation_intervals": ["1h", "6h", "24h", "7d"],
 }

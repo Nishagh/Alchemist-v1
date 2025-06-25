@@ -158,7 +158,7 @@ This application is configured for Google Cloud Run deployment:
 3. **Manual deployment:**
    ```bash
    # Build and deploy in one command
-   gcloud run deploy agent-studio-web \
+   gcloud run deploy alchemist-agent-studio \
      --source . \
      --region us-central1 \
      --platform managed \

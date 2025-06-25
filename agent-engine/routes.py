@@ -15,6 +15,7 @@ from fastapi import FastAPI, Request, HTTPException, Depends, File, UploadFile, 
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel
 from firebase_admin import firestore, storage
+from firebase_admin.firestore import SERVER_TIMESTAMP
 import yaml
 import requests
 import json
@@ -161,7 +162,7 @@ def register_routes(app: FastAPI):
             health_status = {
                 "service": "agent-engine",
                 "status": "healthy",
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": SERVER_TIMESTAMP,
                 "version": "1.0.0",
                 "components": {
                     "openai": {
@@ -188,7 +189,7 @@ def register_routes(app: FastAPI):
                 content={
                     "service": "agent-engine",
                     "status": "unhealthy",
-                    "timestamp": datetime.now().isoformat(),
+                    "timestamp": SERVER_TIMESTAMP,
                     "error": str(e)
                 }
             )
@@ -213,33 +214,57 @@ def register_routes(app: FastAPI):
                 content={"status": "error", "message": f"Error: {str(e)}"}
             )
 
+    @app.options("/api/agents")
+    async def options_agents(request: Request):
+        """Handle OPTIONS requests for agent creation endpoint"""
+        return Response(
+            content="",
+            media_type="text/plain",
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+                "Access-Control-Max-Age": "1200"
+            }
+        )
+
     @app.post("/api/agents")
-    async def create_agent(request: AgentCreationRequest, user_id: str = Depends(get_current_user)):
+    async def create_agent(request: Request, user_id: str = Depends(get_current_user)):
         """Create a new agent."""
         try:
-            # Generate agent ID if not provided
-            agent_id = request.agent_id or str(uuid4())
+            # Get request body as JSON
+            body = await request.json()
             
-            # Create agent configuration
+            # Generate agent ID if not provided
+            agent_id = body.get('agent_id') or str(uuid4())
+            
+            # Create agent configuration with flexible field mapping
             agent_config = {
                 'agent_id': agent_id,
-                'agent_type': request.agent_type,
-                'config': request.config or {},
-                'userId': user_id,
-                'created_at': firestore.SERVER_TIMESTAMP,
-                'updated_at': firestore.SERVER_TIMESTAMP,
-                'status': 'active'
+                'id': agent_id,  # Also include 'id' field for compatibility
+                'name': body.get('name', ''),
+                'description': body.get('description', ''),
+                'instructions': body.get('instructions', ''),
+                'personality': body.get('personality', ''),
+                'agent_type': body.get('agent_type', 'general'),
+                'config': body.get('config', {}),
+                'owner_id': user_id,  # Use owner_id as per DocumentFields
+                'userId': user_id,  # Keep userId for backward compatibility
+                'created_at': body.get('created_at') or firestore.SERVER_TIMESTAMP,
+                'updated_at': body.get('updated_at') or firestore.SERVER_TIMESTAMP,
+                'status': body.get('status', 'draft')
             }
             
             # Save to Firestore
-            agent_ref = default_storage.db.collection('alchemist_agents').document(agent_id)
+            agent_ref = default_storage.db.collection('agents').document(agent_id)
             agent_ref.set(agent_config)
             
             logger.info(f"Created agent {agent_id} for user {user_id}")
             return {
                 "status": "success", 
+                "id": agent_id,
                 "agent_id": agent_id,
-                "agent": agent_config
+                "data": agent_config
             }
         except Exception as e:
             logger.error(f"Error creating agent: {str(e)}")
@@ -322,6 +347,20 @@ def register_routes(app: FastAPI):
                 content={"status": "error", "message": f"Error: {str(e)}"}
             )
 
+    @app.options("/api/agents/{agent_id}/conversations")
+    async def options_agent_conversations(agent_id: str, request: Request):
+        """Handle OPTIONS requests for agent conversations endpoint"""
+        return Response(
+            content="",
+            media_type="text/plain",
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+                "Access-Control-Max-Age": "1200"
+            }
+        )
+
     @app.get("/api/agents/{agent_id}/conversations")
     async def get_conversations(agent_id: str, user_id: str = Depends(get_current_user)):
         """Get conversations for an agent."""
@@ -354,7 +393,7 @@ def register_routes(app: FastAPI):
                             "conversation_id": agent_id,
                             "content": message.get("content", ""),
                             "role": message.get("role", "unknown"),
-                            "timestamp": message.get("timestamp", datetime.now().isoformat())
+                            "timestamp": message.get("timestamp", SERVER_TIMESTAMP)
                         }                            
                         result.append(message_data)
                 return {"status": "success", "conversations": result}
@@ -370,6 +409,20 @@ def register_routes(app: FastAPI):
             )
 
     # Alchemist Direct Interaction Endpoint
+    @app.options("/api/alchemist/interact")
+    async def options_alchemist_interact(request: Request):
+        """Handle OPTIONS requests for alchemist interact endpoint"""
+        return Response(
+            content="",
+            media_type="text/plain",
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "POST, OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+                "Access-Control-Max-Age": "1200"
+            }
+        )
+
     @app.post("/api/alchemist/interact")
     async def interact_with_alchemist(request: Request, user_id: str = Depends(get_current_user)):
         """

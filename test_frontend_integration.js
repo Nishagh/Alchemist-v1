@@ -1,7 +1,7 @@
-// Test frontend integration with agent-tuning-service
+// Test frontend integration with alchemist-agent-tuning
 // This simulates the frontend making API calls to test connectivity
 
-const TUNING_SERVICE_URL = 'https://agent-tuning-service-b3hpe34qdq-uc.a.run.app';
+const TUNING_SERVICE_URL = 'https://alchemist-agent-tuning-b3hpe34qdq-uc.a.run.app';
 
 async function testServiceConnectivity() {
   console.log('🧪 Testing Agent Tuning Service Integration...\n');

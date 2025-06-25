@@ -11,14 +11,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY shared/ /app/shared/
 
 # Install shared libraries
-RUN cd /app/shared && pip install -e .
+RUN pip install -e /app/shared/
 
 # Copy requirements first for better caching
-COPY knowledge-vault/requirements.txt .
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY knowledge-vault/ .
+COPY . .
 
 # Environment variables
 ENV PORT=8080

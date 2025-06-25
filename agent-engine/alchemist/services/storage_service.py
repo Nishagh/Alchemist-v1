@@ -45,17 +45,16 @@ class StorageService:
             Agent configuration dictionary or None if not found
         """
         try:
-            # First, try to get agent document directly
-            agent_ref = self.db.collection('alchemist_agents').document(agent_id)
+            # Get agent from the standard 'agents' collection
+            agent_ref = self.db.collection('agents').document(agent_id)
             doc = agent_ref.get()
             
             if doc.exists:
                 agent_config = doc.to_dict()
-                logger.debug(f"Retrieved agent config {agent_id} from main document")
+                logger.debug(f"Retrieved agent config {agent_id} from agents collection")
                 return agent_config
             else:
-                # If not found in main document, try the config subcollection
-                logger.debug(f"Agent config {agent_id} not found in main document, checking config subcollection")
+                logger.debug(f"Agent config {agent_id} not found")
                 return None                
         except Exception as e:
             logger.error(f"Error retrieving agent config {agent_id}: {str(e)}")
@@ -71,18 +70,25 @@ class StorageService:
             Returns:
                 Agent configuration dictionary or None if not found
             """
-            agent_ref = self.db.collection('alchemist_agents').document(agent_id)
+            agent_ref = self.db.collection('agents').document(agent_id)
             agent_name = await generate_agent_name(message)
             agent_description = await generate_agent_description(message)
             agent_purpose = await generate_agent_purpose(message)
             agent_config = {
                 'agent_id': agent_id,
+                'id': agent_id,  # Include both for compatibility
                 'name': agent_name,
                 'description': agent_description,
                 'purpose': agent_purpose,
+                'instructions': '',  # Standard field
+                'personality': '',   # Standard field
+                'agent_type': 'general',  # Standard field
+                'config': {},  # Standard field
+                'owner_id': userId,  # Standard field
+                'userId': userId,    # Legacy compatibility
                 'created_at': firestore.SERVER_TIMESTAMP,
                 'updated_at': firestore.SERVER_TIMESTAMP,
-                'userId': userId
+                'status': 'draft'
             }
             
             agent_ref.set(agent_config)
@@ -92,7 +98,7 @@ class StorageService:
     async def get_agent_prompt(self, agent_id: str) -> Optional[str]:
         """Get the prompt for an agent."""
         try:
-            agent_ref = self.db.collection('alchemist_agents').document(agent_id).collection('system_prompt').order_by('created_at', direction=firestore.Query.DESCENDING).limit(1).get()
+            agent_ref = self.db.collection('agents').document(agent_id).collection('system_prompt').order_by('created_at', direction=firestore.Query.DESCENDING).limit(1).get()
             doc = agent_ref[0].to_dict()
             return doc.get('content', '')
         except Exception as e:
@@ -306,12 +312,17 @@ class StorageService:
             return []
             
         try:
-            # Query agents
-            query = self.db.collection('alchemist_agents')
+            # Query the standard 'agents' collection
+            query = self.db.collection('agents')
             
-            # Filter by userId if provided
+            # Filter by userId if provided (check both userId and owner_id fields)
             if userId:
-                query = query.where('userId', '==', userId)
+                # Use owner_id as the primary field, fallback to userId for compatibility
+                try:
+                    query = query.where('owner_id', '==', userId)
+                except:
+                    # Fallback to userId field if owner_id doesn't exist
+                    query = query.where('userId', '==', userId)
                 
             query = query.order_by('created_at', direction=firestore.Query.DESCENDING) \
                 .limit(limit).offset(offset)
@@ -327,6 +338,8 @@ class StorageService:
                 # Include the document ID if not already present
                 if 'agent_id' not in agent_data:
                     agent_data['agent_id'] = doc.id
+                if 'id' not in agent_data:
+                    agent_data['id'] = doc.id
                 
                 # Filter out large fields if needed
                 for key, value in list(agent_data.items()):
@@ -360,7 +373,7 @@ class StorageService:
             print(f"Updating agent config {agent_id} with {config_updates}")
             
             # Update agent document
-            agent_ref = self.db.collection('alchemist_agents').document(agent_id)
+            agent_ref = self.db.collection('agents').document(agent_id)
             agent_ref.update(config_updates)
             
             logger.debug(f"Updated agent config {agent_id}")

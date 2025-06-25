@@ -2,15 +2,15 @@
 
 ## ✅ **DEPLOYMENT STATUS: SUCCESS**
 
-The agent-tuning-service has been **successfully deployed** and **fully integrated** with agent-studio.
+The alchemist-agent-tuning has been **successfully deployed** and **fully integrated** with agent-studio.
 
 ---
 
 ## 🏗️ **BACKEND SERVICE**
 
 ### Deployment Details
-- **Service Name**: agent-tuning-service
-- **URL**: https://agent-tuning-service-b3hpe34qdq-uc.a.run.app
+- **Service Name**: alchemist-agent-tuning
+- **URL**: https://alchemist-agent-tuning-b3hpe34qdq-uc.a.run.app
 - **Status**: ✅ Running and healthy
 - **Environment**: Production
 - **Platform**: Google Cloud Run
@@ -78,7 +78,7 @@ GET  /api/training/models/{agent_id}   # List agent models
 
 ### Data Flow
 ```
-Frontend UI → TuningService Client → agent-tuning-service → OpenAI API
+Frontend UI → TuningService Client → alchemist-agent-tuning → OpenAI API
      ↓                                       ↓
  User Feedback ←── Firebase Storage ←─── Job Progress
 ```
@@ -147,7 +147,7 @@ Frontend UI → TuningService Client → agent-tuning-service → OpenAI API
 
 ## 🎯 **INTEGRATION STATUS: COMPLETE**
 
-**The agent-tuning-service is fully deployed, integrated, and ready for production use with agent-studio.**
+**The alchemist-agent-tuning is fully deployed, integrated, and ready for production use with agent-studio.**
 
 All connectivity tests pass, authentication is working, and the frontend components are successfully communicating with the backend service. Users can now create real fine-tuning jobs and monitor their progress in real-time.
 

@@ -7,6 +7,7 @@ import logging
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime, timezone
 from decimal import Decimal
+from firebase_admin.firestore import SERVER_TIMESTAMP
 
 from app.config.settings import settings, DEFAULT_CREDIT_PACKAGES
 from app.services.firebase_service import FirebaseService

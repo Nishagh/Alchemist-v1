@@ -19,7 +19,7 @@ async def health_check():
         content={
             "status": "healthy",
             "timestamp": datetime.utcnow().isoformat(),
-            "service": "agent-tuning-service",
+            "service": "alchemist-agent-tuning",
             "version": "1.0.0"
         }
     )

@@ -6,7 +6,7 @@
 console.log('🗣️  Testing Conversational Fine-tuning Flow\n');
 
 // Test Configuration
-const TUNING_SERVICE_URL = 'https://agent-tuning-service-b3hpe34qdq-uc.a.run.app';
+const TUNING_SERVICE_URL = 'https://alchemist-agent-tuning-b3hpe34qdq-uc.a.run.app';
 const TEST_AGENT_ID = 'test-agent-123';
 
 // Test 1: Backend API Endpoints

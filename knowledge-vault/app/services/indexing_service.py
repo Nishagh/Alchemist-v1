@@ -7,9 +7,12 @@ from typing import List, Dict, Any
 import pypdf
 import docx2txt
 from bs4 import BeautifulSoup
+from firebase_admin import firestore
 from app.services.openai_service import OpenAIService
 from app.services.firebase_service import FirebaseService
 from app.utils.logging_config import get_logger, log_with_data
+
+SERVER_TIMESTAMP = firestore.SERVER_TIMESTAMP
 
 class IndexingService:
     def __init__(self):
@@ -54,7 +57,7 @@ class IndexingService:
                 "content": chunk,
                 "page_number": i + 1,
                 "embedding": embedding,
-                "created_at": datetime.now()
+                "created_at": SERVER_TIMESTAMP
             }
             
             chunk_docs.append(chunk_doc)

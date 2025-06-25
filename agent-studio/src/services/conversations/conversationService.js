@@ -20,7 +20,7 @@ import {
   serverTimestamp,
   increment
 } from 'firebase/firestore';
-import { db } from '../../utils/firebase';
+import { db, Collections, DocumentFields, StatusValues } from '../../utils/firebase';
 
 /**
  * Get conversations for an agent
@@ -92,20 +92,24 @@ export const deleteConversation = async (conversationId) => {
  */
 export const saveTestConversation = async ({ agentId, conversationId, message, response, timestamp }) => {
   try {
-    // Save to dev_conversations collection (pre-deployment testing)
-    const conversationRef = collection(db, 'dev_conversations');
+    // Save to unified conversations collection (pre-deployment testing)
+    const conversationRef = collection(db, Collections.CONVERSATIONS);
     
     await addDoc(conversationRef, {
-      agentId,
-      conversationId,
-      userMessage: message,
-      agentResponse: response,
-      timestamp: timestamp || new Date().toISOString(),
-      createdAt: serverTimestamp(),
-      isProduction: false,
-      deploymentType: 'pre-deployment', // distinguishes from deployed agent testing
-      cost: 0, // always free for pre-deployment testing
-      tokens: { prompt: 0, completion: 0, total: 0 } // no token tracking for free testing
+      [DocumentFields.Conversation.CONVERSATION_ID]: conversationId,
+      [DocumentFields.AGENT_ID]: agentId,
+      [DocumentFields.Conversation.MESSAGE_CONTENT]: message,
+      [DocumentFields.Conversation.AGENT_RESPONSE]: response,
+      [DocumentFields.TIMESTAMP]: timestamp || serverTimestamp(),
+      [DocumentFields.CREATED_AT]: serverTimestamp(),
+      [DocumentFields.Conversation.IS_PRODUCTION]: false,
+      [DocumentFields.Conversation.DEPLOYMENT_TYPE]: 'pre_deployment',
+      [DocumentFields.Conversation.COST_USD]: 0, // always free for pre-deployment testing
+      [DocumentFields.Conversation.TOKENS]: { 
+        [DocumentFields.Conversation.PROMPT_TOKENS]: 0, 
+        [DocumentFields.Conversation.COMPLETION_TOKENS]: 0, 
+        [DocumentFields.Conversation.TOTAL_TOKENS]: 0 
+      }
     });
 
   } catch (error) {
@@ -124,9 +128,10 @@ export const getTestConversationHistory = async (agentId, options = {}) => {
     } = options;
 
     const q = query(
-      collection(db, 'dev_conversations'),
-      where('agentId', '==', agentId),
-      orderBy('createdAt', 'desc'),
+      collection(db, Collections.CONVERSATIONS),
+      where(DocumentFields.AGENT_ID, '==', agentId),
+      where(DocumentFields.Conversation.IS_PRODUCTION, '==', false),
+      orderBy(DocumentFields.CREATED_AT, 'desc'),
       limit(limitCount)
     );
 
@@ -136,9 +141,9 @@ export const getTestConversationHistory = async (agentId, options = {}) => {
     snapshot.forEach((doc) => {
       const data = doc.data();
       conversations.push({
-        id: doc.id,
+        [DocumentFields.ID]: doc.id,
         ...data,
-        timestamp: data.createdAt?.toDate?.()?.toISOString() || data.timestamp
+        [DocumentFields.TIMESTAMP]: data[DocumentFields.CREATED_AT]?.toDate?.()?.toISOString() || data[DocumentFields.TIMESTAMP]
       });
     });
 
@@ -270,7 +275,7 @@ export const sendStreamingMessageToDeployedAgent = async ({
                 response: fullResponse,
                 tokens,
                 cost,
-                timestamp: new Date().toISOString(),
+                timestamp: serverTimestamp(),
                 testMode
               });
             }
@@ -401,7 +406,7 @@ const saveBillableMessage = async ({ agentId, conversationId, message, response,
         total: tokens?.total_tokens || tokens?.total || 0
       },
       cost: cost || 0,
-      timestamp: timestamp || new Date().toISOString(),
+      timestamp: timestamp || serverTimestamp(),
       createdAt: serverTimestamp(),
       isProduction: testMode === 'production', // true for production mode, false for development mode
       deploymentType: 'deployed' // to distinguish from pre-deployment testing
@@ -505,7 +510,7 @@ export const saveBillingSession = async ({ agentId, conversationId, messages, to
       totalCost,
       isProduction: testMode === 'production',
       deploymentType: 'deployed',
-      endedAt: endedAt || new Date().toISOString(),
+      endedAt: endedAt || serverTimestamp(),
       createdAt: serverTimestamp()
     });
 
