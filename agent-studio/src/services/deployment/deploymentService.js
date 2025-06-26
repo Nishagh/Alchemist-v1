@@ -349,7 +349,7 @@ class DeploymentService {
    */
   async updateAgentDeploymentStatus(agentId, deploymentData) {
     try {
-      const agentDoc = doc(db, 'alchemist_agents', agentId);
+      const agentDoc = doc(db, 'agents', agentId);
       
       // Check if this is the first successful deployment
       const currentDeployments = await this.listDeployments({ 

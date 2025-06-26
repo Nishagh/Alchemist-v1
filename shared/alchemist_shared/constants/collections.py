@@ -65,21 +65,6 @@ class Collections:
     AGENT_RELATIONSHIPS = "agent_relationships"
     
     # ============================================================================
-    # DEPRECATED COLLECTIONS (For Migration Reference)
-    # ============================================================================
-    
-    class Deprecated:
-        """Legacy collection names that should be migrated to new naming."""
-        ALCHEMIST_AGENTS = "alchemist_agents"
-        DEV_CONVERSATIONS = "dev_conversations"
-        KNOWLEDGE_BASE_FILES = "knowledge_base_files"
-        USER_CREDITS = "user_credits"
-        AGENT_BILLING_SUMMARY = "agent_billing_summary"
-        MANAGED_ACCOUNTS = "managed_accounts"
-        WEBHOOK_LOGS = "webhook_logs"
-        KNOWLEDGE_BASE_EMBEDDINGS = "knowledge_base_embeddings"
-    
-    # ============================================================================
     # VALIDATION HELPERS
     # ============================================================================
     
@@ -109,29 +94,12 @@ class Collections:
             cls.AGENT_RELATIONSHIPS,
         ]
     
-    @classmethod
-    def get_deprecated_collections(cls) -> list[str]:
-        """Get list of deprecated collection names."""
-        return [
-            cls.Deprecated.ALCHEMIST_AGENTS,
-            cls.Deprecated.DEV_CONVERSATIONS,
-            cls.Deprecated.KNOWLEDGE_BASE_FILES,
-            cls.Deprecated.USER_CREDITS,
-            cls.Deprecated.AGENT_BILLING_SUMMARY,
-            cls.Deprecated.MANAGED_ACCOUNTS,
-            cls.Deprecated.WEBHOOK_LOGS,
-            cls.Deprecated.KNOWLEDGE_BASE_EMBEDDINGS,
-        ]
     
     @classmethod
     def is_valid_collection(cls, collection_name: str) -> bool:
         """Check if collection name is in current valid set."""
         return collection_name in cls.get_all_collections()
     
-    @classmethod
-    def is_deprecated_collection(cls, collection_name: str) -> bool:
-        """Check if collection name is deprecated."""
-        return collection_name in cls.get_deprecated_collections()
 
 
 class DocumentFields:
@@ -351,7 +319,6 @@ class ErrorMessages:
     USER_NOT_AUTHENTICATED = "User not authenticated"
     INSUFFICIENT_CREDITS = "Insufficient credits for this operation"
     INVALID_COLLECTION_NAME = "Invalid collection name"
-    DEPRECATED_COLLECTION_WARNING = "Warning: Using deprecated collection name"
 
 
 def validate_collection_usage(collection_name: str) -> None:
@@ -363,55 +330,12 @@ def validate_collection_usage(collection_name: str) -> None:
         
     Raises:
         ValueError: If collection name is not recognized
-        
-    Logs:
-        Warning: If collection name is deprecated
     """
     import logging
     logger = logging.getLogger(__name__)
     
-    if Collections.is_deprecated_collection(collection_name):
-        logger.warning(f"{ErrorMessages.DEPRECATED_COLLECTION_WARNING}: {collection_name}")
-    elif not Collections.is_valid_collection(collection_name):
+    if not Collections.is_valid_collection(collection_name):
         raise ValueError(f"{ErrorMessages.INVALID_COLLECTION_NAME}: {collection_name}")
 
 
-# ============================================================================
-# CONVENIENCE FUNCTIONS
-# ============================================================================
 
-def get_collection_mapping() -> dict[str, str]:
-    """
-    Get mapping from old collection names to new standardized names.
-    
-    Returns:
-        Dictionary mapping deprecated names to current names
-    """
-    return {
-        Collections.Deprecated.ALCHEMIST_AGENTS: Collections.AGENTS,
-        Collections.Deprecated.DEV_CONVERSATIONS: Collections.CONVERSATIONS,
-        Collections.Deprecated.KNOWLEDGE_BASE_FILES: Collections.KNOWLEDGE_FILES,
-        Collections.Deprecated.USER_CREDITS: Collections.USER_ACCOUNTS,
-        Collections.Deprecated.AGENT_BILLING_SUMMARY: Collections.AGENT_USAGE_SUMMARY,
-        Collections.Deprecated.MANAGED_ACCOUNTS: Collections.INTEGRATION_CHANNELS,
-        Collections.Deprecated.WEBHOOK_LOGS: Collections.COMMUNICATION_LOGS,
-        Collections.Deprecated.KNOWLEDGE_BASE_EMBEDDINGS: Collections.KNOWLEDGE_EMBEDDINGS,
-    }
-
-
-def get_migration_sql() -> str:
-    """
-    Generate migration script for collection name changes.
-    
-    Returns:
-        String containing migration commands
-    """
-    mapping = get_collection_mapping()
-    commands = []
-    
-    for old_name, new_name in mapping.items():
-        commands.append(f"-- Migrate {old_name} to {new_name}")
-        commands.append(f"-- This would be done via Firebase Admin SDK or gcloud firestore")
-        commands.append("")
-    
-    return "\n".join(commands)

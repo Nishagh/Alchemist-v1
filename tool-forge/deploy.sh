@@ -9,7 +9,7 @@ PROJECT_ID="alchemist-e69bb"
 REGION=${GOOGLE_CLOUD_REGION:-"us-central1"}
 FIREBASE_BUCKET=${FIREBASE_STORAGE_BUCKET:-"alchemist-e69bb.firebasestorage.app"}
 
-echo "🚀 Deploying MCP Manager Service"
+echo "🚀 Deploying Alchemist Tool Forge Service"
 echo "Project ID: $PROJECT_ID"
 echo "Region: $REGION"
 echo "Firebase Bucket: $FIREBASE_BUCKET"
@@ -44,20 +44,33 @@ else
     echo "Firebase Storage bucket exists: $FIREBASE_BUCKET"
 fi
 
+# Copy shared module to local directory for Docker context
+echo "📦 Preparing shared module..."
+if [ -d "./shared" ]; then
+    rm -rf ./shared
+fi
+cp -r ../shared ./shared
+
 # Deploy using Cloud Build
-echo "🏗️  Building and deploying MCP Manager Service..."
+echo "🏗️  Building and deploying Alchemist Tool Forge Service..."
 gcloud builds submit \
     --config=cloudbuild-manager.yaml \
     --substitutions=_REGION=$REGION,_FIREBASE_STORAGE_BUCKET=$FIREBASE_BUCKET \
     .
 
+# Cleanup shared directory
+echo "🧹 Cleaning up..."
+if [ -d "./shared" ]; then
+    rm -rf ./shared
+fi
+
 # Get the service URL
-SERVICE_URL=$(gcloud run services describe mcp-manager \
+SERVICE_URL=$(gcloud run services describe alchemist-tool-forge \
     --region=$REGION \
     --format="value(status.url)")
 
 echo "✅ Deployment completed!"
-echo "🌐 MCP Manager Service URL: $SERVICE_URL"
+echo "🌐 Alchemist Tool Forge Service URL: $SERVICE_URL"
 echo ""
 echo "📋 API Endpoints:"
 echo "   Health Check: $SERVICE_URL/health"

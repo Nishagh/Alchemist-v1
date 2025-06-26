@@ -1,33 +1,17 @@
 """
-Firebase Configuration - Updated to use centralized client
+Firebase Configuration - Using centralized Firebase client
 
 Centralized configuration management for Firebase services using shared Firebase client.
 """
+import os
 import logging
 from typing import Optional
+from dataclasses import dataclass
 
 # Import centralized Firebase client
-from alchemist_shared.database.firebase_client import FirebaseClient
+from alchemist_shared.database.firebase_client import get_firestore_client as shared_get_firestore_client, get_storage_bucket as shared_get_storage_bucket
 
 logger = logging.getLogger(__name__)
-
-# Cache for the centralized Firebase client
-_firebase_client = None
-
-def get_firebase_client() -> FirebaseClient:
-    """
-    Get centralized Firebase client instance.
-    
-    Returns:
-        FirebaseClient instance
-    """
-    global _firebase_client
-    
-    if not _firebase_client:
-        _firebase_client = FirebaseClient()
-        logger.info("Sandbox Console: Firebase client initialized using centralized authentication")
-    
-    return _firebase_client
 
 def get_firestore_client():
     """
@@ -36,7 +20,8 @@ def get_firestore_client():
     Returns:
         Firestore client instance
     """
-    return get_firebase_client().db
+    logger.info("Sandbox Console: Using shared Firebase client")
+    return shared_get_firestore_client()
 
 def get_storage_bucket():
     """
@@ -45,7 +30,8 @@ def get_storage_bucket():
     Returns:
         Firebase Storage bucket instance
     """
-    return get_firebase_client().storage
+    logger.info("Sandbox Console: Using shared Firebase storage")
+    return shared_get_storage_bucket()
 
 @dataclass
 class FirebaseSettings:

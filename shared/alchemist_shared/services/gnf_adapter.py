@@ -65,7 +65,6 @@ class EmotionalTone(str, Enum):
 class GNFConfig:
     """Configuration for GNF service connection."""
     service_url: str
-    api_key: Optional[str] = None
     timeout: int = 30
     retry_attempts: int = 3
     retry_delay: float = 1.0
@@ -147,10 +146,7 @@ class GNFAdapter:
             }
         )
         
-        if self.config.api_key:
-            self.session.headers.update({
-                'Authorization': f'Bearer {self.config.api_key}'
-            })
+        # No API key required for GNF service
         
         # Test connection to GNF service
         try:
@@ -245,10 +241,15 @@ class GNFAdapter:
             if not response:
                 raise GNFError("Failed to create agent identity - no response")
             
-            identity_id = response.get('identity_id') or response.get('agent_id')
+            # Handle GNF API response format: {"success": True, "agent": {...}, "message": "..."}
+            if not response.get('success'):
+                raise GNFError(f"GNF API returned failure: {response.get('message', 'Unknown error')}")
+            
+            agent_data = response.get('agent', {})
+            identity_id = agent_data.get('agent_id') or identity_data.agent_id
             
             if not identity_id:
-                raise GNFError("No identity ID returned from GNF service")
+                raise GNFError("No agent ID returned from GNF service")
             
             # Store identity reference in Firebase
             if self.firebase_client:
@@ -258,7 +259,7 @@ class GNFAdapter:
             self._identity_cache[identity_data.agent_id] = {
                 'identity_id': identity_id,
                 'cached_at': datetime.utcnow(),
-                'data': response
+                'data': agent_data
             }
             
             logger.info(f"Created GNF identity {identity_id} for agent {identity_data.agent_id}")
@@ -290,15 +291,17 @@ class GNFAdapter:
             # Fetch from GNF service
             response = await self._make_request('GET', f'/agents/{agent_id}')
             
-            if response:
+            if response and response.get('success'):
+                agent_data = response.get('agent', {})
                 # Update cache
                 self._identity_cache[agent_id] = {
-                    'identity_id': response.get('agent_id'),
+                    'identity_id': agent_data.get('agent_id', agent_id),
                     'cached_at': datetime.utcnow(),
-                    'data': response
+                    'data': agent_data
                 }
+                return agent_data
             
-            return response
+            return None
             
         except GNFError as e:
             logger.warning(f"Failed to fetch identity for agent {agent_id}: {e}")
@@ -349,21 +352,20 @@ class GNFAdapter:
         # Prepare interaction payload
         payload = {
             'agent_id': interaction.agent_id,
-            'type': interaction.interaction_type.value,
+            'interaction_type': interaction.interaction_type.value,
             'content': interaction.content,
             'participants': interaction.participants,
             'context': interaction.context,
-            'impact': interaction.impact_level.value,
-            'emotional_tone': interaction.emotional_tone.value,
-            'timestamp': interaction.timestamp.isoformat()
+            'impact_level': interaction.impact_level.value,
+            'emotional_tone': interaction.emotional_tone.value
         }
         
         try:
             # Track via GNF API
             response = await self._make_request('POST', '/interactions', payload)
             
-            if not response:
-                logger.warning(f"No response from GNF interaction tracking for agent {interaction.agent_id}")
+            if not response or not response.get('success'):
+                logger.warning(f"Failed to track interaction for agent {interaction.agent_id}: {response.get('message', 'No response') if response else 'No response'}")
                 return {}
             
             # Store interaction in Firebase if available
@@ -393,7 +395,7 @@ class GNFAdapter:
         """
         try:
             response = await self._make_request('GET', f'/agents/{agent_id}/interactions?limit={limit}')
-            return response.get('interactions', []) if response else []
+            return response.get('interactions', []) if response and response.get('success') else []
             
         except GNFError as e:
             logger.warning(f"Failed to fetch interactions for agent {agent_id}: {e}")
@@ -418,17 +420,16 @@ class GNFAdapter:
         
         payload = {
             'agent_id': agent_id,
-            **action_data,
-            'timestamp': datetime.utcnow().isoformat()
+            **action_data
         }
         
         try:
-            response = await self._make_request('POST', f'/agents/{agent_id}/actions', payload)
+            response = await self._make_request('POST', '/actions', payload)
             
-            if response and self.firebase_client:
+            if response and response.get('success') and self.firebase_client:
                 await self._store_responsibility_assessment(agent_id, response)
             
-            return response or {}
+            return response.get('action', {}) if response and response.get('success') else {}
             
         except GNFError as e:
             logger.error(f"Failed to track action for agent {agent_id}: {e}")
@@ -447,7 +448,7 @@ class GNFAdapter:
         """
         try:
             response = await self._make_request('GET', f'/agents/{agent_id}/responsibility/report?days={days}')
-            return response or {}
+            return response.get('report', {}) if response and response.get('success') else {}
             
         except GNFError as e:
             logger.warning(f"Failed to get responsibility report for agent {agent_id}: {e}")
@@ -576,6 +577,9 @@ class GNFAdapter:
             return
         
         try:
+            # Convert datetime to ISO format string to avoid JSON serialization issues
+            timestamp_str = interaction.timestamp.isoformat() if interaction.timestamp else None
+            
             record = {
                 DocumentFields.AGENT_ID: interaction.agent_id,
                 DocumentFields.GNF.INTERACTION_TYPE: interaction.interaction_type.value,
@@ -585,7 +589,7 @@ class GNFAdapter:
                 DocumentFields.GNF.EMOTIONAL_TONE: interaction.emotional_tone.value,
                 DocumentFields.GNF.NARRATIVE_SIGNIFICANCE: gnf_response.get('narrative_significance', 0.0),
                 DocumentFields.GNF.RESPONSIBILITY_IMPACT: gnf_response.get('responsibility_impact', 0.0),
-                DocumentFields.TIMESTAMP: interaction.timestamp,
+                DocumentFields.TIMESTAMP: timestamp_str,
                 DocumentFields.CREATED_AT: SERVER_TIMESTAMP
             }
             
@@ -619,14 +623,12 @@ class GNFAdapter:
 # CONVENIENCE FUNCTIONS
 # ============================================================================
 
-def create_gnf_adapter(service_url: str, api_key: Optional[str] = None, 
-                      firebase_client: Optional[FirebaseClient] = None) -> GNFAdapter:
+def create_gnf_adapter(service_url: str, firebase_client: Optional[FirebaseClient] = None) -> GNFAdapter:
     """
     Create a GNF adapter with default configuration.
     
     Args:
         service_url: URL of the GNF service
-        api_key: Optional API key for authentication
         firebase_client: Optional Firebase client for data persistence
         
     Returns:
@@ -634,7 +636,6 @@ def create_gnf_adapter(service_url: str, api_key: Optional[str] = None,
     """
     config = GNFConfig(
         service_url=service_url,
-        api_key=api_key,
         timeout=30,
         retry_attempts=3,
         retry_delay=1.0

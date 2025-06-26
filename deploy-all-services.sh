@@ -2,6 +2,18 @@
 
 # Alchemist Platform - Post-Migration Service Deployment Script
 # This script deploys all services after the Firestore migration is complete
+#
+# Usage:
+#   ./deploy-all-services.sh              # Interactive mode selection
+#   ./deploy-all-services.sh --manual     # Use predefined service lists
+#   ./deploy-all-services.sh --auto       # Auto-discover services with deploy.sh
+#
+# Features:
+# - Auto-discovers services with deploy.sh scripts
+# - Prioritizes individual service deploy.sh scripts over generic gcloud deploy
+# - Manual mode for controlled phased deployment
+# - Auto mode for comprehensive deployment of all services
+# - Health checks for all deployed services
 
 set -e  # Exit on any error
 
@@ -24,6 +36,33 @@ echo -e "Region: ${REGION}"
 echo -e "Migration Status: ✅ Complete"
 echo ""
 
+# Deployment mode selection
+echo -e "${YELLOW}📋 Deployment Mode Selection:${NC}"
+echo -e "1. Use predefined service lists (manual control)"
+echo -e "2. Auto-discover all services with deploy.sh scripts"
+echo ""
+
+# Check for command line argument
+if [ "$1" == "--auto" ]; then
+    DEPLOYMENT_MODE="auto"
+    echo -e "${GREEN}🤖 Auto-discovery mode selected via --auto flag${NC}"
+elif [ "$1" == "--manual" ]; then
+    DEPLOYMENT_MODE="manual"
+    echo -e "${GREEN}📋 Manual mode selected via --manual flag${NC}"
+else
+    read -p "Choose deployment mode (1 for manual, 2 for auto): " choice
+    case $choice in
+        1) DEPLOYMENT_MODE="manual" ;;
+        2) DEPLOYMENT_MODE="auto" ;;
+        *) 
+            echo -e "${YELLOW}Invalid choice, defaulting to manual mode${NC}"
+            DEPLOYMENT_MODE="manual"
+            ;;
+    esac
+fi
+
+echo ""
+
 # Function to deploy a service
 deploy_service() {
     local service_name=$1
@@ -38,13 +77,25 @@ deploy_service() {
     
     cd "$service_path"
     
-    # Check if service has a deploy script
+    # Prioritize service-specific deploy.sh script
     if [ -f "deploy.sh" ]; then
-        echo -e "   Using service-specific deploy script..."
+        echo -e "   📜 Using service-specific deploy.sh script..."
         chmod +x deploy.sh
-        ./deploy.sh
+        
+        # Export environment variables that might be needed
+        export PROJECT_ID="$PROJECT_ID"
+        export REGION="$REGION"
+        
+        # Execute the service's own deploy script
+        if ./deploy.sh; then
+            echo -e "${GREEN}✅ ${service_name} deployed successfully using deploy.sh${NC}"
+        else
+            echo -e "${RED}❌ ${service_name} deployment failed in deploy.sh${NC}"
+            cd - > /dev/null
+            return 1
+        fi
     elif [ -f "Dockerfile" ]; then
-        echo -e "   Deploying with gcloud run deploy..."
+        echo -e "   🐳 No deploy.sh found, using gcloud run deploy with Dockerfile..."
         gcloud run deploy "$service_name" \
             --source . \
             --project "$PROJECT_ID" \
@@ -55,16 +106,18 @@ deploy_service() {
             --timeout 3600 \
             --max-instances 10 \
             --quiet
+        
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}✅ ${service_name} deployed successfully using gcloud${NC}"
+        else
+            echo -e "${RED}❌ ${service_name} deployment failed with gcloud${NC}"
+            cd - > /dev/null
+            return 1
+        fi
     else
-        echo -e "${YELLOW}⚠️  No Dockerfile or deploy script found, skipping...${NC}"
+        echo -e "${YELLOW}⚠️  No deploy.sh or Dockerfile found in $service_path, skipping...${NC}"
+        cd - > /dev/null
         return 0
-    fi
-    
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}✅ ${service_name} deployed successfully${NC}"
-    else
-        echo -e "${RED}❌ ${service_name} deployment failed${NC}"
-        return 1
     fi
     
     cd - > /dev/null
@@ -99,6 +152,30 @@ check_service_health() {
     fi
 }
 
+# Function to auto-discover services with deploy.sh scripts
+discover_services() {
+    echo -e "${BLUE}🔍 Auto-discovering services with deploy.sh scripts...${NC}"
+    
+    DISCOVERED_SERVICES=()
+    
+    # Find all deploy.sh scripts
+    while IFS= read -r -d '' deploy_script; do
+        service_dir=$(dirname "$deploy_script")
+        service_name=$(basename "$service_dir")
+        
+        # Skip if it's in a subdirectory we don't want
+        if [[ "$service_dir" == *"/universal-deployment-service"* ]]; then
+            continue
+        fi
+        
+        echo -e "   📜 Found: ${service_name} (${service_dir})"
+        DISCOVERED_SERVICES+=("$service_name:$service_dir")
+    done < <(find . -name "deploy.sh" -type f -print0)
+    
+    echo -e "${GREEN}✅ Discovered ${#DISCOVERED_SERVICES[@]} services with deploy.sh scripts${NC}"
+    echo ""
+}
+
 # Validate prerequisites
 echo -e "${BLUE}🔍 Validating prerequisites...${NC}"
 
@@ -120,82 +197,118 @@ gcloud config set project "$PROJECT_ID" --quiet
 echo -e "${GREEN}✅ Prerequisites validated${NC}"
 echo ""
 
-# Phase 1: Deploy Core Services (Critical)
-echo -e "${BLUE}📦 Phase 1: Deploying Core Services${NC}"
-echo -e "${BLUE}======================================${NC}"
+# Auto-discover services
+discover_services
 
-CORE_SERVICES=(
-    "billing-service:billing-service"
-    "agent-studio:agent-studio" 
-    "knowledge-vault:knowledge-vault"
-    "agent-engine:agent-engine"
-    "agent-bridge:agent-bridge"
-)
-
-for service_info in "${CORE_SERVICES[@]}"; do
-    IFS=':' read -r service_name service_path <<< "$service_info"
-    deploy_service "$service_name" "$service_path"
+if [ "$DEPLOYMENT_MODE" == "auto" ]; then
+    # Auto-discovery mode: deploy all discovered services
+    echo -e "${BLUE}🤖 Auto-Discovery Mode: Deploying All Services${NC}"
+    echo -e "${BLUE}===============================================${NC}"
     
-    # Brief pause between core deployments
-    sleep 5
-done
+    for service_info in "${DISCOVERED_SERVICES[@]}"; do
+        IFS=':' read -r service_name service_path <<< "$service_info"
+        deploy_service "$service_name" "$service_path"
+        
+        # Brief pause between deployments
+        sleep 3
+    done
+    
+    echo -e "${GREEN}✅ Auto-Discovery Complete - All Services Deployed${NC}"
+    echo ""
+    
+else
+    # Manual mode: use predefined service lists
+    echo -e "${BLUE}📋 Manual Mode: Deploying Services in Phases${NC}"
+    echo ""
+    
+    # Phase 1: Deploy Core Services (Critical)
+    echo -e "${BLUE}📦 Phase 1: Deploying Core Services${NC}"
+    echo -e "${BLUE}======================================${NC}"
+    
+    CORE_SERVICES=(
+        "billing-service:billing-service"
+        "agent-studio:agent-studio" 
+        "knowledge-vault:knowledge-vault"
+        "agent-engine:agent-engine"
+        "agent-bridge:agent-bridge"
+    )
+    
+    for service_info in "${CORE_SERVICES[@]}"; do
+        IFS=':' read -r service_name service_path <<< "$service_info"
+        deploy_service "$service_name" "$service_path"
+        
+        # Brief pause between core deployments
+        sleep 5
+    done
+    
+    echo -e "${GREEN}✅ Phase 1 Complete - Core Services Deployed${NC}"
+    echo ""
+    
+    # Phase 2: Deploy Supporting Services
+    echo -e "${BLUE}📦 Phase 2: Deploying Supporting Services${NC}"
+    echo -e "${BLUE}==========================================${NC}"
+    
+    SUPPORTING_SERVICES=(
+        "agent-tuning-service:agent-tuning-service"
+        "agent-launcher:agent-launcher"
+        "alchemist-sandbox-console:sandbox-console"
+        "prompt-engine:prompt-engine"
+    )
+    
+    for service_info in "${SUPPORTING_SERVICES[@]}"; do
+        IFS=':' read -r service_name service_path <<< "$service_info"
+        deploy_service "$service_name" "$service_path"
+    done
 
-echo -e "${GREEN}✅ Phase 1 Complete - Core Services Deployed${NC}"
-echo ""
-
-# Phase 2: Deploy Supporting Services
-echo -e "${BLUE}📦 Phase 2: Deploying Supporting Services${NC}"
-echo -e "${BLUE}==========================================${NC}"
-
-SUPPORTING_SERVICES=(
-    "alchemist-agent-tuning:alchemist-agent-tuning"
-    "agent-launcher:agent-launcher/universal-deployment-service"
-    "sandbox-console:sandbox-console"
-    "prompt-engine:prompt-engine"
-)
-
-for service_info in "${SUPPORTING_SERVICES[@]}"; do
-    IFS=':' read -r service_name service_path <<< "$service_info"
-    deploy_service "$service_name" "$service_path"
-done
-
-echo -e "${GREEN}✅ Phase 2 Complete - Supporting Services Deployed${NC}"
-echo ""
-
-# Phase 3: Deploy Additional Services
-echo -e "${BLUE}📦 Phase 3: Deploying Additional Services${NC}"
-echo -e "${BLUE}=========================================${NC}"
-
-ADDITIONAL_SERVICES=(
-    "tool-forge:tool-forge"
-    "alchemist-monitor-service:alchemist-monitor-service"
-)
-
-for service_info in "${ADDITIONAL_SERVICES[@]}"; do
-    IFS=':' read -r service_name service_path <<< "$service_info"
-    deploy_service "$service_name" "$service_path"
-done
-
-echo -e "${GREEN}✅ Phase 3 Complete - Additional Services Deployed${NC}"
-echo ""
+    echo -e "${GREEN}✅ Phase 2 Complete - Supporting Services Deployed${NC}"
+    echo ""
+    
+    # Phase 3: Deploy Additional Services
+    echo -e "${BLUE}📦 Phase 3: Deploying Additional Services${NC}"
+    echo -e "${BLUE}=========================================${NC}"
+    
+    ADDITIONAL_SERVICES=(
+        "alchemist-tool-forge:tool-forge"
+        "alchemist-monitor-service:alchemist-monitor-service"
+    )
+    
+    for service_info in "${ADDITIONAL_SERVICES[@]}"; do
+        IFS=':' read -r service_name service_path <<< "$service_info"
+        deploy_service "$service_name" "$service_path"
+    done
+    
+    echo -e "${GREEN}✅ Phase 3 Complete - Additional Services Deployed${NC}"
+    echo ""
+fi
 
 # Health Checks
 echo -e "${BLUE}🏥 Running Health Checks${NC}"
 echo -e "${BLUE}========================${NC}"
 
-ALL_SERVICES=(
-    "billing-service"
-    "agent-studio"
-    "knowledge-vault" 
-    "agent-engine"
-    "agent-bridge"
-    "alchemist-agent-tuning"
-    "agent-launcher"
-    "sandbox-console"
-    "prompt-engine"
-    "tool-forge"
-    "alchemist-monitor-service"
-)
+# Build service list based on deployment mode
+if [ "$DEPLOYMENT_MODE" == "auto" ]; then
+    # Use discovered services for health checks
+    ALL_SERVICES=()
+    for service_info in "${DISCOVERED_SERVICES[@]}"; do
+        IFS=':' read -r service_name service_path <<< "$service_info"
+        ALL_SERVICES+=("$service_name")
+    done
+else
+    # Use predefined service list
+    ALL_SERVICES=(
+        "billing-service"
+        "agent-studio"
+        "knowledge-vault" 
+        "agent-engine"
+        "agent-bridge"
+        "alchemist-agent-tuning"
+        "agent-launcher"
+        "alchemist-sandbox-console"
+        "prompt-engine"
+        "alchemist-tool-forge"
+        "alchemist-monitor-service"
+    )
+fi
 
 HEALTHY_SERVICES=0
 TOTAL_SERVICES=${#ALL_SERVICES[@]}
@@ -242,4 +355,11 @@ echo -e "4. Verify billing/credits functionality"
 echo -e "5. Check service logs for any errors"
 
 echo ""
-echo -e "${GREEN}🚀 Alchemist Platform deployment complete!${NC}"
+echo -e "${BLUE}💡 Deployment Tips:${NC}"
+echo -e "• Use --auto flag for future deployments to auto-discover all services"
+echo -e "• Use --manual flag for controlled phased deployments"
+echo -e "• Each service's deploy.sh script is prioritized over generic gcloud deploy"
+echo -e "• Check individual service deploy.sh scripts for service-specific configurations"
+
+echo ""
+echo -e "${GREEN}🚀 Alchemist Platform deployment complete! (Mode: $DEPLOYMENT_MODE)${NC}"

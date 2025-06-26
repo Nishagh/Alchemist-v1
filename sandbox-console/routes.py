@@ -214,7 +214,7 @@ def register_routes(app: FastAPI):
             tools_configured = True  # Simplified for now
             
             response_data = {
-                "service": "sandbox-console",
+                "service": "alchemist-sandbox-console",
                 "status": "healthy",
                 "timestamp": datetime.now().isoformat(),
                 "version": "1.0.0",
@@ -242,7 +242,7 @@ def register_routes(app: FastAPI):
             
         except Exception as e:
             error_response = {
-                "service": "sandbox-console",
+                "service": "alchemist-sandbox-console",
                 "status": "unhealthy",
                 "timestamp": datetime.now().isoformat(),
                 "error": str(e)

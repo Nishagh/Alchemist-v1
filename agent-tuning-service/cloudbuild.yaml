@@ -43,7 +43,7 @@ steps:
       - '--concurrency=80'
       - '--max-instances=10'
       - '--set-env-vars=TUNING_ENVIRONMENT=production,TUNING_FIREBASE_PROJECT_ID=$PROJECT_ID'
-      - '--service-account=alchemist-service-account@$PROJECT_ID.iam.gserviceaccount.com'
+      - '--set-secrets=OPENAI_API_KEY=OPENAI_API_KEY:latest'
     id: 'deploy-service'
     waitFor: ['push-image-sha']
 

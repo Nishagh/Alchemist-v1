@@ -5,7 +5,7 @@ This module deploys optimized AI agents from the Alchemist platform as high-perf
 ## Architecture
 
 - **One Cloud Run service per AI agent** - Each agent is deployed as an independent service
-- **Agent configuration from Firestore** - Fetches agent data from `alchemist_agents/[agentId]` collection
+- **Agent configuration from Firestore** - Fetches agent data from `agents/[agentId]` collection
 - **Isolated deployments** - Each service runs with agent-specific environment and configuration
 - **Separate from MCP deployments** - This is for deploying AI agents that consume MCP tools
 
@@ -115,7 +115,7 @@ python deploy_cli.py list --project-id YOUR_GCP_PROJECT
 ## How It Works
 
 ### 1. Agent Configuration Fetch
-- Fetches agent configuration from Firestore collection `alchemist_agents/[agentId]`
+- Fetches agent configuration from Firestore collection `agents/[agentId]`
 - Extracts agent-specific settings like model, system prompt, environment variables
 - Checks for MCP server integration in `api_integration.service_url`
 

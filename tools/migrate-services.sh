@@ -44,7 +44,7 @@ copy_service() {
 }
 
 # Migrate services
-copy_service "Knowledge-base-service" "packages/knowledge-base" "Knowledge Base Service"
+copy_service "alchemist-knowledge-vault" "packages/knowledge-base" "Knowledge Base Service"
 copy_service "Whatsapp-integration" "packages/whatsapp" "WhatsApp Integration Service"
 copy_service "agent-deployment/universal-deployment-service" "packages/agent-deployment" "Agent Deployment Service"
 copy_service "frontend" "packages/frontend" "Frontend Application"

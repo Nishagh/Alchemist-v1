@@ -167,7 +167,7 @@ docker-build:
 	docker build -t agent-engine agent-engine/
 	docker build -t knowledge-vault knowledge-vault/
 	docker build -t agent-bridge agent-bridge/
-	docker build -t agent-studio-web agent-studio/
+	docker build -t alchemist-agent-studio agent-studio/
 
 # Check which services have changes
 check-changes:

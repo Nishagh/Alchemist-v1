@@ -1,16 +1,21 @@
 #!/bin/bash
-# Deployment script for Standalone Agent with Knowledge Base Service integration
-# This script sets up the environment and deploys the standalone agent to Google Cloud Run
+# Deployment script for Alchemist Sandbox Console Service
+# 
+# Usage:
+#   ./deploy.sh              # Deploy to Google Cloud Run using Cloud Build (default)
+#   ./deploy.sh --local      # Deploy locally
+#   ./deploy.sh --docker     # Deploy to Google Cloud Run using local Docker build
+#
+# This script deploys the standalone agent to Google Cloud Run by default
 
 set -e  # Exit on error
 
 # Configuration variables
-KNOWLEDGE_BASE_URL=${KNOWLEDGE_BASE_URL:-"https://knowledge-base-service-b3hpe34qdq-uc.a.run.app"}
+KNOWLEDGE_BASE_URL=${KNOWLEDGE_BASE_URL:-"https://alchemist-knowledge-vault-b3hpe34qdq-uc.a.run.app"}
 DEFAULT_AGENT_ID=${DEFAULT_AGENT_ID:-"8e18dfe2-1478-4bb3-a9ee-894ff1ac81e7"}
-OPENAI_API_KEY=${OPENAI_API_KEY:-"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"}
-GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-"firebase-credentials.json"}
+# OPENAI_API_KEY is now managed as a Google Secret (openai-api-key)
 GCP_PROJECT_ID=${GCP_PROJECT_ID:-"alchemist-e69bb"}
-SERVICE_NAME=${SERVICE_NAME:-"standalone-agent"}
+SERVICE_NAME=${SERVICE_NAME:-"alchemist-sandbox-console"}
 REGION=${REGION:-"us-central1"}
 IMAGE_NAME=${IMAGE_NAME:-"gcr.io/${GCP_PROJECT_ID}/${SERVICE_NAME}:latest"}
 
@@ -21,9 +26,13 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 # Banner
-echo -e "${GREEN}=================================${NC}"
-echo -e "${GREEN}Standalone Agent Deployment Script${NC}"
-echo -e "${GREEN}=================================${NC}"
+echo -e "${GREEN}========================================${NC}"
+echo -e "${GREEN}Alchemist Sandbox Console Deployment${NC}"
+echo -e "${GREEN}========================================${NC}"
+echo -e "${GREEN}Default: Google Cloud Run Deployment${NC}"
+echo -e "${GREEN}Use --local for local deployment${NC}"
+echo -e "${GREEN}Use --docker for local Docker build${NC}"
+echo ""
 
 # Check for required environment variables
 check_env_var() {
@@ -62,9 +71,6 @@ update_env_file() {
     grep -q "^DEFAULT_AGENT_ID=" .env && sed -i.bak "s|^DEFAULT_AGENT_ID=.*|DEFAULT_AGENT_ID=$DEFAULT_AGENT_ID|" .env || echo "DEFAULT_AGENT_ID=$DEFAULT_AGENT_ID" >> .env
   fi
   
-  if [ ! -z "$OPENAI_API_KEY" ]; then
-    grep -q "^OPENAI_API_KEY=" .env && sed -i.bak "s|^OPENAI_API_KEY=.*|OPENAI_API_KEY=$OPENAI_API_KEY|" .env || echo "OPENAI_API_KEY=$OPENAI_API_KEY" >> .env
-  fi
   
   if [ ! -z "$GOOGLE_APPLICATION_CREDENTIALS" ]; then
     grep -q "^GOOGLE_APPLICATION_CREDENTIALS=" .env && sed -i.bak "s|^GOOGLE_APPLICATION_CREDENTIALS=.*|GOOGLE_APPLICATION_CREDENTIALS=$GOOGLE_APPLICATION_CREDENTIALS|" .env || echo "GOOGLE_APPLICATION_CREDENTIALS=$GOOGLE_APPLICATION_CREDENTIALS" >> .env
@@ -136,6 +142,13 @@ gcloud_build() {
   # Check if Dockerfile exists
   check_dockerfile
   
+  # Copy shared module to local directory for Docker context
+  echo -e "${YELLOW}📦 Preparing shared module...${NC}"
+  if [ -d "./shared" ]; then
+      rm -rf ./shared
+  fi
+  cp -r ../shared ./shared
+  
   # Submit the build to Google Cloud Build
   gcloud builds submit --tag ${IMAGE_NAME} .
   
@@ -146,13 +159,14 @@ gcloud_build() {
 deploy_to_cloud_run() {
   echo -e "\n${GREEN}Deploying to Google Cloud Run...${NC}"
   
-  # Deploy to Cloud Run
+  # Deploy to Cloud Run with secrets
   gcloud run deploy ${SERVICE_NAME} \
     --image ${IMAGE_NAME} \
     --platform managed \
     --region ${REGION} \
     --allow-unauthenticated \
-    --set-env-vars="KNOWLEDGE_BASE_URL=${KNOWLEDGE_BASE_URL},DEFAULT_AGENT_ID=${DEFAULT_AGENT_ID},OPENAI_API_KEY=${OPENAI_API_KEY}"
+    --set-env-vars="KNOWLEDGE_BASE_URL=${KNOWLEDGE_BASE_URL},DEFAULT_AGENT_ID=${DEFAULT_AGENT_ID}" \
+    --set-secrets="OPENAI_API_KEY=OPENAI_API_KEY:latest"
   
   echo -e "${GREEN}Deployed to Google Cloud Run successfully.${NC}"
 }
@@ -171,11 +185,8 @@ deploy() {
     export DEFAULT_AGENT_ID=$DEFAULT_AGENT_ID
   fi
   
-  if ! check_env_var "OPENAI_API_KEY"; then
-    echo -e "${YELLOW}OPENAI_API_KEY is not set. Please provide an OpenAI API key to continue.${NC}"
-    read -p "Enter OPENAI_API_KEY: " OPENAI_API_KEY
-    export OPENAI_API_KEY=$OPENAI_API_KEY
-  fi
+  # OPENAI_API_KEY is managed as a Google Secret (openai-api-key)
+  echo -e "${GREEN}✅ Using existing Google Secret for OPENAI_API_KEY${NC}"
   
   # Check if requirements.txt exists, create if not
   if [ ! -f "requirements.txt" ]; then
@@ -191,92 +202,80 @@ EOF
     echo -e "${GREEN}requirements.txt created successfully.${NC}"
   fi
   
-  # Determine deployment type
-  echo -e "\n${GREEN}Select deployment type:${NC}"
-  echo "1) Local deployment"
-  echo "2) Google Cloud Run deployment"
-  read -p "Enter your choice (1/2): " deployment_choice
-  
-  case $deployment_choice in
-    1)
-      # Local deployment
-      echo -e "\n${GREEN}Proceeding with local deployment...${NC}"
-      
-      # Install dependencies
-      install_dependencies
-      
-      # Update .env file
-      update_env_file
-      
-      # Verify Knowledge Base Service connection
-      if verify_knowledge_base; then
-        echo -e "\n${GREEN}Local deployment completed successfully!${NC}"
-        echo -e "${GREEN}The standalone agent is now ready to use with Knowledge Base Service integration.${NC}"
-      else
-        echo -e "\n${YELLOW}Local deployment completed with warnings.${NC}"
-        echo -e "${YELLOW}The Knowledge Base Service connection could not be verified.${NC}"
-        echo -e "${YELLOW}Check the connection and try again later.${NC}"
-      fi
-      ;;
-    2)
-      # Cloud deployment
-      echo -e "\n${GREEN}Proceeding with Google Cloud Run deployment...${NC}"
-      
-      # Check GCP project ID
-      if ! check_env_var "GCP_PROJECT_ID"; then
-        echo -e "${YELLOW}GCP_PROJECT_ID is not set. Please provide a Google Cloud Project ID to continue.${NC}"
-        read -p "Enter GCP_PROJECT_ID: " GCP_PROJECT_ID
-        export GCP_PROJECT_ID=$GCP_PROJECT_ID
-        IMAGE_NAME="gcr.io/${GCP_PROJECT_ID}/${SERVICE_NAME}:latest"
-      fi
-      
-      # Check for gcloud CLI
-      if ! command -v gcloud &> /dev/null; then
-        echo -e "${RED}Error: gcloud CLI not found. Please install the Google Cloud SDK first.${NC}"
-        echo -e "${YELLOW}Visit: https://cloud.google.com/sdk/docs/install${NC}"
-        exit 1
-      fi
-      
-      # Check gcloud auth
-      echo -e "\n${GREEN}Checking Google Cloud authentication...${NC}"
-      if ! gcloud auth print-access-token &> /dev/null; then
-        echo -e "${YELLOW}You need to authenticate with Google Cloud.${NC}"
-        gcloud auth login
-      fi
-      
-      # Select build method
-      echo -e "\n${GREEN}Select build method:${NC}"
-      echo "1) Local Docker build and push to GCR"
-      echo "2) Google Cloud Build (build in the cloud)"
-      read -p "Enter your choice (1/2): " build_choice
-      
-      case $build_choice in
-        1)
-          # Local Docker build
-          build_docker_image
-          push_to_gcr
-          ;;
-        2)
-          # Google Cloud Build
-          gcloud_build
-          ;;
-        *)
-          echo -e "${RED}Invalid choice. Using Google Cloud Build.${NC}"
-          gcloud_build
-          ;;
-      esac
-      
-      # Deploy to Cloud Run
-      deploy_to_cloud_run
-      
-      echo -e "\n${GREEN}Google Cloud Run deployment completed successfully!${NC}"
-      echo -e "${GREEN}The standalone agent is now deployed and ready to use.${NC}"
-      ;;
-    *)
-      echo -e "${RED}Invalid choice. Exiting.${NC}"
+  # Deploy to Google Cloud by default
+  # Use --local flag to force local deployment: ./deploy.sh --local
+  if [[ "$1" == "--local" ]]; then
+    echo -e "\n${GREEN}Local deployment mode selected...${NC}"
+    
+    # Install dependencies
+    install_dependencies
+    
+    # Update .env file
+    update_env_file
+    
+    # Verify Knowledge Base Service connection
+    if verify_knowledge_base; then
+      echo -e "\n${GREEN}Local deployment completed successfully!${NC}"
+      echo -e "${GREEN}The standalone agent is now ready to use with Knowledge Base Service integration.${NC}"
+    else
+      echo -e "\n${YELLOW}Local deployment completed with warnings.${NC}"
+      echo -e "${YELLOW}The Knowledge Base Service connection could not be verified.${NC}"
+      echo -e "${YELLOW}Check the connection and try again later.${NC}"
+    fi
+  else
+    # Default: Google Cloud Run deployment
+    echo -e "\n${GREEN}Proceeding with Google Cloud Run deployment...${NC}"
+    
+    # Check GCP project ID
+    if ! check_env_var "GCP_PROJECT_ID"; then
+      echo -e "${YELLOW}GCP_PROJECT_ID is not set. Please provide a Google Cloud Project ID to continue.${NC}"
+      read -p "Enter GCP_PROJECT_ID: " GCP_PROJECT_ID
+      export GCP_PROJECT_ID=$GCP_PROJECT_ID
+      IMAGE_NAME="gcr.io/${GCP_PROJECT_ID}/${SERVICE_NAME}:latest"
+    fi
+    
+    # Check for gcloud CLI
+    if ! command -v gcloud &> /dev/null; then
+      echo -e "${RED}Error: gcloud CLI not found. Please install the Google Cloud SDK first.${NC}"
+      echo -e "${YELLOW}Visit: https://cloud.google.com/sdk/docs/install${NC}"
       exit 1
-      ;;
-  esac
+    fi
+    
+    # Check gcloud auth
+    echo -e "\n${GREEN}Checking Google Cloud authentication...${NC}"
+    if ! gcloud auth print-access-token &> /dev/null; then
+      echo -e "${YELLOW}You need to authenticate with Google Cloud.${NC}"
+      gcloud auth login
+    fi
+    
+    # Enable required APIs
+    echo -e "\n${GREEN}Enabling required APIs...${NC}"
+    gcloud services enable run.googleapis.com cloudbuild.googleapis.com
+    
+    # Use Google Cloud Build by default (use --docker flag for local build)
+    if [[ "$1" == "--docker" ]]; then
+      echo -e "\n${GREEN}Using local Docker build...${NC}"
+      # Local Docker build
+      build_docker_image
+      push_to_gcr
+    else
+      echo -e "\n${GREEN}Using Google Cloud Build...${NC}"
+      # Google Cloud Build (default)
+      gcloud_build
+    fi
+    
+    # Deploy to Cloud Run
+    deploy_to_cloud_run
+    
+    # Cleanup shared directory
+    echo -e "${YELLOW}🧹 Cleaning up...${NC}"
+    if [ -d "./shared" ]; then
+        rm -rf ./shared
+    fi
+    
+    echo -e "\n${GREEN}Google Cloud Run deployment completed successfully!${NC}"
+    echo -e "${GREEN}The standalone agent is now deployed and ready to use.${NC}"
+  fi
 }
 
 # Execute the deployment

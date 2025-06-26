@@ -211,7 +211,7 @@ The application can also be deployed to:
    rules_version = '2';
    service cloud.firestore {
      match /databases/{database}/documents {
-       match /alchemist_agents/{agentId} {
+       match /agents/{agentId} {
          allow read, write: if request.auth != null 
            && request.auth.uid == resource.data.userId;
        }

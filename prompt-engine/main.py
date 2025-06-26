@@ -95,17 +95,25 @@ async def health_check():
 async def root():
     return {"message": "Welcome to the Prompt Engineer Service. See /docs for API documentation."}
 
-# Add middleware to log requests
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    logger.info(f"Request: {request.method} {request.url.path}")
-    response = await call_next(request)
-    logger.info(f"Response status: {response.status_code}")
-    return response
+# Add API logging middleware
+try:
+    from alchemist_shared.middleware.api_logging_middleware import setup_api_logging_middleware
+    setup_api_logging_middleware(app, "prompt-engine")
+    logger.info("API logging middleware enabled")
+except ImportError:
+    logger.warning("API logging middleware not available")
+    
+    # Fallback to basic logging middleware
+    @app.middleware("http")
+    async def log_requests(request: Request, call_next):
+        logger.info(f"Request: {request.method} {request.url.path}")
+        response = await call_next(request)
+        logger.info(f"Response status: {response.status_code}")
+        return response
 
 if __name__ == "__main__":
     # Get port from environment variable or use default
     port = int(os.environ.get("PORT", 8080))
     
     # Run the server
-    uvicorn.run("server:app", host="0.0.0.0", port=port, reload=False)
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)

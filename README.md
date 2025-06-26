@@ -177,7 +177,7 @@ OPENAI_API_KEY=your-openai-key
 CORS_ORIGINS=https://your-domain.com
 
 # Service URLs (auto-configured in production)
-KNOWLEDGE_BASE_URL=https://knowledge-base-service-url
+KNOWLEDGE_BASE_URL=https://alchemist-knowledge-vault-url
 WHATSAPP_SERVICE_URL=https://whatsapp-service-url
 ```
 

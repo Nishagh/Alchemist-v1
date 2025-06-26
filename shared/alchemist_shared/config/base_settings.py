@@ -8,7 +8,11 @@ Handles common configuration patterns and environment variable loading.
 import os
 from enum import Enum
 from typing import Optional, Dict, Any
-from pydantic import BaseSettings as PydanticBaseSettings, Field
+from pydantic import Field
+from pydantic_settings import BaseSettings as PydanticBaseSettings
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 class Environment(str, Enum):
@@ -36,13 +40,14 @@ class BaseSettings(PydanticBaseSettings):
     port: int = Field(default=8080, description="Server port")
     
     # Firebase configuration
-    firebase_project_id: Optional[str] = Field(default=None, description="Firebase project ID")
-    firebase_storage_bucket: Optional[str] = Field(default=None, description="Firebase storage bucket")
-    google_application_credentials: Optional[str] = Field(default=None, description="Path to Google credentials file")
+    firebase_project_id: Optional[str] = Field(default=None, description="Firebase project ID", validation_alias="FIREBASE_PROJECT_ID")
+    firebase_storage_bucket: Optional[str] = Field(default=None, description="Firebase storage bucket", validation_alias="FIREBASE_STORAGE_BUCKET")
+    google_application_credentials: Optional[str] = Field(default=None, description="Path to Google credentials file", validation_alias="GOOGLE_APPLICATION_CREDENTIALS")
     
     # OpenAI configuration
-    openai_api_key: Optional[str] = Field(default=None, description="OpenAI API key")
+    openai_api_key: Optional[str] = Field(default=None, description="OpenAI API key", validation_alias="OPENAI_API_KEY")
     openai_model: str = Field(default="gpt-4", description="Default OpenAI model")
+    openai_organization: Optional[str] = Field(default=None, description="OpenAI organization ID", validation_alias="OPENAI_ORGANIZATION")
     
     # Logging configuration
     log_level: str = Field(default="INFO", description="Logging level")
@@ -51,19 +56,12 @@ class BaseSettings(PydanticBaseSettings):
     # Security configuration
     cors_origins: list[str] = Field(default=["http://localhost:3000"], description="CORS allowed origins")
     
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
-        
-        # Environment variable mapping
-        fields = {
-            "firebase_project_id": {"env": ["FIREBASE_PROJECT_ID", "GOOGLE_CLOUD_PROJECT"]},
-            "firebase_storage_bucket": {"env": "FIREBASE_STORAGE_BUCKET"},
-            "google_application_credentials": {"env": "GOOGLE_APPLICATION_CREDENTIALS"},
-            "openai_api_key": {"env": "OPENAI_API_KEY"},
-            "cors_origins": {"env": "CORS_ORIGINS"},
-        }
+    model_config = {
+        "env_file": [".env", "../shared/.env"],
+        "env_file_encoding": "utf-8",
+        "case_sensitive": False,
+        "extra": "ignore"
+    }
     
     @property
     def is_development(self) -> bool:
@@ -94,13 +92,20 @@ class BaseSettings(PydanticBaseSettings):
         env_var = f"{service_name.upper().replace('-', '_')}_URL"
         return os.environ.get(env_var)
     
+    def get_openai_config(self) -> Dict[str, Any]:
+        """Get centralized OpenAI configuration."""
+        config = {"api_key": self.openai_api_key}
+        if self.openai_organization:
+            config["organization"] = self.openai_organization
+        return config
+    
     def to_dict(self) -> Dict[str, Any]:
         """Convert settings to dictionary."""
-        return self.dict()
+        return self.model_dump()
     
     def __str__(self) -> str:
         """String representation (excludes sensitive data)."""
-        safe_dict = self.dict()
+        safe_dict = self.model_dump()
         # Remove sensitive fields
         safe_dict.pop("openai_api_key", None)
         safe_dict.pop("google_application_credentials", None)

@@ -47,20 +47,6 @@ export const Collections = {
   // Integrations
   INTEGRATION_CHANNELS: 'integration_channels',
   
-  // ============================================================================
-  // DEPRECATED COLLECTIONS (For Migration Reference)
-  // ============================================================================
-  
-  Deprecated: {
-    ALCHEMIST_AGENTS: 'alchemist_agents',
-    DEV_CONVERSATIONS: 'dev_conversations',
-    KNOWLEDGE_BASE_FILES: 'knowledge_base_files',
-    USER_CREDITS: 'user_credits',
-    AGENT_BILLING_SUMMARY: 'agent_billing_summary',
-    MANAGED_ACCOUNTS: 'managed_accounts',
-    WEBHOOK_LOGS: 'webhook_logs',
-    KNOWLEDGE_BASE_EMBEDDINGS: 'knowledge_base_embeddings',
-  },
 };
 
 /**
@@ -225,7 +211,6 @@ export const ErrorMessages = {
   USER_NOT_AUTHENTICATED: 'User not authenticated',
   INSUFFICIENT_CREDITS: 'Insufficient credits for this operation',
   INVALID_COLLECTION_NAME: 'Invalid collection name',
-  DEPRECATED_COLLECTION_WARNING: 'Warning: Using deprecated collection name',
 };
 
 /**
@@ -248,13 +233,6 @@ export const getAllCollections = () => {
   ];
 };
 
-/**
- * Get list of deprecated collection names.
- * @returns {string[]} Array of deprecated collection names
- */
-export const getDeprecatedCollections = () => {
-  return Object.values(Collections.Deprecated);
-};
 
 /**
  * Check if collection name is in current valid set.
@@ -265,54 +243,19 @@ export const isValidCollection = (collectionName) => {
   return getAllCollections().includes(collectionName);
 };
 
-/**
- * Check if collection name is deprecated.
- * @param {string} collectionName - The collection name to check
- * @returns {boolean} True if deprecated, false otherwise
- */
-export const isDeprecatedCollection = (collectionName) => {
-  return getDeprecatedCollections().includes(collectionName);
-};
 
 /**
- * Validate collection name usage and log warnings for deprecated names.
+ * Validate collection name usage.
  * @param {string} collectionName - The collection name to validate
  * @throws {Error} If collection name is not recognized
  */
 export const validateCollectionUsage = (collectionName) => {
-  if (isDeprecatedCollection(collectionName)) {
-    console.warn(`${ErrorMessages.DEPRECATED_COLLECTION_WARNING}: ${collectionName}`);
-  } else if (!isValidCollection(collectionName)) {
+  if (!isValidCollection(collectionName)) {
     throw new Error(`${ErrorMessages.INVALID_COLLECTION_NAME}: ${collectionName}`);
   }
 };
 
-/**
- * Get mapping from old collection names to new standardized names.
- * @returns {Object} Dictionary mapping deprecated names to current names
- */
-export const getCollectionMapping = () => {
-  return {
-    [Collections.Deprecated.ALCHEMIST_AGENTS]: Collections.AGENTS,
-    [Collections.Deprecated.DEV_CONVERSATIONS]: Collections.CONVERSATIONS,
-    [Collections.Deprecated.KNOWLEDGE_BASE_FILES]: Collections.KNOWLEDGE_FILES,
-    [Collections.Deprecated.USER_CREDITS]: Collections.USER_ACCOUNTS,
-    [Collections.Deprecated.AGENT_BILLING_SUMMARY]: Collections.AGENT_USAGE_SUMMARY,
-    [Collections.Deprecated.MANAGED_ACCOUNTS]: Collections.INTEGRATION_CHANNELS,
-    [Collections.Deprecated.WEBHOOK_LOGS]: Collections.COMMUNICATION_LOGS,
-    [Collections.Deprecated.KNOWLEDGE_BASE_EMBEDDINGS]: Collections.KNOWLEDGE_EMBEDDINGS,
-  };
-};
 
-/**
- * Get the current collection name for a potentially deprecated name.
- * @param {string} collectionName - The collection name (may be deprecated)
- * @returns {string} The current standardized collection name
- */
-export const getCurrentCollectionName = (collectionName) => {
-  const mapping = getCollectionMapping();
-  return mapping[collectionName] || collectionName;
-};
 
 // ============================================================================
 // TYPESCRIPT TYPE DEFINITIONS (when used in .ts files)

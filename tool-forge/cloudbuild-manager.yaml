@@ -6,14 +6,14 @@ steps:
       - '-f'
       - 'Dockerfile.manager'
       - '-t'
-      - 'gcr.io/$PROJECT_ID/mcp-manager:latest'
+      - 'gcr.io/$PROJECT_ID/alchemist-tool-forge:latest'
       - '.'
 
   # Push the image to Container Registry
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
-      - 'gcr.io/$PROJECT_ID/mcp-manager:latest'
+      - 'gcr.io/$PROJECT_ID/alchemist-tool-forge:latest'
 
   # Deploy to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
@@ -21,9 +21,9 @@ steps:
     args:
       - 'run'
       - 'deploy'
-      - 'mcp-manager'
+      - 'alchemist-tool-forge'
       - '--image'
-      - 'gcr.io/$PROJECT_ID/mcp-manager:latest'
+      - 'gcr.io/$PROJECT_ID/alchemist-tool-forge:latest'
       - '--region'
       - '$_REGION'
       - '--platform'
@@ -49,7 +49,7 @@ substitutions:
 
 # Images to be pushed to Container Registry
 images:
-  - 'gcr.io/$PROJECT_ID/mcp-manager:latest'
+  - 'gcr.io/$PROJECT_ID/alchemist-tool-forge:latest'
 
 # Configure timeout
 timeout: 1200s 

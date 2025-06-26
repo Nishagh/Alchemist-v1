@@ -1,4 +1,5 @@
 """
+from alchemist_shared.middleware.api_logging_middleware import setup_api_logging_middleware
 Alchemist Billing Service
 FastAPI-based microservice for handling billing, credits, and payments
 """
@@ -123,6 +124,9 @@ async def cors_test():
     }
 
 
+
+# API Logging Middleware
+setup_api_logging_middleware(app, "billing-service")
 if __name__ == "__main__":
     uvicorn.run(
         "main:app",

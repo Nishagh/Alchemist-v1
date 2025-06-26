@@ -151,13 +151,14 @@ def generate_timestamp_id(timestamp: datetime, granularity: str = "minute") -> s
 
 def get_collection_path(service_name: str, metrics_type: str = "raw") -> str:
     """Get Firestore collection path for metrics"""
-    base_path = f"{FirestoreSchema.RAW_METRICS}/{service_name}"
+    # Firestore path: metrics/{service_name}_metrics
+    # This ensures odd number of path elements (1: collection)
     
     if metrics_type == "raw":
-        return f"{base_path}/{FirestoreSchema.RAW_METRICS_SUBCOLLECTION}"
-    elif metrics_type == "hourly":
-        return f"{base_path}/{FirestoreSchema.HOURLY_METRICS}"
+        return f"metrics_{service_name}_raw"
+    elif metrics_type == "hourly": 
+        return f"metrics_{service_name}_hourly"
     elif metrics_type == "daily":
-        return f"{base_path}/{FirestoreSchema.DAILY_METRICS}"
+        return f"metrics_{service_name}_daily"
     else:
-        return f"{base_path}/raw_metrics"
+        return f"metrics_{service_name}_raw"

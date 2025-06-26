@@ -19,8 +19,16 @@ import aiohttp
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import firebase_admin
-from firebase_admin import credentials, firestore, storage
+# Use shared Firebase client
+try:
+    from alchemist_shared.database.firebase_client import get_firestore_client
+    from alchemist_shared.config.firebase_config import get_storage_bucket
+    SHARED_FIREBASE_AVAILABLE = True
+except ImportError:
+    # Fallback to direct Firebase import
+    import firebase_admin
+    from firebase_admin import credentials, firestore, storage
+    SHARED_FIREBASE_AVAILABLE = False
 from google.cloud import run_v2
 from google.auth import default
 import subprocess
@@ -43,28 +51,35 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Initialize Firebase
-if not firebase_admin._apps:
-    # Check if we're running locally or in cloud
-    credentials_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
-    storage_bucket = os.getenv('FIREBASE_STORAGE_BUCKET') or 'alchemist-e69bb.appspot.com'
-    
-    if credentials_path and os.path.exists(credentials_path):
-        # Local development - use credentials file
-        print(f"Using Firebase credentials file: {credentials_path}")
-        cred = credentials.Certificate(credentials_path)
-        firebase_admin.initialize_app(cred, {
-            'storageBucket': storage_bucket
-        })
-    else:
-        # Cloud deployment - use default service account
-        print("Using default service account for Firebase authentication")
-        cred = credentials.ApplicationDefault()
-        firebase_admin.initialize_app(cred, {
-            'storageBucket': storage_bucket
-        })
+if SHARED_FIREBASE_AVAILABLE:
+    # Use shared Firebase clients
+    print("Using shared Firebase authentication")
+    db = get_firestore_client()
+    bucket = get_storage_bucket()
+else:
+    # Fallback to direct Firebase initialization
+    if not firebase_admin._apps:
+        # Check if we're running locally or in cloud
+        credentials_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+        storage_bucket = os.getenv('FIREBASE_STORAGE_BUCKET') or 'alchemist-e69bb.appspot.com'
+        
+        if credentials_path and os.path.exists(credentials_path):
+            # Local development - use credentials file
+            print(f"Using Firebase credentials file: {credentials_path}")
+            cred = credentials.Certificate(credentials_path)
+            firebase_admin.initialize_app(cred, {
+                'storageBucket': storage_bucket
+            })
+        else:
+            # Cloud deployment - use default service account
+            print("Using default service account for Firebase authentication")
+            cred = credentials.ApplicationDefault()
+            firebase_admin.initialize_app(cred, {
+                'storageBucket': storage_bucket
+            })
 
-db = firestore.client()
-bucket = storage.bucket()
+    db = firestore.client()
+    bucket = storage.bucket()
 
 
 @asynccontextmanager
@@ -174,7 +189,7 @@ class DeploymentLogger:
     async def update_job_status(self, status: str, step: str, progress: int, error_message: str = None):
         """Update deployment job status in Firestore"""
         try:
-            job_ref = db.collection('alchemist_agents').document(self.agent_id).collection('deployments').document(self.deployment_id)
+            job_ref = db.collection('agents').document(self.agent_id).collection('deployments').document(self.deployment_id)
             update_data = {
                 'status': status,
                 'current_step': step,
@@ -209,7 +224,7 @@ class DeploymentLogger:
                 "failed": "error"
             }.get(status, status)
             
-            status_ref = db.collection('alchemist_agents').document(self.agent_id)
+            status_ref = db.collection('agents').document(self.agent_id)
             update_data = {
                 'status': server_status,
                 'current_step': step,
@@ -270,7 +285,7 @@ class MCPManagerService:
             progress=0
         )
         
-        doc_ref = db.collection('alchemist_agents').document(agent_id).collection('deployments').document(deployment_id)
+        doc_ref = db.collection('agents').document(agent_id).collection('deployments').document(deployment_id)
         doc_ref.set(job.model_dump())
         
     async def deploy_mcp_server_async(self, agent_id: str, deployment_id: str, description: str = None):
@@ -282,7 +297,7 @@ class MCPManagerService:
             await deploy_logger.update_job_status("building", "Validating configuration", 10)
 
             # Fetch agent data and MCP config URL
-            agent_data = db.collection('alchemist_agents').document(agent_id).get().to_dict()
+            agent_data = db.collection('agents').document(agent_id).get().to_dict()
             if not agent_data or 'mcp_config' not in agent_data:
                 raise Exception(f"No MCP config found for agent {agent_id}")
             
@@ -380,7 +395,7 @@ class MCPManagerService:
             }
             
             # Update both mcp_server_status and api_integration fields
-            status_ref = db.collection('alchemist_agents').document(agent_id)
+            status_ref = db.collection('agents').document(agent_id)
             update_data = {
                 'mcp_server_status': {
                     'agent_id': agent_id,
@@ -462,12 +477,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the generic MCP server
 COPY generic_mcp_server.py .
-COPY firebase-credentials.json .
 
 # Set environment variables
 ENV AGENT_ID={agent_id}
 ENV MCP_CONFIG_URL={mcp_config_url}
-ENV GOOGLE_APPLICATION_CREDENTIALS=/app/firebase-credentials.json
 ENV FIREBASE_STORAGE_BUCKET={os.getenv('FIREBASE_STORAGE_BUCKET')}
 ENV PORT=8080
 
@@ -641,7 +654,7 @@ if __name__ == "__main__":
             import shutil
             shutil.copy("generic_mcp_server.py", temp_dir)
             shutil.copy("requirements.txt", temp_dir)
-            shutil.copy("firebase-credentials.json", temp_dir)
+            # Note: firebase-credentials.json no longer needed - using default service account
             
             # Submit to Cloud Build
             await self._submit_cloud_build(temp_dir, image_uri, agent_id, deploy_logger)
@@ -737,7 +750,6 @@ if __name__ == "__main__":
                                 "env": [
                                     {"name": "AGENT_ID", "value": agent_id},
                                     {"name": "MCP_CONFIG_URL", "value": mcp_config_url},
-                                    {"name": "GOOGLE_APPLICATION_CREDENTIALS", "value": "/app/firebase-credentials.json"},
                                     {"name": "FIREBASE_STORAGE_BUCKET", "value": os.getenv('FIREBASE_STORAGE_BUCKET')}
                                 ],
                                 "resources": {
@@ -843,13 +855,13 @@ if __name__ == "__main__":
     
     async def _save_server_status(self, status: MCPServerStatus):
         """Save server status to Firestore"""
-        doc_ref = db.collection('alchemist_agents').document(status.agent_id)
+        doc_ref = db.collection('agents').document(status.agent_id)
         doc_ref.update({'mcp_server_status': status.model_dump()})
     
     async def get_server_status(self, agent_id: str) -> Optional[MCPServerStatus]:
         """Get status of an MCP server"""
         try:
-            doc_ref = db.collection('alchemist_agents').document(agent_id)
+            doc_ref = db.collection('agents').document(agent_id)
             doc = doc_ref.get()
             
             if doc.exists:
@@ -882,7 +894,7 @@ if __name__ == "__main__":
     async def get_deployment_job(self, agent_id: str, deployment_id: str) -> Optional[DeploymentJob]:
         """Get deployment job details"""
         try:
-            doc_ref = db.collection('alchemist_agents').document(agent_id).collection('deployments').document(deployment_id)
+            doc_ref = db.collection('agents').document(agent_id).collection('deployments').document(deployment_id)
             doc = doc_ref.get()
             
             if doc.exists:
@@ -945,7 +957,7 @@ if __name__ == "__main__":
             await process.communicate()
             
             # Delete from Firestore
-            db.collection('alchemist_agents').document(agent_id).update({'mcp_server_status': {}})
+            db.collection('agents').document(agent_id).update({'mcp_server_status': {}})
             #db.collection('mcp_agents').document(agent_id).delete()
             
             # Delete from Storage
@@ -1022,7 +1034,7 @@ async def get_server_status(agent_id: str):
 async def get_integration_summary(agent_id: str):
     """Get comprehensive integration summary for agentEditor"""
     try:
-        doc_ref = db.collection('alchemist_agents').document(agent_id)
+        doc_ref = db.collection('agents').document(agent_id)
         doc = doc_ref.get()
         
         if not doc.exists:

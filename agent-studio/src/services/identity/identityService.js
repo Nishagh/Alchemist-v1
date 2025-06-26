@@ -16,7 +16,7 @@ class IdentityService {
     if (!this._baseUrl) {
       const apiConfig = getApiConfig();
       console.log('Lazy loading API config:', apiConfig);
-      this._baseUrl = apiConfig?.baseUrl || 'https://global-narrative-framework-backend-851487020021.us-central1.run.app';
+      this._baseUrl = apiConfig?.baseUrl || 'https://global-narrative-framework-851487020021.us-central1.run.app';
       console.log('BaseUrl set to:', this._baseUrl);
     }
     return this._baseUrl;

@@ -6,7 +6,7 @@ Models for file uploads, processing, and metadata.
 
 from enum import Enum
 from typing import Optional, Dict, Any
-from pydantic import Field, validator
+from pydantic import Field, field_validator
 from .base_models import TimestampedModel
 
 
@@ -51,14 +51,14 @@ class FileMetadata(TimestampedModel):
     # Metadata
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional file metadata")
     
-    @validator("filename")
+    @field_validator("filename")
     def validate_filename(cls, v):
         """Validate filename."""
         if not v or not v.strip():
             raise ValueError("Filename cannot be empty")
         return v.strip()
     
-    @validator("file_size")
+    @field_validator("file_size")
     def validate_file_size(cls, v):
         """Validate file size."""
         max_size = 50 * 1024 * 1024  # 50MB
@@ -66,7 +66,7 @@ class FileMetadata(TimestampedModel):
             raise ValueError(f"File size exceeds maximum limit of {max_size} bytes")
         return v
     
-    @validator("content_type")
+    @field_validator("content_type")
     def validate_content_type(cls, v):
         """Validate content type."""
         allowed_types = [
@@ -119,8 +119,8 @@ class FileMetadata(TimestampedModel):
         self.processing_error = error_message
         self.update_timestamp()
     
-    class Config:
-        schema_extra = {
+    model_config = {
+        "json_schema_extra": {
             "example": {
                 "agent_id": "agent123",
                 "user_id": "user123",
@@ -132,3 +132,4 @@ class FileMetadata(TimestampedModel):
                 "chunk_count": 15
             }
         }
+    }

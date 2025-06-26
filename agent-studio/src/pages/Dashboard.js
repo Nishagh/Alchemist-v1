@@ -253,7 +253,7 @@ const Dashboard = () => {
       );
 
       // Load recent agent creation activity
-      const recentAgentsRef = collection(db, 'alchemist_agents');
+      const recentAgentsRef = collection(db, 'agents');
       const recentAgentsQuery = query(
         recentAgentsRef,
         where('userId', '==', currentUser.uid),

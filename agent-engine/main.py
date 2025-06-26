@@ -81,7 +81,12 @@ app = FastAPI(
 # Configure standard CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins
+    allow_origins=[
+        "https://alchemist.olbrain.com",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "*"
+    ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"],
     allow_headers=["*"],
@@ -100,7 +105,11 @@ async def add_cors_headers(request, call_next):
     response = await call_next(request)
     
     # Add CORS headers to every response
-    response.headers["Access-Control-Allow-Origin"] = "*"
+    origin = request.headers.get("origin")
+    if origin == "https://alchemist.olbrain.com" or origin in ["http://localhost:3000", "http://127.0.0.1:3000"]:
+        response.headers["Access-Control-Allow-Origin"] = origin
+    else:
+        response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["Access-Control-Allow-Credentials"] = "true"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD"
     response.headers["Access-Control-Allow-Headers"] = "*"
@@ -115,7 +124,11 @@ async def options_route(request: Request, path: str):
         content="",
         media_type="text/plain",
     )
-    response.headers["Access-Control-Allow-Origin"] = "*"
+    origin = request.headers.get("origin")
+    if origin == "https://alchemist.olbrain.com" or origin in ["http://localhost:3000", "http://127.0.0.1:3000"]:
+        response.headers["Access-Control-Allow-Origin"] = origin
+    else:
+        response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, HEAD"
     response.headers["Access-Control-Allow-Headers"] = "*"
     response.headers["Access-Control-Max-Age"] = "1200"

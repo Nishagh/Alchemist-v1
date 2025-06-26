@@ -69,8 +69,8 @@
             try {
                 console.log('Testing Firestore access...');
                 
-                // Test query to alchemist_agents collection
-                const agentsQuery = db.collection('alchemist_agents')
+                // Test query to agents collection
+                const agentsQuery = db.collection('agents')
                     .where('user_id', '==', user.uid)
                     .limit(5);
                 

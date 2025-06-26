@@ -162,7 +162,7 @@ def register_routes(app: FastAPI):
             health_status = {
                 "service": "agent-engine",
                 "status": "healthy",
-                "timestamp": SERVER_TIMESTAMP,
+                "timestamp": datetime.now().isoformat(),
                 "version": "1.0.0",
                 "components": {
                     "openai": {
@@ -189,7 +189,7 @@ def register_routes(app: FastAPI):
                 content={
                     "service": "agent-engine",
                     "status": "unhealthy",
-                    "timestamp": SERVER_TIMESTAMP,
+                    "timestamp": datetime.now().isoformat(),
                     "error": str(e)
                 }
             )
@@ -393,7 +393,7 @@ def register_routes(app: FastAPI):
                             "conversation_id": agent_id,
                             "content": message.get("content", ""),
                             "role": message.get("role", "unknown"),
-                            "timestamp": message.get("timestamp", SERVER_TIMESTAMP)
+                            "timestamp": message.get("timestamp", datetime.now().isoformat())
                         }                            
                         result.append(message_data)
                 return {"status": "success", "conversations": result}

@@ -20,7 +20,7 @@ The WhatsApp integration allows deployed agents to receive and respond to WhatsA
 
 ### Firestore Configuration Structure
 
-Add the following WhatsApp configuration to your agent document in Firestore (`alchemist_agents/{agentId}`):
+Add the following WhatsApp configuration to your agent document in Firestore (`agents/{agentId}`):
 
 ```json
 {

@@ -1,0 +1,860 @@
+# Alchemist Platform - Firestore Collections Schema
+# This document defines the structure of all Firestore collections used in the Alchemist platform.
+# It serves as a reference for developers and helps maintain consistency across services.
+
+collections:
+  # ============================================================================
+  # CORE COLLECTIONS
+  # ============================================================================
+  
+  agents:
+    description: "Agent management and configuration"
+    fields:
+      id: 
+        type: string
+        description: "Unique agent identifier"
+        required: true
+      name:
+        type: string
+        description: "Display name for the agent"
+        required: true
+      description:
+        type: string
+        description: "Agent description and purpose"
+        required: true
+      type:
+        type: string
+        description: "Agent type (general, code, research, writing, data, customer)"
+        required: true
+      owner_id:
+        type: string
+        description: "User ID of the agent owner"
+        required: true
+      deployment_status:
+        type: string
+        description: "Current deployment status (pending, building, deployed, failed, cancelled)"
+        required: true
+      active_deployment_id:
+        type: string
+        description: "ID of the currently active deployment"
+        required: false
+      service_url:
+        type: string
+        description: "URL of the deployed agent service"
+        required: false
+      created_at:
+        type: timestamp
+        description: "When the agent was created"
+        required: true
+      updated_at:
+        type: timestamp
+        description: "When the agent was last updated"
+        required: true
+      last_deployed_at:
+        type: timestamp
+        description: "When the agent was last deployed"
+        required: false
+
+  agent_deployments:
+    description: "Agent deployment tracking and history"
+    fields:
+      id:
+        type: string
+        description: "Unique deployment identifier"
+        required: true
+      agent_id:
+        type: string
+        description: "Reference to the agent being deployed"
+        required: true
+      deployment_status:
+        type: string
+        description: "Deployment status (pending, building, deployed, failed, cancelled)"
+        required: true
+      created_at:
+        type: timestamp
+        description: "When the deployment was initiated"
+        required: true
+      updated_at:
+        type: timestamp
+        description: "When the deployment status was last updated"
+        required: true
+
+  agent_usage_summary:
+    description: "Agent usage statistics and billing summary"
+    fields:
+      id:
+        type: string
+        description: "Unique summary identifier"
+        required: true
+      agent_id:
+        type: string
+        description: "Reference to the agent"
+        required: true
+      user_id:
+        type: string
+        description: "Reference to the user/owner"
+        required: true
+      total_interactions:
+        type: number
+        description: "Total number of interactions"
+        required: true
+      total_tokens:
+        type: number
+        description: "Total tokens consumed"
+        required: true
+      total_cost_usd:
+        type: number
+        description: "Total cost in USD"
+        required: true
+      created_at:
+        type: timestamp
+        description: "When the summary was created"
+        required: true
+      updated_at:
+        type: timestamp
+        description: "When the summary was last updated"
+        required: true
+
+  conversations:
+    description: "Agent conversation logs and interactions"
+    fields:
+      id:
+        type: string
+        description: "Unique conversation identifier"
+        required: true
+      conversation_id:
+        type: string
+        description: "Session conversation identifier"
+        required: true
+      agent_id:
+        type: string
+        description: "Reference to the agent"
+        required: true
+      user_id:
+        type: string
+        description: "Reference to the user (optional for anonymous)"
+        required: false
+      message_content:
+        type: string
+        description: "User's message content"
+        required: true
+      agent_response:
+        type: string
+        description: "Agent's response content"
+        required: true
+      is_production:
+        type: boolean
+        description: "Whether this was a production interaction"
+        required: true
+      deployment_type:
+        type: string
+        description: "Type of deployment (development, staging, production)"
+        required: true
+      tokens:
+        type: object
+        description: "Token usage breakdown"
+        required: true
+        fields:
+          prompt_tokens:
+            type: number
+            description: "Tokens used in the prompt"
+            required: true
+          completion_tokens:
+            type: number
+            description: "Tokens used in the completion"
+            required: true
+          total_tokens:
+            type: number
+            description: "Total tokens used"
+            required: true
+      cost_usd:
+        type: number
+        description: "Cost of this interaction in USD"
+        required: true
+      context:
+        type: object
+        description: "Additional context information"
+        required: false
+      timestamp:
+        type: timestamp
+        description: "When the interaction occurred"
+        required: true
+      created_at:
+        type: timestamp
+        description: "When the record was created"
+        required: true
+
+  communication_logs:
+    description: "Communication logs and webhook events"
+    fields:
+      id:
+        type: string
+        description: "Unique log identifier"
+        required: true
+      agent_id:
+        type: string
+        description: "Reference to the agent"
+        required: true
+      timestamp:
+        type: timestamp
+        description: "When the communication occurred"
+        required: true
+      created_at:
+        type: timestamp
+        description: "When the log was created"
+        required: true
+
+  api_logs:
+    description: "API request and response logs"
+    fields:
+      id:
+        type: string
+        description: "Unique log identifier"
+        required: true
+      agent_id:
+        type: string
+        description: "Reference to the agent"
+        required: true
+      user_id:
+        type: string
+        description: "Reference to the user"
+        required: false
+      endpoint:
+        type: string
+        description: "API endpoint that was called"
+        required: true
+      method:
+        type: string
+        description: "HTTP method (GET, POST, etc.)"
+        required: true
+      status_code:
+        type: number
+        description: "HTTP response status code"
+        required: true
+      response_time_ms:
+        type: number
+        description: "Response time in milliseconds"
+        required: true
+      timestamp:
+        type: timestamp
+        description: "When the API call occurred"
+        required: true
+      created_at:
+        type: timestamp
+        description: "When the log was created"
+        required: true
+
+  # ============================================================================
+  # USER AND BILLING COLLECTIONS
+  # ============================================================================
+
+  user_accounts:
+    description: "User account information and billing details"
+    fields:
+      id:
+        type: string
+        description: "Unique user identifier"
+        required: true
+      user_id:
+        type: string
+        description: "Firebase Auth user ID"
+        required: true
+      email:
+        type: string
+        description: "User's email address"
+        required: true
+      display_name:
+        type: string
+        description: "User's display name"
+        required: true
+      credit_balance:
+        type: number
+        description: "Current credit balance"
+        required: true
+      total_credits_purchased:
+        type: number
+        description: "Total credits purchased"
+        required: true
+      total_credits_used:
+        type: number
+        description: "Total credits consumed"
+        required: true
+      account_status:
+        type: string
+        description: "Account status (active, suspended, trial)"
+        required: true
+      trial_credits_remaining:
+        type: number
+        description: "Remaining trial credits"
+        required: false
+      created_at:
+        type: timestamp
+        description: "When the account was created"
+        required: true
+      updated_at:
+        type: timestamp
+        description: "When the account was last updated"
+        required: true
+      last_activity_at:
+        type: timestamp
+        description: "When the user was last active"
+        required: false
+
+  credit_transactions:
+    description: "Credit purchase and usage transactions"
+    fields:
+      id:
+        type: string
+        description: "Unique transaction identifier"
+        required: true
+      user_id:
+        type: string
+        description: "Reference to the user"
+        required: true
+      transaction_type:
+        type: string
+        description: "Transaction type (purchase, usage, adjustment, refund)"
+        required: true
+      amount:
+        type: number
+        description: "Transaction amount (positive for purchases, negative for usage)"
+        required: true
+      payment_provider:
+        type: string
+        description: "Payment provider used (stripe, paypal, etc.)"
+        required: false
+      created_at:
+        type: timestamp
+        description: "When the transaction occurred"
+        required: true
+
+  # ============================================================================
+  # KNOWLEDGE BASE COLLECTIONS
+  # ============================================================================
+
+  knowledge_files:
+    description: "Knowledge base file metadata"
+    fields:
+      id:
+        type: string
+        description: "Unique file identifier"
+        required: true
+      file_id:
+        type: string
+        description: "File identifier"
+        required: true
+      agent_id:
+        type: string
+        description: "Reference to the agent"
+        required: true
+      user_id:
+        type: string
+        description: "Reference to the user who uploaded the file"
+        required: true
+      original_filename:
+        type: string
+        description: "Original filename"
+        required: true
+      storage_path:
+        type: string
+        description: "Path to the file in storage"
+        required: true
+      file_size_bytes:
+        type: number
+        description: "File size in bytes"
+        required: true
+      file_type:
+        type: string
+        description: "File type/extension"
+        required: true
+      chunk_count:
+        type: number
+        description: "Number of chunks created from this file"
+        required: true
+      processing_status:
+        type: string
+        description: "Processing status (pending, processing, completed, failed)"
+        required: true
+      created_at:
+        type: timestamp
+        description: "When the file was uploaded"
+        required: true
+      updated_at:
+        type: timestamp
+        description: "When the file was last updated"
+        required: true
+
+  knowledge_embeddings:
+    description: "Knowledge base text chunks and embeddings"
+    fields:
+      id:
+        type: string
+        description: "Unique embedding identifier"
+        required: true
+      file_id:
+        type: string
+        description: "Reference to the source file"
+        required: true
+      agent_id:
+        type: string
+        description: "Reference to the agent"
+        required: true
+      text_content:
+        type: string
+        description: "Text content of the chunk"
+        required: true
+      embedding_vector:
+        type: array
+        description: "Vector embedding of the text"
+        required: true
+      page_number:
+        type: number
+        description: "Page number in the source document"
+        required: false
+      chunk_index:
+        type: number
+        description: "Index of this chunk within the file"
+        required: true
+      created_at:
+        type: timestamp
+        description: "When the embedding was created"
+        required: true
+
+  # ============================================================================
+  # TRAINING AND AI COLLECTIONS
+  # ============================================================================
+
+  training_jobs:
+    description: "AI training job tracking"
+    fields:
+      id:
+        type: string
+        description: "Unique training job identifier"
+        required: true
+      agent_id:
+        type: string
+        description: "Reference to the agent being trained"
+        required: true
+      user_id:
+        type: string
+        description: "Reference to the user who initiated training"
+        required: true
+      status:
+        type: string
+        description: "Training status (pending, processing, completed, failed)"
+        required: true
+      created_at:
+        type: timestamp
+        description: "When the training job was created"
+        required: true
+      updated_at:
+        type: timestamp
+        description: "When the training job was last updated"
+        required: true
+
+  # ============================================================================
+  # INTEGRATION COLLECTIONS
+  # ============================================================================
+
+  integration_channels:
+    description: "Integration channel configurations (WhatsApp, Slack, etc.)"
+    fields:
+      id:
+        type: string
+        description: "Unique integration identifier"
+        required: true
+      agent_id:
+        type: string
+        description: "Reference to the agent"
+        required: true
+      user_id:
+        type: string
+        description: "Reference to the user who created the integration"
+        required: true
+      channel_type:
+        type: string
+        description: "Type of integration (whatsapp, slack, discord, etc.)"
+        required: true
+      configuration:
+        type: object
+        description: "Channel-specific configuration"
+        required: true
+      status:
+        type: string
+        description: "Integration status (active, inactive, failed)"
+        required: true
+      created_at:
+        type: timestamp
+        description: "When the integration was created"
+        required: true
+      updated_at:
+        type: timestamp
+        description: "When the integration was last updated"
+        required: true
+
+  # ============================================================================
+  # GLOBAL NARRATIVE FRAMEWORK COLLECTIONS
+  # ============================================================================
+
+  agent_identities:
+    description: "Agent narrative identities and personality development"
+    fields:
+      id:
+        type: string
+        description: "Unique identity identifier"
+        required: true
+      narrative_identity_id:
+        type: string
+        description: "Narrative identity identifier"
+        required: true
+      agent_id:
+        type: string
+        description: "Reference to the agent"
+        required: true
+      development_stage:
+        type: string
+        description: "Current development stage of the agent"
+        required: true
+      narrative_coherence_score:
+        type: number
+        description: "Score indicating narrative consistency"
+        required: true
+      responsibility_score:
+        type: number
+        description: "Score indicating agent's responsibility level"
+        required: true
+      experience_points:
+        type: number
+        description: "Accumulated experience points"
+        required: true
+      total_interactions:
+        type: number
+        description: "Total number of interactions"
+        required: true
+      defining_moments_count:
+        type: number
+        description: "Number of defining moments in agent's history"
+        required: true
+      personality_traits:
+        type: object
+        description: "Agent's personality traits"
+        required: true
+      core_values:
+        type: array
+        description: "Agent's core values"
+        required: true
+      primary_goals:
+        type: array
+        description: "Agent's primary goals"
+        required: true
+      motivations:
+        type: array
+        description: "Agent's motivations"
+        required: true
+      fears:
+        type: array
+        description: "Agent's fears or concerns"
+        required: true
+      current_arc:
+        type: string
+        description: "Current narrative arc"
+        required: true
+      story_elements:
+        type: object
+        description: "Story elements and themes"
+        required: true
+      character_development:
+        type: object
+        description: "Character development progress"
+        required: true
+      created_at:
+        type: timestamp
+        description: "When the identity was created"
+        required: true
+      updated_at:
+        type: timestamp
+        description: "When the identity was last updated"
+        required: true
+
+  agent_interactions:
+    description: "Agent interaction records for narrative tracking"
+    fields:
+      id:
+        type: string
+        description: "Unique interaction identifier"
+        required: true
+      agent_id:
+        type: string
+        description: "Reference to the agent"
+        required: true
+      interaction_type:
+        type: string
+        description: "Type of interaction"
+        required: true
+      participants:
+        type: array
+        description: "Participants in the interaction"
+        required: true
+      impact_level:
+        type: string
+        description: "Impact level of the interaction"
+        required: true
+      emotional_tone:
+        type: string
+        description: "Emotional tone of the interaction"
+        required: true
+      narrative_significance:
+        type: string
+        description: "Significance in the narrative"
+        required: true
+      personality_impact:
+        type: object
+        description: "Impact on personality traits"
+        required: true
+      learning_outcome:
+        type: string
+        description: "What the agent learned"
+        required: false
+      responsibility_impact:
+        type: number
+        description: "Impact on responsibility score"
+        required: true
+      timestamp:
+        type: timestamp
+        description: "When the interaction occurred"
+        required: true
+      created_at:
+        type: timestamp
+        description: "When the record was created"
+        required: true
+
+  agent_memories:
+    description: "Agent memory storage for narrative continuity"
+    fields:
+      id:
+        type: string
+        description: "Unique memory identifier"
+        required: true
+      agent_id:
+        type: string
+        description: "Reference to the agent"
+        required: true
+      memory_type:
+        type: string
+        description: "Type of memory (episodic, semantic, etc.)"
+        required: true
+      text_content:
+        type: string
+        description: "Memory content"
+        required: true
+      consolidation_strength:
+        type: number
+        description: "How well consolidated this memory is"
+        required: true
+      importance_score:
+        type: number
+        description: "Importance score of this memory"
+        required: true
+      emotional_valence:
+        type: number
+        description: "Emotional valence of the memory"
+        required: true
+      tags:
+        type: array
+        description: "Tags associated with the memory"
+        required: true
+      timestamp:
+        type: timestamp
+        description: "When the memory was formed"
+        required: true
+      created_at:
+        type: timestamp
+        description: "When the memory was stored"
+        required: true
+      updated_at:
+        type: timestamp
+        description: "When the memory was last updated"
+        required: true
+
+  evolution_events:
+    description: "Agent evolution and development events"
+    fields:
+      id:
+        type: string
+        description: "Unique evolution event identifier"
+        required: true
+      agent_id:
+        type: string
+        description: "Reference to the agent"
+        required: true
+      event_type:
+        type: string
+        description: "Type of evolution event"
+        required: true
+      trigger:
+        type: string
+        description: "What triggered this evolution"
+        required: true
+      pre_evolution_state:
+        type: object
+        description: "Agent state before evolution"
+        required: true
+      post_evolution_state:
+        type: object
+        description: "Agent state after evolution"
+        required: true
+      changes:
+        type: object
+        description: "Specific changes that occurred"
+        required: true
+      timestamp:
+        type: timestamp
+        description: "When the evolution occurred"
+        required: true
+      created_at:
+        type: timestamp
+        description: "When the event was recorded"
+        required: true
+
+  responsibility_assessments:
+    description: "Agent responsibility assessments and ethical evaluations"
+    fields:
+      id:
+        type: string
+        description: "Unique assessment identifier"
+        required: true
+      agent_id:
+        type: string
+        description: "Reference to the agent"
+        required: true
+      action_type:
+        type: string
+        description: "Type of action being assessed"
+        required: true
+      responsibility_level:
+        type: string
+        description: "Level of responsibility"
+        required: true
+      contributing_factors:
+        type: array
+        description: "Factors that contributed to the assessment"
+        required: true
+      mitigation_actions:
+        type: array
+        description: "Actions taken to mitigate issues"
+        required: false
+      accountability_score:
+        type: number
+        description: "Accountability score"
+        required: true
+      ethical_weight:
+        type: number
+        description: "Ethical weight of the action"
+        required: true
+      decision_quality:
+        type: number
+        description: "Quality of the decision made"
+        required: true
+      learning_potential:
+        type: number
+        description: "Potential for learning from this assessment"
+        required: true
+      timestamp:
+        type: timestamp
+        description: "When the assessment was made"
+        required: true
+      created_at:
+        type: timestamp
+        description: "When the assessment was recorded"
+        required: true
+
+  global_events:
+    description: "Global events affecting the narrative framework"
+    fields:
+      id:
+        type: string
+        description: "Unique global event identifier"
+        required: true
+      event_type:
+        type: string
+        description: "Type of global event"
+        required: true
+      affected_agents:
+        type: array
+        description: "Agents affected by this event"
+        required: true
+      impact_level:
+        type: string
+        description: "Impact level of the event"
+        required: true
+      timestamp:
+        type: timestamp
+        description: "When the event occurred"
+        required: true
+      created_at:
+        type: timestamp
+        description: "When the event was recorded"
+        required: true
+
+  agent_relationships:
+    description: "Relationships between agents in the narrative framework"
+    fields:
+      id:
+        type: string
+        description: "Unique relationship identifier"
+        required: true
+      agent_id_1:
+        type: string
+        description: "Reference to the first agent"
+        required: true
+      agent_id_2:
+        type: string
+        description: "Reference to the second agent"
+        required: true
+      relationship_type:
+        type: string
+        description: "Type of relationship"
+        required: true
+      strength:
+        type: number
+        description: "Strength of the relationship"
+        required: true
+      created_at:
+        type: timestamp
+        description: "When the relationship was established"
+        required: true
+      updated_at:
+        type: timestamp
+        description: "When the relationship was last updated"
+        required: true
+
+# ============================================================================
+# COLLECTION USAGE GUIDELINES
+# ============================================================================
+
+usage_guidelines:
+  naming_conventions:
+    - "All collection names use snake_case"
+    - "Field names use snake_case consistently"
+    - "Timestamps use server_timestamp() for creation"
+    - "IDs are generated using Firebase document IDs"
+  
+  required_fields:
+    - "All documents must have created_at timestamp"
+    - "Most documents should have updated_at timestamp"
+    - "Use consistent field naming across collections"
+  
+  indexing_strategy:
+    - "Index frequently queried fields"
+    - "Create composite indexes for complex queries"
+    - "Consider query patterns when designing indexes"
+  
+  security_rules:
+    - "Implement proper security rules for each collection"
+    - "Ensure users can only access their own data"
+    - "Validate data structure in security rules"
+  
+  data_validation:
+    - "Validate collection names using validate_collection_usage()"
+    - "Use standardized field names from DocumentFields"
+    - "Implement proper error handling for invalid data"

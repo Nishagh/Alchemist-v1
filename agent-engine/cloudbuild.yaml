@@ -30,9 +30,9 @@ steps:
   - '--timeout'
   - '300s'
   - '--set-env-vars'
-  - 'FIREBASE_PROJECT_ID=$PROJECT_ID,ALCHEMIST_MODEL=gpt-4.1,ENVIRONMENT=production,PYTHONPATH=/app'
+  - 'FIREBASE_PROJECT_ID=$PROJECT_ID,ALCHEMIST_MODEL=gpt-4.1,ENVIRONMENT=production,PYTHONPATH=/app,PROMPT_ENGINEER_API_URL=https://alchemist-prompt-engine-851487020021.us-central1.run.app,MCP_CONFIG_GENERATOR_URL=https://mcp-config-generator-851487020021.us-central1.run.app,FIREBASE_STORAGE_BUCKET=alchemist-e69bb.appspot.com'
   - '--set-secrets'
-  - 'OPENAI_API_KEY=openai-api-key:latest'
+  - 'OPENAI_API_KEY=OPENAI_API_KEY:latest'
 images:
 - 'gcr.io/$PROJECT_ID/alchemist-agent-engine:$BUILD_ID'
-timeout: '1200s'
+timeout: '3600s'

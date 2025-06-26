@@ -16,17 +16,18 @@ class BaseModel(PydanticBaseModel):
     All Alchemist models should inherit from this class.
     """
     
-    class Config:
+    model_config = {
         # Allow population by field name and alias
-        allow_population_by_field_name = True
+        "populate_by_name": True,
         # Generate schema with examples
-        schema_extra = {
+        "json_schema_extra": {
             "example": {}
-        }
+        },
         # Validate assignment
-        validate_assignment = True
+        "validate_assignment": True,
         # Use enum values instead of names
-        use_enum_values = True
+        "use_enum_values": True
+    }
 
 
 class TimestampedModel(BaseModel):
@@ -46,7 +47,7 @@ class TimestampedModel(BaseModel):
     
     def to_firestore(self) -> Dict[str, Any]:
         """Convert model to Firestore-compatible dictionary."""
-        data = self.dict(exclude_none=True)
+        data = self.model_dump(exclude_none=True)
         
         # Convert datetime objects to Firestore timestamp format
         if self.created_at:

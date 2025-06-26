@@ -353,7 +353,7 @@ CMD ["python", "main.py"]
             db = firestore.client(firebase_app)
             
             # Update agent document
-            agent_ref = db.collection('alchemist_agents').document(agent_id)
+            agent_ref = db.collection('agents').document(agent_id)
             
             update_data = {
                 'universal_deployment': {
@@ -392,7 +392,7 @@ CMD ["python", "main.py"]
             db = firestore.client(firebase_app)
             
             # Get agent document
-            agent_ref = db.collection('alchemist_agents').document(agent_id)
+            agent_ref = db.collection('agents').document(agent_id)
             agent_doc = agent_ref.get()
             
             if agent_doc.exists:

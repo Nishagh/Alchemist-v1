@@ -36,7 +36,7 @@ python tools/list_vectors.py --agent-id 8e18dfe2-1478-4bb3-a9ee-894ff1ac81e7 --s
 #### Sample Output
 
 ```
-Connecting to Knowledge Base Service at https://knowledge-base-service-b3hpe34qdq-uc.a.run.app...
+Connecting to Knowledge Base Service at https://alchemist-knowledge-vault-b3hpe34qdq-uc.a.run.app...
 
 Vector Index Summary for Agent: 8e18dfe2-1478-4bb3-a9ee-894ff1ac81e7
 Collection Name: agent_8e18dfe2_1478_4bb3_a9ee_894ff1ac81e7

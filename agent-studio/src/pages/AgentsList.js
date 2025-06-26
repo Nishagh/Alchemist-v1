@@ -63,7 +63,7 @@ const AgentsList = () => {
 
   useEffect(() => {
     if (currentUser) {
-      const agentsCollectionRef = collection(db, 'alchemist_agents');
+      const agentsCollectionRef = collection(db, 'agents');
       const agentsQuery = query(agentsCollectionRef, where('userId', '==', currentUser.uid));
       const unsubscribe = onSnapshot(agentsQuery, (snapshot) => {
         const agents = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));

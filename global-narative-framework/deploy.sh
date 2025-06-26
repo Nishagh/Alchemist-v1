@@ -87,15 +87,6 @@ EOF
 # Create secrets in Google Secret Manager if they don't exist
 echo -e "\n${YELLOW}Creating/updating secrets in Google Secret Manager...${NC}"
 
-# Create OpenAI API key secret
-if ! gcloud secrets describe openai-api-key --project=$GOOGLE_CLOUD_PROJECT >/dev/null 2>&1; then
-  echo "Creating openai-api-key secret..."
-  echo -n "$OPENAI_API_KEY" | gcloud secrets create openai-api-key --data-file=- --project=$GOOGLE_CLOUD_PROJECT
-else
-  echo "Updating openai-api-key secret..."
-  echo -n "$OPENAI_API_KEY" | gcloud secrets versions add openai-api-key --data-file=- --project=$GOOGLE_CLOUD_PROJECT
-fi
-
 
 # Enable required APIs
 echo -e "\n${YELLOW}Enabling required Google Cloud APIs...${NC}"
@@ -132,4 +123,4 @@ echo -e "\n${YELLOW}Starting Cloud Build deployment...${NC}"
 gcloud builds submit --config=cloudbuild.yaml --project=$GOOGLE_CLOUD_PROJECT
 
 echo -e "\n${GREEN}Deployment initiated! Build and deployment progress can be monitored in the Google Cloud Console.${NC}"
-echo -e "Once complete, your service will be available at: https://global-narrative-framework-backend-[hash].run.app"
+echo -e "Once complete, your service will be available at: https://global-narrative-framework-[hash].run.app"

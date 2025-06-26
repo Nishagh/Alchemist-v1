@@ -92,7 +92,11 @@ class Settings(BaseSettings):
         "env_file": ".env",
         "env_prefix": "TUNING_",
         "case_sensitive": False,
-        "protected_namespaces": ()
+        "protected_namespaces": (),
+        "fields": {
+            "openai_api_key": {"env": ["OPENAI_API_KEY", "TUNING_OPENAI_API_KEY"]},
+            "openai_organization": {"env": ["OPENAI_ORGANIZATION", "TUNING_OPENAI_ORGANIZATION"]},
+        }
     }
 
 

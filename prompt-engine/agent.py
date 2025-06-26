@@ -120,26 +120,30 @@ class PromptEngineerAgent:
             Tuple of (current_prompt, is_create_mode, prompt_history)
         """
         try:
-            # Always fetch prompt history for context (limit to last 5 for efficiency)
-            collection_ref = self.db.collection(f"alchemist_agents/{agent_id}/system_prompt")
-            history_docs = collection_ref.order_by("created_at", direction=firestore.Query.DESCENDING).get()
+            # Get current prompt from main agent document
+            agent_doc = self.db.collection('agents').document(agent_id).get()
             messages = []
-            for doc in history_docs:
-                doc_dict = doc.to_dict()
-                doc_dict['id'] = doc.id
-                # Only include valid prompts in history
-                content = doc_dict.get("content", "")
-                instructions = doc_dict.get("instructions", "")
-                messages.append(HumanMessage(content=instructions))
-                messages.append(AIMessage(content=content))
+            current_prompt = ""
             
-            # Try to get current prompt from main agent document first
-            agent_doc = self.db.collection('alchemist_agents').document(agent_id).get()
             if agent_doc.exists:
                 agent_data = agent_doc.to_dict()
                 current_prompt = agent_data.get('system_prompt', '')
+                
+                # Get prompt history from agent document if available
+                prompt_history = agent_data.get('prompt_history', [])
+                
+                # Convert history to messages for context (limit to last 5 for efficiency)
+                for history_item in prompt_history[-5:]:
+                    if isinstance(history_item, dict):
+                        instructions = history_item.get('instructions', '')
+                        content = history_item.get('content', '')
+                        if instructions and content:
+                            messages.append(HumanMessage(content=instructions))
+                            messages.append(AIMessage(content=content))
+                
                 if self._is_valid_prompt(current_prompt):
-                    return current_prompt, False, messages            
+                    return current_prompt, False, messages
+            
             return "", True, messages
             
         except Exception as e:
@@ -279,7 +283,7 @@ Output ONLY the complete updated prompt text (or NO_UPDATE_NEEDED message) witho
     
     async def _save_prompt(self, agent_id: str, prompt: str, instructions: str) -> None:
         """
-        Save the prompt to Firestore.
+        Save the prompt to Firestore using the optimized structure.
         
         Args:
             agent_id: ID of the agent
@@ -288,25 +292,45 @@ Output ONLY the complete updated prompt text (or NO_UPDATE_NEEDED message) witho
         """
         try:
             import time
-            timestamp = int(time.time())
+            from datetime import datetime
             
-            # Prepare prompt data for history
-            prompt_data = {
-                "id": str(timestamp),
+            # Prepare prompt data for history with regular timestamp (not SERVER_TIMESTAMP)
+            prompt_history_entry = {
                 "content": prompt,
-                "created_at": firestore.SERVER_TIMESTAMP,
                 "created_by": self.agent_id,
-                "instructions": instructions
+                "instructions": instructions,
+                "timestamp": int(time.time()),
+                "created_at": datetime.utcnow()
             }
             
-            # Save to prompt history collection
-            collection_ref = self.db.collection(f"alchemist_agents/{agent_id}/system_prompt")
-            collection_ref.add(prompt_data)
+            # Get current agent document to append to history
+            agent_ref = self.db.collection('agents').document(agent_id)
+            agent_doc = agent_ref.get()
             
-            # Update main agent document
-            self.db.collection('alchemist_agents').document(agent_id).update({
-                'system_prompt': prompt
-            })
+            if agent_doc.exists:
+                agent_data = agent_doc.to_dict()
+                current_history = agent_data.get('prompt_history', [])
+                
+                # Add new entry to history (keep last 10 entries for performance)
+                current_history.append(prompt_history_entry)
+                if len(current_history) > 10:
+                    current_history = current_history[-10:]
+                
+                # Update agent document with new prompt and history
+                agent_ref.update({
+                    'system_prompt': prompt,
+                    'prompt_history': current_history,
+                    'updated_at': SERVER_TIMESTAMP
+                })
+            else:
+                # Create new agent document if it doesn't exist
+                agent_ref.set({
+                    'agent_id': agent_id,
+                    'system_prompt': prompt,
+                    'prompt_history': [prompt_history_entry],
+                    'created_at': SERVER_TIMESTAMP,
+                    'updated_at': SERVER_TIMESTAMP
+                })
             
             logger.info(f"Successfully saved prompt for agent {agent_id}")
             

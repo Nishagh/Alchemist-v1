@@ -6,7 +6,7 @@ Models for user accounts, authentication, and permissions.
 
 from enum import Enum
 from typing import Optional, List
-from pydantic import Field, EmailStr, validator
+from pydantic import Field, EmailStr, field_validator
 from .base_models import TimestampedModel
 
 
@@ -46,14 +46,14 @@ class User(TimestampedModel):
     # Preferences
     preferences: dict = Field(default_factory=dict, description="User preferences")
     
-    @validator("email")
+    @field_validator("email")
     def validate_email(cls, v):
         """Validate email address."""
         if not v:
             raise ValueError("Email address is required")
         return v.lower().strip()
     
-    @validator("display_name")
+    @field_validator("display_name")
     def validate_display_name(cls, v):
         """Validate display name."""
         if v is not None:
@@ -94,8 +94,8 @@ class User(TimestampedModel):
         self.monthly_message_count = 0
         self.update_timestamp()
     
-    class Config:
-        schema_extra = {
+    model_config = {
+        "json_schema_extra": {
             "example": {
                 "email": "user@example.com",
                 "display_name": "John Doe",
@@ -105,3 +105,4 @@ class User(TimestampedModel):
                 "total_agents": 2
             }
         }
+    }

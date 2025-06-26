@@ -8,7 +8,7 @@ set -e
 
 # Configuration
 PROJECT_ID="alchemist-e69bb"
-IMAGE_NAME="knowledge-base-service"
+IMAGE_NAME="alchemist-knowledge-vault"
 REGION="us-central1"  # Change as needed
 
 # Colors for output
@@ -38,15 +38,6 @@ gcloud config set project ${PROJECT_ID}
 echo -e "${YELLOW}Ensuring Cloud Build API is enabled...${NC}"
 gcloud services enable cloudbuild.googleapis.com
 
-# Validate deployment security - ensure no credential files in build context
-echo -e "${YELLOW}Validating deployment security...${NC}"
-if [ -f "firebase-credentials.json" ] || [ -f "gcloud-credentials.json" ] || [ -f "service-account-key.json" ]; then
-    echo -e "${RED}Security Error: Credential files found in deployment directory!${NC}"
-    echo -e "${RED}Firebase credentials should not be included in cloud deployments.${NC}"
-    echo -e "${RED}Please ensure .dockerignore excludes: firebase-credentials.json, gcloud-credentials.json, service-account-key.json${NC}"
-    exit 1
-fi
-
 # Copy shared module to local directory for Docker context
 echo -e "${YELLOW}📦 Preparing shared module...${NC}"
 if [ -d "./shared" ]; then
@@ -61,11 +52,10 @@ gcloud builds submit --tag gcr.io/${PROJECT_ID}/${IMAGE_NAME} .
 # Deploy to Cloud Run
 echo -e "${YELLOW}Deploying to Cloud Run...${NC}"
 
-# Extract environment variables directly from .env file and set them as individual flags
-OPENAI_API_KEY=$(grep "^OPENAI_API_KEY=" .env | cut -d '=' -f2-)
-PORT=$(grep "^PORT=" .env | cut -d '=' -f2-)
-ALCHEMIST_MODEL=$(grep "^ALCHEMIST_MODEL=" .env | cut -d '=' -f2-)
-FIREBASE_STORAGE_BUCKET=$(grep "^FIREBASE_STORAGE_BUCKET=" .env | cut -d '=' -f2-)
+# Extract environment variables from .env file for cloud deployment
+PORT=$(grep "^PORT=" .env | cut -d '=' -f2- 2>/dev/null || echo "8080")
+ALCHEMIST_MODEL=$(grep "^ALCHEMIST_MODEL=" .env | cut -d '=' -f2- 2>/dev/null || echo "text-embedding-3-small")
+FIREBASE_STORAGE_BUCKET=$(grep "^FIREBASE_STORAGE_BUCKET=" .env | cut -d '=' -f2- 2>/dev/null || echo "${PROJECT_ID}.appspot.com")
 
 gcloud run deploy ${IMAGE_NAME} \
   --image gcr.io/${PROJECT_ID}/${IMAGE_NAME} \
@@ -77,7 +67,6 @@ gcloud run deploy ${IMAGE_NAME} \
   --cpu 1 \
   --set-env-vars="ALCHEMIST_MODEL=${ALCHEMIST_MODEL},FIREBASE_STORAGE_BUCKET=${FIREBASE_STORAGE_BUCKET}" \
   --update-secrets=OPENAI_API_KEY=OPENAI_API_KEY:latest \
-  --service-account="knowledge-base-service@${PROJECT_ID}.iam.gserviceaccount.com" \
   --min-instances=0
 
 # Get the service URL

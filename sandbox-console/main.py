@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """
+from alchemist_shared.middleware.api_logging_middleware import setup_api_logging_middleware
 Standalone Agent Web Service - A Flask web service for the standalone agent.
 This service provides API endpoints for processing messages, creating conversations,
 and managing agent interactions. It follows a conversation-centric architecture.
@@ -13,11 +14,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
-import firebase_admin
-from firebase_admin import credentials, firestore
 from agent import UserAgent
 from dotenv import load_dotenv
 from routes import register_routes
+from config.firebase_config import get_firestore_client, get_storage_bucket
 
 # Import metrics functionality
 try:
@@ -42,7 +42,7 @@ async def lifespan(app: FastAPI):
     
     if METRICS_AVAILABLE:
         try:
-            start_background_metrics_collection("sandbox-console")
+            start_background_metrics_collection("alchemist-sandbox-console")
             logger.info("Background metrics collection started")
         except Exception as e:
             logger.warning(f"Failed to start metrics collection: {e}")
@@ -113,7 +113,7 @@ async def options_route(request: Request, path: str):
 
 # Add metrics middleware if available
 if METRICS_AVAILABLE:
-    setup_metrics_middleware(app, "sandbox-console")
+    setup_metrics_middleware(app, "alchemist-sandbox-console")
     logger.info("Metrics middleware enabled")
 
 register_routes(app)
@@ -142,7 +142,7 @@ async def health_check():
         tools_configured = os.path.exists('knowledge_base_tool.py') and os.path.exists('mcp_tool.py')
         
         response_data = {
-            "service": "sandbox-console",
+            "service": "alchemist-sandbox-console",
             "status": "healthy",
             "timestamp": datetime.datetime.now().isoformat(),
             "version": "1.0.0",
@@ -170,7 +170,7 @@ async def health_check():
         
     except Exception as e:
         error_response = {
-            "service": "sandbox-console",
+            "service": "alchemist-sandbox-console",
             "status": "unhealthy",
             "timestamp": datetime.datetime.now().isoformat(),
             "error": str(e)
@@ -187,6 +187,9 @@ async def legacy_health_check():
 
 # This is what Cloud Run will look for when the container starts
 # No need for a separate wsgi.py file
+
+# API Logging Middleware
+setup_api_logging_middleware(app, "sandbox-console")
 if __name__ == "__main__":
     # This block only runs when executing the file directly
     # In production on Cloud Run, Gunicorn will import this file and use the 'app' variable

@@ -61,7 +61,7 @@ class AgentConfigLoader:
             logger.info(f"Loading configuration for agent: {agent_id}")
             
             # Fetch base configuration from Firestore
-            agent_ref = self.db.collection('alchemist_agents').document(agent_id)
+            agent_ref = self.db.collection('agents').document(agent_id)
             agent_doc = agent_ref.get()
             
             if not agent_doc.exists:

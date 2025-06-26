@@ -50,7 +50,7 @@ services:
       - "FIREBASE_STORAGE_BUCKET"
       - "OPENAI_API_KEY"
     secrets:
-      - "openai-api-key"
+      - "OPENAI_API_KEY"
     
   agent-engine:
     tier: 1
@@ -67,7 +67,7 @@ services:
       - "AGENT_LAUNCHER_URL"
       - "TOOL_FORGE_URL"
     secrets:
-      - "openai-api-key"
+      - "OPENAI_API_KEY"
     dependencies:
       - "knowledge-vault"
 
@@ -125,8 +125,6 @@ services:
       - "FIREBASE_PROJECT_ID"
       - "ENVIRONMENT"
       - "GOOGLE_APPLICATION_CREDENTIALS"
-    secrets:
-      - "firebase-service-account"
     dependencies:
       - "agent-engine"
       - "knowledge-vault"
@@ -158,7 +156,7 @@ services:
     environment_variables:
       - "FIREBASE_PROJECT_ID"
     secrets:
-      - "openai-api-key"
+      - "OPENAI_API_KEY"
     
   sandbox-console:
     tier: 3
@@ -172,7 +170,7 @@ services:
       - "FIREBASE_PROJECT_ID"
       - "KNOWLEDGE_BASE_URL"
     secrets:
-      - "openai-api-key"
+      - "OPENAI_API_KEY"
     dependencies:
       - "knowledge-vault"
       - "agent-engine"
@@ -236,7 +234,7 @@ required_apis:
 
 # Secret management configuration
 secrets:
-  openai-api-key:
+  OPENAI_API_KEY:
     description: "OpenAI API key for AI services"
     required_for:
       - "agent-engine"
@@ -250,11 +248,6 @@ secrets:
       - "banking-api-service"
     default_value: "banking-api-key-2025"
   
-  firebase-service-account:
-    description: "Firebase service account credentials for monitoring service"
-    required_for:
-      - "alchemist-monitor-service"
-
 # Health check configuration
 health_checks:
   timeout: 30

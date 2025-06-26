@@ -41,7 +41,7 @@ async function createTestAgent(userId) {
   };
   
   try {
-    const docRef = await db.collection('alchemist_agents').add(agentData);
+    const docRef = await db.collection('agents').add(agentData);
     console.log('Test agent created:', docRef.id, agentData);
     return docRef.id;
   } catch (error) {

@@ -158,7 +158,7 @@ class UniversalDeploymentManager:
         deployment_ref.set(deployment_record)
         
         # Update agent document with universal deployment status
-        agent_ref = db.collection('alchemist_agents').document(request.agent_id)
+        agent_ref = db.collection('agents').document(request.agent_id)
         agent_ref.update({
             'universal_deployment': {
                 'deployment_id': deployment_id,
@@ -186,7 +186,7 @@ class UniversalDeploymentManager:
             # Also update agent document
             if 'agent_id' in self.active_deployments.get(deployment_id, {}):
                 agent_id = self.active_deployments[deployment_id]['agent_id']
-                agent_ref = db.collection('alchemist_agents').document(agent_id)
+                agent_ref = db.collection('agents').document(agent_id)
                 
                 agent_update = {
                     'universal_deployment': {

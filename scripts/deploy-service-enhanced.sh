@@ -436,7 +436,7 @@ deploy_to_cloud_run() {
     # Add secrets for services that need them
     case $service in
         "agent-engine"|"knowledge-vault"|"prompt-engine"|"sandbox-console")
-            deploy_cmd+=(--set-secrets="OPENAI_API_KEY=openai-api-key:latest")
+            deploy_cmd+=(--set-secrets="OPENAI_API_KEY=OPENAI_API_KEY:latest")
             ;;
     esac
     

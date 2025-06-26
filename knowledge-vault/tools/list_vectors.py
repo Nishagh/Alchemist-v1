@@ -22,7 +22,7 @@ def parse_args():
     parser.add_argument("--agent-id", type=str, required=True, 
                         help="Agent ID to list vectors for")
     parser.add_argument("--service-url", type=str, 
-                        default=os.environ.get("KNOWLEDGE_BASE_URL", "https://knowledge-base-service-b3hpe34qdq-uc.a.run.app"),
+                        default=os.environ.get("KNOWLEDGE_BASE_URL", "https://alchemist-knowledge-vault-b3hpe34qdq-uc.a.run.app"),
                         help="URL of the Knowledge Base Service")
     parser.add_argument("--verbose", "-v", action="store_true",
                         help="Display detailed vector metadata")
@@ -92,7 +92,7 @@ def main():
     # Parse arguments
     # List vectors
     agent_id = "8e749a5b-91a3-4354-afdf-dc1d157e89fd"
-    service_url = "https://knowledge-base-service-b3hpe34qdq-uc.a.run.app"
+    service_url = "https://alchemist-knowledge-vault-b3hpe34qdq-uc.a.run.app"
     success = list_vectors(agent_id, service_url, verbose=True)
     
     # Exit with appropriate status code

@@ -1,5 +1,5 @@
 # Global Narrative Framework - Backend Service for Cloud Run
-FROM python:3.12-slim
+FROM --platform=linux/amd64 python:3.12-slim
 
 # Set environment variables for production
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -17,15 +17,19 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy requirements first for better caching
-COPY requirements.txt .
+COPY global-narative-framework/requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
+# Copy and install shared libraries
+COPY shared /app/shared
+RUN cd /app/shared && pip install -e .
+
 # Copy application code
-COPY gnf/ ./gnf/
-COPY firebase.json firestore.rules firestore.indexes.json ./
+COPY global-narative-framework/gnf/ ./gnf/
+COPY global-narative-framework/firebase.json global-narative-framework/firestore.rules global-narative-framework/firestore.indexes.json ./
 
 # Create non-root user for security
 RUN groupadd -r gnfuser && useradd -r -g gnfuser gnfuser

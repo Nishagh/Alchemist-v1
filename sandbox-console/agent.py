@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 def get_system_prompt(agent_id: str):
     from services.firebase_service import get_firestore_service
     firestore_service = get_firestore_service()
-    agent_doc = firestore_service.collection('alchemist_agents').document(agent_id).get().to_dict()
+    agent_doc = firestore_service.collection('agents').document(agent_id).get().to_dict()
     system_prompt = agent_doc['system_prompt']
     return system_prompt
 
@@ -52,7 +52,7 @@ def get_mcp_server(agent_id: str):
     from services.firebase_service import get_firestore_service
     firestore_service = get_firestore_service()
     mcp_url = None
-    agent_ref = firestore_service.collection('alchemist_agents').document(agent_id).get()
+    agent_ref = firestore_service.collection('agents').document(agent_id).get()
     if agent_ref.exists:
         agent_doc = agent_ref.to_dict()
         if 'api_integration' in agent_doc.keys():

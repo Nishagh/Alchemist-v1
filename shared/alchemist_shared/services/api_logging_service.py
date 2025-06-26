@@ -187,7 +187,7 @@ class APILoggingService:
         try:
             # Find the existing document
             query = self.collection_ref.where("req_id", "==", request_id).limit(1)
-            docs = [doc async for doc in query.stream()]
+            docs = list(query.stream())
             
             if not docs:
                 logger.warning(f"No existing log entry found for request_id: {request_id}")
@@ -217,7 +217,7 @@ class APILoggingService:
                 existing_meta.update(metadata)
                 update_data["meta"] = existing_meta
             
-            await doc_ref.update(update_data)
+            doc_ref.update(update_data)
             return True
             
         except Exception as e:
@@ -254,7 +254,7 @@ class APILoggingService:
                 batch.set(doc_ref, doc.dict(exclude_unset=True))
             
             # Commit batch
-            await batch.commit()
+            batch.commit()
             
             logger.debug(f"Flushed {len(self._log_batch)} API log entries")
             
@@ -330,7 +330,7 @@ class APILoggingService:
             collection_query = collection_query.offset(query.offset).limit(query.limit)
             
             # Execute query
-            docs = [doc.to_dict() async for doc in collection_query.stream()]
+            docs = [doc.to_dict() for doc in collection_query.stream()]
             
             # Filter by response time if specified (post-query filtering)
             if query.min_response_time_ms or query.max_response_time_ms:
@@ -432,7 +432,7 @@ class APILoggingService:
             
             # Query old documents
             old_docs_query = self.collection_ref.where("ts", "<", cutoff_date).limit(1000)
-            docs_to_delete = [doc async for doc in old_docs_query.stream()]
+            docs_to_delete = list(old_docs_query.stream())
             
             if not docs_to_delete:
                 logger.info("No old API logs to clean up")
@@ -448,12 +448,12 @@ class APILoggingService:
                 
                 # Commit batch when it gets large
                 if delete_count % 500 == 0:
-                    await batch.commit()
+                    batch.commit()
                     batch = self.db.batch()
             
             # Commit remaining deletes
             if delete_count % 500 != 0:
-                await batch.commit()
+                batch.commit()
             
             logger.info(f"Cleaned up {delete_count} old API log entries")
             

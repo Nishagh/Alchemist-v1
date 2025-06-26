@@ -68,7 +68,7 @@ class WhatsAppWebhookService {
    */
   async updateAgentWhatsAppConfig(agentId, whatsappConfig) {
     try {
-      const agentRef = doc(db, 'alchemist_agents', agentId);
+      const agentRef = doc(db, 'agents', agentId);
       
       // Update the agent configuration with WhatsApp webhook settings
       await updateDoc(agentRef, {

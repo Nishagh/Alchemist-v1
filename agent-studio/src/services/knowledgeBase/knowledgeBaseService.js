@@ -70,7 +70,7 @@ export const uploadKnowledgeBaseFile = async (agentId, file) => {
       const newFile = {
         id: response.data?.id || Date.now().toString(),
         filename: file.name,
-        service: "knowledge-base-service",
+        service: "alchemist-knowledge-vault",
         indexed: true
       };
       return { success: true, file: newFile };

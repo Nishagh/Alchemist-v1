@@ -32,7 +32,7 @@ Before using the Knowledge Base Service integration, ensure:
 
 The following environment variables are required for the Knowledge Base Service integration:
 
-- `KNOWLEDGE_BASE_URL`: URL of the Knowledge Base Service (default: "https://knowledge-base-service-b3hpe34qdq-uc.a.run.app")
+- `KNOWLEDGE_BASE_URL`: URL of the Knowledge Base Service (default: "https://alchemist-knowledge-vault-b3hpe34qdq-uc.a.run.app")
 - `DEFAULT_AGENT_ID`: ID of the agent to use for knowledge base searches
 - `OPENAI_API_KEY`: OpenAI API key for the agent
 - `GOOGLE_APPLICATION_CREDENTIALS`: Path to the service account credentials file for Firebase

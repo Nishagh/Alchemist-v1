@@ -9,7 +9,7 @@ The Prompt Engineer service is designed to align with Alchemist's conversation-c
 1. **Stateless Component**: The service operates as a stateless microservice, following the architectural shift from agent-state-centric to conversation-centric design.
 
 2. **Firestore Data Model**: Uses the established data model for storing prompts:
-   - `alchemist_agents/{agent_id}/system_prompt` collection for storing prompt versions
+   - `agents/{agent_id}/system_prompt` collection for storing prompt versions
 
 3. **OpenAI Integration**: Uses the centralized OpenAI service for API key management to ensure consistency across all components.
 
@@ -56,19 +56,6 @@ gcloud services enable secretmanager.googleapis.com
 # Create secret for OpenAI API key
 echo -n "your-openai-api-key" | gcloud secrets create openai-api-key --data-file=-
 
-# Grant access to the service account (this is handled by the deployment script but shown here for reference)
-gcloud iam service-accounts create prompt-engineer-service-sa \
-    --display-name="Prompt Engineer Service Account"
-
-# Grant Secret Manager access
-gcloud projects add-iam-policy-binding alchemist-prompt-engineer \
-    --member="serviceAccount:prompt-engineer-service-sa@alchemist-prompt-engineer.iam.gserviceaccount.com" \
-    --role="roles/secretmanager.secretAccessor"
-
-# Grant Firestore access
-gcloud projects add-iam-policy-binding alchemist-prompt-engineer \
-    --member="serviceAccount:prompt-engineer-service-sa@alchemist-prompt-engineer.iam.gserviceaccount.com" \
-    --role="roles/datastore.user"
 ```
 
 ### 4. Set Up Firebase Service Account

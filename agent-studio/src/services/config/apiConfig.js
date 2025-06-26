@@ -11,7 +11,7 @@ export const KNOWLEDGE_BASE_URL = process.env.REACT_APP_KNOWLEDGE_BASE_URL;
 export const MCP_MANAGER_URL = process.env.REACT_APP_MCP_MANAGER_URL;
 export const TUNING_SERVICE_URL = process.env.REACT_APP_TUNING_SERVICE_URL;
 export const BILLING_SERVICE_URL = process.env.REACT_APP_BILLING_SERVICE_URL || 'https://billing-service-851487020021.us-central1.run.app';
-export const GNF_SERVICE_URL = process.env.REACT_APP_GNF_SERVICE_URL || 'https://global-narrative-framework-backend-851487020021.us-central1.run.app';
+export const GNF_SERVICE_URL = process.env.REACT_APP_GNF_SERVICE_URL || 'https://global-narrative-framework-851487020021.us-central1.run.app';
 
 // Create axios instances with default config
 export const api = axios.create({
@@ -122,7 +122,7 @@ export const ENDPOINTS = {
 // Get API configuration for services
 export const getApiConfig = () => {
   const config = {
-    baseUrl: GNF_SERVICE_URL || 'https://global-narrative-framework-backend-851487020021.us-central1.run.app', // For identity service compatibility
+    baseUrl: GNF_SERVICE_URL || 'https://global-narrative-framework-851487020021.us-central1.run.app', // For identity service compatibility
     alchemist: {
       url: API_BASE_URL,
       timeout: 30000
@@ -144,7 +144,7 @@ export const getApiConfig = () => {
       timeout: 30000
     },
     globalNarrative: {
-      url: GNF_SERVICE_URL || 'https://global-narrative-framework-backend-851487020021.us-central1.run.app',
+      url: GNF_SERVICE_URL || 'https://global-narrative-framework-851487020021.us-central1.run.app',
       timeout: 30000
     }
   };

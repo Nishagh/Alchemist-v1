@@ -1,4 +1,5 @@
 """
+from alchemist_shared.middleware.api_logging_middleware import setup_api_logging_middleware
 Main FastAPI application for WhatsApp BSP (Business Solution Provider) service
 """
 import asyncio

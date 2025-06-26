@@ -1,4 +1,5 @@
 """
+from alchemist_shared.middleware.api_logging_middleware import setup_api_logging_middleware
 Alchemist Monitor Service
 Main FastAPI application for monitoring all Alchemist services
 """

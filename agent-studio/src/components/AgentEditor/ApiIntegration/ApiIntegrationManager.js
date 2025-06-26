@@ -122,7 +122,7 @@ const ApiIntegrationManager = ({
       console.log('Setting up deployment history listener for agent:', agentId);
       
       // Create a reference to the deployments subcollection
-      const deploymentsRef = collection(db, 'alchemist_agents', agentId, 'deployments');
+      const deploymentsRef = collection(db, 'agents', agentId, 'deployments');
       const deploymentsQuery = query(deploymentsRef, orderBy('created_at', 'desc'));
       
       const unsubscribe = onSnapshot(deploymentsQuery, (snapshot) => {

@@ -17,14 +17,19 @@ WORKDIR /app
 COPY requirements-manager.txt .
 RUN pip install --no-cache-dir -r requirements-manager.txt
 
+# Copy shared libraries first (for better caching)
+COPY shared/ /app/shared/
+
+# Install shared libraries
+RUN cd /app/shared && pip install -e .
+
 # Copy application files
 COPY mcp_manager_service.py .
 COPY generic_mcp_server.py .
 COPY requirements.txt .
-COPY firebase-credentials.json .
 
 # Set environment variables
-ENV GOOGLE_APPLICATION_CREDENTIALS=/app/firebase-credentials.json
+# Note: Using default service account authentication in Cloud Run
 ENV PORT=8080
 
 # Expose port

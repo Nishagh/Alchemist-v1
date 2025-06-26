@@ -94,13 +94,19 @@ class FirebaseClient:
             logger.info(f"Using Firebase credentials from GOOGLE_APPLICATION_CREDENTIALS: {cred_path}")
             return cred_path
         
-        # Priority 3: Centralized root directory (enforced for consistency)
+        # Priority 3: Shared folder credentials (for local development)
+        shared_cred_path = self._find_shared_credentials()
+        if shared_cred_path:
+            logger.info(f"Using Firebase credentials from shared folder: {shared_cred_path}")
+            return shared_cred_path
+        
+        # Priority 4: Centralized root directory (enforced for consistency)
         root_cred_path = self._find_project_root_credentials()
         if root_cred_path:
             logger.info(f"Using centralized Firebase credentials from project root: {root_cred_path}")
             return root_cred_path
         
-        # Priority 4: Legacy fallback locations (with deprecation warning)
+        # Priority 5: Legacy fallback locations (with deprecation warning)
         legacy_paths = [
             "firebase-credentials.json",
             "../firebase-credentials.json", 
@@ -112,7 +118,7 @@ class FirebaseClient:
             if os.path.exists(path):
                 logger.warning(
                     f"Using legacy Firebase credentials location: {path}. "
-                    "Consider moving to project root or setting FIREBASE_CREDENTIALS_PATH"
+                    "Consider moving to shared folder or setting FIREBASE_CREDENTIALS_PATH"
                 )
                 return path
         
@@ -120,7 +126,8 @@ class FirebaseClient:
             "Firebase credentials file not found. Please:\n"
             "1. Set FIREBASE_CREDENTIALS_PATH environment variable, or\n"
             "2. Set GOOGLE_APPLICATION_CREDENTIALS environment variable, or\n"
-            "3. Place firebase-credentials.json in project root directory"
+            "3. Place firebase-credentials.json in shared folder, or\n"
+            "4. Place firebase-credentials.json in project root directory"
         )
     
     def _find_project_root_credentials(self) -> Optional[str]:
@@ -140,6 +147,27 @@ class FirebaseClient:
                 ]
                 
                 if any(os.path.exists(os.path.join(current_dir, indicator)) for indicator in indicators):
+                    return cred_path
+            
+            parent_dir = os.path.dirname(current_dir)
+            if parent_dir == current_dir:  # Reached filesystem root
+                break
+            current_dir = parent_dir
+        
+        return None
+    
+    def _find_shared_credentials(self) -> Optional[str]:
+        """Find firebase-credentials.json in shared folder for local development."""
+        current_dir = os.getcwd()
+        
+        # Look for shared folder and firebase-credentials.json
+        for _ in range(5):  # Max 5 levels up
+            shared_dir = os.path.join(current_dir, "shared")
+            
+            if os.path.exists(shared_dir):
+                cred_path = os.path.join(shared_dir, "firebase-credentials.json")
+                if os.path.exists(cred_path):
+                    logger.info(f"Found shared credentials at: {cred_path}")
                     return cred_path
             
             parent_dir = os.path.dirname(current_dir)
@@ -205,8 +233,6 @@ class FirebaseClient:
         # Check for credential files that shouldn't exist in cloud deployments
         credential_files = [
             "firebase-credentials.json",
-            "gcloud-credentials.json", 
-            "service-account-key.json"
         ]
         
         found_files = []
@@ -222,14 +248,12 @@ class FirebaseClient:
     
     def get_collection(self, collection_name: str):
         """Get a Firestore collection reference with validation."""
-        # Validate collection name (logs warning for deprecated names)
         from alchemist_shared.constants.collections import validate_collection_usage
         validate_collection_usage(collection_name)
         return self.db.collection(collection_name)
     
     def get_document(self, collection_name: str, document_id: str):
         """Get a Firestore document reference with validation."""
-        # Validate collection name (logs warning for deprecated names)
         from alchemist_shared.constants.collections import validate_collection_usage
         validate_collection_usage(collection_name)
         return self.db.collection(collection_name).document(document_id)
@@ -262,6 +286,61 @@ class FirebaseClient:
     def get_knowledge_embeddings_collection(self):
         """Get the knowledge embeddings collection reference."""
         return self.get_collection(Collections.KNOWLEDGE_EMBEDDINGS)
+    
+    # CRUD operation methods
+    async def add_document(self, collection_name: str, data: Dict[str, Any]) -> str:
+        """Add a document to a collection and return the document ID."""
+        try:
+            doc_ref = self.get_collection(collection_name).add(data)
+            # Handle both sync and async returns from Firestore
+            if hasattr(doc_ref, '__await__'):
+                doc_ref = await doc_ref
+            # doc_ref is a tuple (timestamp, document_reference) for add operations
+            if isinstance(doc_ref, tuple):
+                return doc_ref[1].id
+            return doc_ref.id
+        except Exception as e:
+            logger.error(f"Failed to add document to {collection_name}: {e}")
+            raise
+    
+    async def update_document(self, collection_name: str, document_id: str, data: Dict[str, Any]) -> bool:
+        """Update a document in a collection."""
+        try:
+            doc_ref = self.get_document(collection_name, document_id)
+            result = doc_ref.update(data)
+            # Handle both sync and async returns from Firestore
+            if hasattr(result, '__await__'):
+                await result
+            return True
+        except Exception as e:
+            logger.error(f"Failed to update document {document_id} in {collection_name}: {e}")
+            raise
+    
+    async def get_document_data(self, collection_name: str, document_id: str) -> Optional[Dict[str, Any]]:
+        """Get a document's data from a collection."""
+        try:
+            doc_ref = self.get_document(collection_name, document_id)
+            doc = doc_ref.get()
+            # Handle both sync and async returns from Firestore
+            if hasattr(doc, '__await__'):
+                doc = await doc
+            return doc.to_dict() if doc.exists else None
+        except Exception as e:
+            logger.error(f"Failed to get document {document_id} from {collection_name}: {e}")
+            raise
+    
+    async def delete_document(self, collection_name: str, document_id: str) -> bool:
+        """Delete a document from a collection."""
+        try:
+            doc_ref = self.get_document(collection_name, document_id)
+            result = doc_ref.delete()
+            # Handle both sync and async returns from Firestore
+            if hasattr(result, '__await__'):
+                await result
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete document {document_id} from {collection_name}: {e}")
+            raise
 
 
 # Convenience functions for backward compatibility

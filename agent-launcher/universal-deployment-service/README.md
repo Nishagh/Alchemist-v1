@@ -186,7 +186,7 @@ Place `firebase-credentials.json` in the service directory for Firestore access.
 ### Agent Status Update
 
 ```javascript
-// Collection: alchemist_agents/{agent_id}
+// Collection: agents/{agent_id}
 {
   "universal_deployment": {
     "deployment_id": "uuid",

@@ -41,6 +41,7 @@ def get_firestore_client() -> Client:
             # Fallback to direct Firebase Admin initialization
             import firebase_admin
             from firebase_admin import credentials, firestore
+            import os
             
             if not firebase_admin._apps:
                 cred = credentials.ApplicationDefault()
@@ -53,7 +54,13 @@ def get_firestore_client() -> Client:
                     self.db = firestore.client()
                     try:
                         from firebase_admin import storage
-                        self.storage = storage.bucket()
+                        bucket_name = os.environ.get("FIREBASE_STORAGE_BUCKET")
+                        if bucket_name:
+                            self.storage = storage.bucket(bucket_name)
+                            logger.info(f"Storage bucket initialized: {bucket_name}")
+                        else:
+                            logger.warning("Storage bucket name not specified. Specify the bucket name via the 'storageBucket' option when initializing the App, or specify the bucket name explicitly when calling the storage.bucket() function.")
+                            self.storage = None
                     except Exception as e:
                         logger.warning(f"Storage not available: {e}")
                         self.storage = None

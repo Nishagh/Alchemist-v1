@@ -189,7 +189,7 @@ class MetricsService:
             collection_path = get_collection_path(self.service_name, "raw")
             
             # Convert to dict for Firestore
-            metrics_dict = metrics.dict()
+            metrics_dict = metrics.model_dump()
             metrics_dict['timestamp'] = metrics.timestamp
             
             # Store in Firestore
@@ -215,7 +215,7 @@ class MetricsService:
                 "current_response_time": metrics.request_metrics.avg_response_time_ms
             }
             
-            doc_ref = self.firebase_client.db.collection("metrics/service_health").document(self.service_name)
+            doc_ref = self.firebase_client.db.collection("service_health").document(self.service_name)
             doc_ref.set(health_data)
             
         except Exception as e:

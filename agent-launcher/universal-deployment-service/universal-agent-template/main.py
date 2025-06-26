@@ -202,7 +202,7 @@ def initialize_conversation_repository(db):
             if metadata:
                 conversation_data['metadata'] = metadata
             
-            conversation_ref = self.db.collection('alchemist_agents').document(self.agent_id).collection('conversations')
+            conversation_ref = self.db.collection('agents').document(self.agent_id).collection('conversations')
             doc_ref = conversation_ref.add(conversation_data)[1]
             return doc_ref.id
         
@@ -218,7 +218,7 @@ def initialize_conversation_repository(db):
             if metadata:
                 message_data['metadata'] = metadata
             
-            conversation_ref = self.db.collection('alchemist_agents').document(self.agent_id).collection('conversations').document(conversation_id)
+            conversation_ref = self.db.collection('agents').document(self.agent_id).collection('conversations').document(conversation_id)
             message_ref = conversation_ref.collection('messages').add(message_data)[1]
             
             # Update conversation metadata
@@ -233,7 +233,7 @@ def initialize_conversation_repository(db):
         def get_messages(self, conversation_id: str, limit: int = 50):
             """Get conversation messages"""
             messages_ref = (
-                self.db.collection('alchemist_agents')
+                self.db.collection('agents')
                 .document(self.agent_id)
                 .collection('conversations')
                 .document(conversation_id)

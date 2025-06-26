@@ -6,7 +6,7 @@ Models for agent configuration, status, and metadata.
 
 from enum import Enum
 from typing import Optional, Dict, Any, List
-from pydantic import Field, validator
+from pydantic import Field, field_validator
 from datetime import datetime
 from .base_models import TimestampedModel
 
@@ -57,22 +57,22 @@ class AgentConfig(TimestampedModel):
     # Environment variables and secrets
     environment_variables: Dict[str, str] = Field(default_factory=dict, description="Environment variables")
     
-    @validator("name")
+    @field_validator("name")
     def validate_name(cls, v):
         """Validate agent name."""
         if not v or not v.strip():
             raise ValueError("Agent name cannot be empty")
         return v.strip()
     
-    @validator("system_prompt")
+    @field_validator("system_prompt")
     def validate_system_prompt(cls, v):
         """Validate system prompt."""
         if len(v) > 10000:
             raise ValueError("System prompt too long (max 10000 characters)")
         return v
     
-    class Config:
-        schema_extra = {
+    model_config = {
+        "json_schema_extra": {
             "example": {
                 "name": "Customer Support Agent",
                 "description": "AI agent for handling customer inquiries",
@@ -83,6 +83,7 @@ class AgentConfig(TimestampedModel):
                 "whatsapp_enabled": True
             }
         }
+    }
 
 
 class Agent(TimestampedModel):
@@ -131,7 +132,7 @@ class Agent(TimestampedModel):
     gnf_enabled: bool = Field(default=True, description="Whether GNF tracking is enabled for this agent")
     last_gnf_sync: Optional[datetime] = Field(default=None, description="Last time GNF data was synchronized")
     
-    @validator("user_id")
+    @field_validator("user_id")
     def validate_user_id(cls, v):
         """Validate user ID."""
         if not v or not v.strip():
@@ -228,8 +229,8 @@ class Agent(TimestampedModel):
         self.last_gnf_sync = datetime.utcnow()
         self.update_timestamp()
     
-    class Config:
-        schema_extra = {
+    model_config = {
+        "json_schema_extra": {
             "example": {
                 "user_id": "user123",
                 "config": {
@@ -250,3 +251,4 @@ class Agent(TimestampedModel):
                 "gnf_enabled": True
             }
         }
+    }

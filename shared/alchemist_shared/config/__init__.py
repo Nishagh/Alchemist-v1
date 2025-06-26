@@ -1,6 +1,6 @@
 """Configuration management utilities."""
 
 from .base_settings import BaseSettings
-from .environment import Environment
+from .base_settings import Environment
 
 __all__ = ["BaseSettings", "Environment"]

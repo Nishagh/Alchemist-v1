@@ -18,7 +18,7 @@ service cloud.firestore {
     }
     
     // Agents collection - users can only access their own agents
-    match /alchemist_agents/{agentId} {
+    match /agents/{agentId} {
       allow read, write: if isAuthenticated() && 
         (resource == null || resource.data.userId == request.auth.uid) &&
         (request.resource == null || request.resource.data.userId == request.auth.uid);

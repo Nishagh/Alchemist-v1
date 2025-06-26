@@ -1,20 +1,19 @@
-# Dockerignore for Agent Launcher
-# Only include agent-launcher directory, exclude everything else
-
-# Exclude all other services (except when building specific services)
+# Exclude all other services except prompt-engine and shared
 admin-dashboard/
 agent-bridge/
-agent-engine/
 agent-studio/
 agent-tuning-service/
-# alchemist-monitor-service/ - Allow for monitor service builds
+agent-engine/
+alchemist-monitor-service/
 banking-api-service/
 knowledge-vault/
 mcp_config_generator/
-prompt-engine/
+billing-service/
 sandbox-console/
 tool-forge/
 user-deployment-monitor/
+agent-launcher/
+global-narative-framework/
 
 # Exclude documentation and scripts
 docs/
@@ -98,16 +97,9 @@ service-account-key.json
 shared/build/
 shared/dist/
 
-# Include only what we need for agent-launcher
-!agent-launcher/
+# Include what we need for prompt-engine
+!prompt-engine/
 !shared/
-
-# Within agent-launcher, exclude test files
-agent-launcher/**/tests/
-agent-launcher/**/*test*
-agent-launcher/**/vector_data*/
-agent-launcher/**/*.bin
-agent-launcher/**/*.sqlite3
 
 # Exclude deployment configs at root
 cloudbuild*.yaml

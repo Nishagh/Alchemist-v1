@@ -33,7 +33,7 @@ try:
         InteractionType,
         track_conversation_interaction
     )
-    from alchemist_shared.database.firebase_client import get_firebase_client
+    from alchemist_shared.database.firebase_client import get_firestore_client
     GNF_AVAILABLE = True
 except ImportError as e:
     logging.warning(f"GNF integration not available: {e}")
@@ -108,17 +108,16 @@ class OrchestratorAgent():
         if GNF_AVAILABLE:
             try:
                 gnf_service_url = os.getenv('GNF_SERVICE_URL', 'http://localhost:8000')
-                gnf_api_key = os.getenv('GNF_API_KEY')
-                firebase_client = get_firebase_client()
+                firebase_client = get_firestore_client()
                 
                 self.gnf_adapter = create_gnf_adapter(
                     service_url=gnf_service_url,
-                    api_key=gnf_api_key,
                     firebase_client=firebase_client
                 )
-                logger.info(f"GNF adapter initialized for agent {agent_id}")
+                # Note: GNF adapter will be initialized asynchronously when first used
+                logger.info(f"GNF adapter created for agent {agent_id}")
             except Exception as e:
-                logger.warning(f"Failed to initialize GNF adapter: {e}")
+                logger.warning(f"Failed to create GNF adapter: {e}")
                 self.gnf_adapter = None
         
         self.init_langchain()
@@ -131,7 +130,7 @@ class OrchestratorAgent():
                 logger.warning("OpenAI API key is missing. LangChain initialization will fail.")
                 raise ValueError("OpenAI API key is required for LangChain initialization")
             
-            self.llm = init_chat_model(self.model, model_provider="openai")            
+            self.llm = init_chat_model(model=self.model, model_provider="openai")            
             # Test the LLM connection
             logger.info(f"Testing connection to OpenAI with model {self.model}")
             
@@ -286,6 +285,10 @@ class OrchestratorAgent():
             return self._gnf_identity_created
         
         try:
+            # Initialize GNF adapter if not already done
+            if not self.gnf_adapter.session:
+                await self.gnf_adapter.initialize()
+            
             # Check if identity already exists
             existing_identity = await self.gnf_adapter.get_agent_identity(self.agent_id)
             
@@ -354,12 +357,19 @@ class OrchestratorAgent():
             return
         
         try:
+            # Initialize GNF adapter if not already done
+            if not self.gnf_adapter.session:
+                await self.gnf_adapter.initialize()
+            
+            # Sanitize context to remove non-JSON serializable objects
+            sanitized_context = self._sanitize_context_for_json(context or {})
+            
             # Prepare interaction context
             interaction_context = {
                 'conversation_type': 'agent_creation',
                 'platform': 'alchemist',
                 'model': self.model,
-                **(context or {})
+                **sanitized_context
             }
             
             # Track the interaction
@@ -375,6 +385,34 @@ class OrchestratorAgent():
             
         except Exception as e:
             logger.warning(f"Failed to track conversation interaction: {e}")
+    
+    def _sanitize_context_for_json(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Sanitize context dictionary to remove non-JSON serializable objects.
+        
+        Args:
+            context: Original context dictionary
+            
+        Returns:
+            Sanitized context dictionary with JSON-serializable values
+        """
+        def sanitize_value(value):
+            if hasattr(value, 'timestamp') and hasattr(value, 'nanosecond'):
+                # This is likely a DatetimeWithNanoseconds object
+                return value.isoformat() if hasattr(value, 'isoformat') else str(value)
+            elif isinstance(value, datetime):
+                return value.isoformat()
+            elif isinstance(value, dict):
+                return {k: sanitize_value(v) for k, v in value.items()}
+            elif isinstance(value, list):
+                return [sanitize_value(item) for item in value]
+            elif hasattr(value, '__dict__') and not isinstance(value, (str, int, float, bool, type(None))):
+                # Convert complex objects to their string representation
+                return str(value)
+            else:
+                return value
+        
+        return {k: sanitize_value(v) for k, v in context.items()}
     
     async def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -491,6 +529,9 @@ class OrchestratorAgent():
                 steps = result.get('intermediate_steps', [])
             except TypeError as e:
                 logger.warning(f"Using fallback for LangChain compatibility: {str(e)}")
+                # Fallback: execute without expecting intermediate steps
+                response = await self.agent_executor.ainvoke(invoke_params)
+                steps = []
             
             # Modify the response if it contains raw tool output
             response = self._format_response_for_user(response, steps)

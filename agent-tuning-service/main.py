@@ -1,4 +1,5 @@
 """
+from alchemist_shared.middleware.api_logging_middleware import setup_api_logging_middleware
 Agent Tuning Service
 
 Main FastAPI application for managing AI agent fine-tuning jobs.
@@ -132,6 +133,9 @@ def create_app() -> FastAPI:
 # Create the application instance
 app = create_app()
 
+
+# API Logging Middleware
+setup_api_logging_middleware(app, "agent-tuning-service")
 if __name__ == "__main__":
     import uvicorn
     

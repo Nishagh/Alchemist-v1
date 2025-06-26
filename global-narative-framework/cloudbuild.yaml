@@ -1,14 +1,17 @@
 # Google Cloud Build configuration for Global Narrative Framework
 steps:
-  # Build the container image
+  # Build the container image from parent directory to include shared module
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
+      - '--platform=linux/amd64'
+      - '-f'
+      - 'global-narative-framework/Dockerfile'
       - '-t'
       - 'gcr.io/$PROJECT_ID/global-narrative-framework:$BUILD_ID'
       - '-t'
       - 'gcr.io/$PROJECT_ID/global-narrative-framework:latest'
-      - '.'
+      - '../'
     env:
       - 'DOCKER_BUILDKIT=1'
 
@@ -29,7 +32,7 @@ steps:
     args:
       - 'run'
       - 'deploy'
-      - 'global-narrative-framework-backend'
+      - 'global-narrative-framework'
       - '--image'
       - 'gcr.io/$PROJECT_ID/global-narrative-framework:$BUILD_ID'
       - '--region'
@@ -54,9 +57,7 @@ steps:
       - '--set-env-vars'
       - 'ENVIRONMENT=production,FIREBASE_PROJECT_ID=$PROJECT_ID,PYTHONPATH=/app'
       - '--set-secrets'
-      - 'OPENAI_API_KEY=openai-api-key:latest'
-      - '--service-account'
-      - '$PROJECT_NUMBER-compute@developer.gserviceaccount.com'
+      - 'OPENAI_API_KEY=OPENAI_API_KEY:latest'
 
 # Store images in Container Registry
 images:

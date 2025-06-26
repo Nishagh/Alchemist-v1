@@ -4,14 +4,16 @@ OpenAI Service Module
 This module provides centralized access to OpenAI services and configuration.
 All OpenAI API calls should go through this service to ensure consistent handling
 of API keys, models, and error handling.
+
+Updated to use centralized alchemist_shared modules for configuration and authentication.
 """
-import os
 import logging
 from typing import Optional, Dict, Any, Tuple
 from langchain_openai import ChatOpenAI
-from dotenv import load_dotenv
 
-load_dotenv()
+# Import centralized configuration from alchemist_shared
+from alchemist_shared.config.base_settings import BaseSettings
+from alchemist_shared.database.firebase_client import FirebaseClient
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +28,7 @@ class OpenAIService:
     - API key management
     - Model configuration
     - ChatOpenAI instance creation
+    - Integration with centralized alchemist_shared configuration
     
     This is a singleton class, so only one instance will exist.
     All OpenAI API interactions should go through this service.
@@ -33,7 +36,9 @@ class OpenAIService:
     
     _instance = None
     _api_key: str = None
-    _default_model: str = "gpt-4.1"
+    _default_model: str = "gpt-4"
+    _settings: Optional[BaseSettings] = None
+    _firebase_client: Optional[FirebaseClient] = None
     
     def __new__(cls):
         """Singleton pattern to ensure only one instance exists."""
@@ -43,19 +48,31 @@ class OpenAIService:
         return cls._instance
     
     def _initialize(self):
-        """Initialize the service by loading the API key."""
-        self._api_key = os.getenv("OPENAI_API_KEY", "")
-        if not self._api_key:
-            logger.warning("OPENAI_API_KEY environment variable is not set!")
+        """Initialize the service using centralized configuration."""
+        # Load centralized settings
+        self._settings = BaseSettings()
+        
+        # Initialize Firebase client for potential future use
+        self._firebase_client = FirebaseClient()
+        
+        # Get OpenAI configuration from centralized settings
+        openai_config = self._settings.get_openai_config()
+        self._api_key = openai_config.get("api_key")
+        self._default_model = self._settings.openai_model
+        
+        if self._api_key:
+            logger.info(f"OpenAI API key loaded from centralized config: {self._api_key[:5]}...")
         else:
-            logger.info(f"OpenAI API key loaded: {self._api_key[:5]}...")
+            logger.warning("No OpenAI API key found in centralized configuration")
+            
+        logger.info(f"Using centralized model configuration: {self._default_model}")
     
     @property
     def api_key(self) -> str:
         """Get the OpenAI API key."""
-        if not self._api_key:
-            # Try to reload in case it was set after initialization
-            self._api_key = os.getenv("OPENAI_API_KEY", "")
+        if not self._api_key and self._settings:
+            openai_config = self._settings.get_openai_config()
+            self._api_key = openai_config.get("api_key", "")
         return self._api_key
     
     @api_key.setter
@@ -71,9 +88,6 @@ class OpenAIService:
             global _LLM_CACHE
             _LLM_CACHE = {}
             logger.info(f"OpenAI API key updated: {value[:5]}...")
-            
-            # Set as environment variable to ensure all components use the same key
-            os.environ["OPENAI_API_KEY"] = value
     
     @property
     def default_model(self) -> str:
@@ -145,6 +159,47 @@ class OpenAIService:
         
         if "model" in config and config["model"]:
             self.default_model = config["model"]
+    
+    @property
+    def firebase_client(self) -> Optional[FirebaseClient]:
+        """Get the Firebase client instance."""
+        return self._firebase_client
+    
+    @property
+    def settings(self) -> Optional[BaseSettings]:
+        """Get the centralized settings instance."""
+        return self._settings
+    
+    def reload_config(self) -> bool:
+        """
+        Reload configuration from centralized settings.
+        
+        Returns:
+            bool: True if reload was successful, False otherwise
+        """
+        try:
+            # Reload settings
+            self._settings = BaseSettings()
+            
+            # Update OpenAI configuration
+            openai_config = self._settings.get_openai_config()
+            new_api_key = openai_config.get("api_key")
+            
+            if new_api_key and new_api_key != self._api_key:
+                self.api_key = new_api_key
+                logger.info("OpenAI API key updated from centralized config")
+            
+            # Update model if changed
+            new_model = self._settings.openai_model
+            if new_model and new_model != self._default_model:
+                self.default_model = new_model
+                logger.info(f"Default model updated to: {new_model}")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to reload configuration: {e}")
+            return False
 
 # Create a default instance
 default_openai_service = OpenAIService()
