@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAgentState } from './useAgentState';
+import { DEPLOYMENT_STATUS } from '../constants/workflowStates';
 
 // Define the workflow stages
 export const WORKFLOW_STAGES = [
@@ -147,24 +148,24 @@ export const useAgentWorkflow = (agentId) => {
         canProceed: true
       },
       deployment: {
-        completed: !!(agentData?.deployment_status === 'completed' || agentData?.deployment_status === 'deployed'),
+        completed: !!(agentData?.deployment_status === DEPLOYMENT_STATUS.COMPLETED || agentData?.deployment_status === DEPLOYMENT_STATUS.DEPLOYED),
         requirements: ['Completed agent definition'],
         canProceed: !!(agentData?.name && agentData?.system_prompt && agentData?.model)
       },
       'post-testing': {
-        completed: !!(agentData?.deployment_status === 'completed' || agentData?.deployment_status === 'deployed'),
+        completed: !!(agentData?.deployment_status === DEPLOYMENT_STATUS.COMPLETED || agentData?.deployment_status === DEPLOYMENT_STATUS.DEPLOYED),
         requirements: ['Successful deployment'],
-        canProceed: !!(agentData?.deployment_status === 'completed' || agentData?.deployment_status === 'deployed')
+        canProceed: !!(agentData?.deployment_status === DEPLOYMENT_STATUS.COMPLETED || agentData?.deployment_status === DEPLOYMENT_STATUS.DEPLOYED)
       },
       integration: {
         completed: !!(agentData?.integrations_configured),
         requirements: ['Successful deployment'],
-        canProceed: !!(agentData?.deployment_status === 'completed' || agentData?.deployment_status === 'deployed')
+        canProceed: !!(agentData?.deployment_status === DEPLOYMENT_STATUS.COMPLETED || agentData?.deployment_status === DEPLOYMENT_STATUS.DEPLOYED)
       },
       analytics: {
         completed: true, // Always accessible once deployed
         requirements: ['Successful deployment'],
-        canProceed: !!(agentData?.deployment_status === 'completed' || agentData?.deployment_status === 'deployed')
+        canProceed: !!(agentData?.deployment_status === DEPLOYMENT_STATUS.COMPLETED || agentData?.deployment_status === DEPLOYMENT_STATUS.DEPLOYED)
       }
     };
 

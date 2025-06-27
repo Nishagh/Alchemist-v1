@@ -31,8 +31,8 @@ class Settings(BaseSettings):
     FIREBASE_PROJECT_ID: str = Field(env="FIREBASE_PROJECT_ID", default="alchemist-e69bb")
     FIREBASE_CREDENTIALS_PATH: Optional[str] = Field(env="FIREBASE_CREDENTIALS_PATH", default=None)
     
-    # Firestore collections
-    USER_CREDITS_COLLECTION: str = "user_credits"
+    # Firestore collections (schema-compliant names)
+    USER_CREDITS_COLLECTION: str = "user_accounts"
     CREDIT_TRANSACTIONS_COLLECTION: str = "credit_transactions"
     CREDIT_PACKAGES_COLLECTION: str = "credit_packages"
     CREDIT_ORDERS_COLLECTION: str = "credit_orders"
@@ -108,7 +108,7 @@ except Exception as e:
         FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "alchemist-e69bb")
         FIREBASE_CREDENTIALS_PATH = os.getenv("FIREBASE_CREDENTIALS_PATH")
         
-        USER_CREDITS_COLLECTION = "user_credits"
+        USER_CREDITS_COLLECTION = "user_accounts"
         CREDIT_TRANSACTIONS_COLLECTION = "credit_transactions"
         CREDIT_PACKAGES_COLLECTION = "credit_packages"
         CREDIT_ORDERS_COLLECTION = "credit_orders"

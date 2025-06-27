@@ -64,9 +64,6 @@ else
     echo -e "${GREEN}Repository ${REPO_NAME} already exists.${NC}"
 fi
 
-# Skip Secret Manager setup - not needed for frontend-only deployment
-echo -e "${YELLOW}Skipping Secret Manager setup (frontend-only deployment)...${NC}"
-
 # Generate a timestamp for unique image versioning
 TIMESTAMP=$(date +%Y%m%d%H%M%S)
 IMAGE_URL="$REGION-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$SERVICE_NAME:$TIMESTAMP"

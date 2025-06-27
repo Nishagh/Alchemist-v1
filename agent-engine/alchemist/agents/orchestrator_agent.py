@@ -34,6 +34,11 @@ try:
         track_conversation_interaction
     )
     from alchemist_shared.database.firebase_client import get_firestore_client
+    from alchemist_shared.constants.workflow_states import (
+        DeploymentStatus, 
+        is_success_status,
+        normalize_status
+    )
     GNF_AVAILABLE = True
 except ImportError as e:
     logging.warning(f"GNF integration not available: {e}")
@@ -361,15 +366,12 @@ class OrchestratorAgent():
             if not self.gnf_adapter.session:
                 await self.gnf_adapter.initialize()
             
-            # Sanitize context to remove non-JSON serializable objects
-            sanitized_context = self._sanitize_context_for_json(context or {})
-            
             # Prepare interaction context
             interaction_context = {
                 'conversation_type': 'agent_creation',
                 'platform': 'alchemist',
                 'model': self.model,
-                **sanitized_context
+                **(context or {})
             }
             
             # Track the interaction
@@ -385,34 +387,6 @@ class OrchestratorAgent():
             
         except Exception as e:
             logger.warning(f"Failed to track conversation interaction: {e}")
-    
-    def _sanitize_context_for_json(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Sanitize context dictionary to remove non-JSON serializable objects.
-        
-        Args:
-            context: Original context dictionary
-            
-        Returns:
-            Sanitized context dictionary with JSON-serializable values
-        """
-        def sanitize_value(value):
-            if hasattr(value, 'timestamp') and hasattr(value, 'nanosecond'):
-                # This is likely a DatetimeWithNanoseconds object
-                return value.isoformat() if hasattr(value, 'isoformat') else str(value)
-            elif isinstance(value, datetime):
-                return value.isoformat()
-            elif isinstance(value, dict):
-                return {k: sanitize_value(v) for k, v in value.items()}
-            elif isinstance(value, list):
-                return [sanitize_value(item) for item in value]
-            elif hasattr(value, '__dict__') and not isinstance(value, (str, int, float, bool, type(None))):
-                # Convert complex objects to their string representation
-                return str(value)
-            else:
-                return value
-        
-        return {k: sanitize_value(v) for k, v in context.items()}
     
     async def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -694,7 +668,7 @@ class OrchestratorAgent():
                         return f"I encountered a problem: {error}"
                     elif message and not message.strip().startswith('{'):
                         return self._ensure_proper_formatting(message)
-                    elif status == "completed" or status == "success":
+                    elif is_success_status(status):
                         return "I've successfully completed the requested operation."
             except:
                 # If we can't parse JSON or another error, fall back to a default message

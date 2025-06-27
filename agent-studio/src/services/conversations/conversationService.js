@@ -396,20 +396,22 @@ const saveBillableMessage = async ({ agentId, conversationId, message, response,
     const conversationRef = collection(db, 'conversations');
     
     await addDoc(conversationRef, {
-      agentId,
-      conversationId,
-      userMessage: message,
-      agentResponse: response,
+      conversation_id: conversationId,
+      agent_id: agentId,
+      user_id: null,
+      message_content: message,
+      agent_response: response,
+      is_production: testMode === 'production',
+      deployment_type: testMode === 'production' ? 'production' : 'development',
       tokens: {
-        prompt: tokens?.prompt_tokens || tokens?.prompt || 0,
-        completion: tokens?.completion_tokens || tokens?.completion || 0,
-        total: tokens?.total_tokens || tokens?.total || 0
+        prompt_tokens: tokens?.prompt_tokens || tokens?.prompt || 0,
+        completion_tokens: tokens?.completion_tokens || tokens?.completion || 0,
+        total_tokens: tokens?.total_tokens || tokens?.total || 0
       },
-      cost: cost || 0,
+      cost_usd: cost || 0,
+      context: null,
       timestamp: timestamp || serverTimestamp(),
-      createdAt: serverTimestamp(),
-      isProduction: testMode === 'production', // true for production mode, false for development mode
-      deploymentType: 'deployed' // to distinguish from pre-deployment testing
+      created_at: serverTimestamp()
     });
 
     // Update agent billing summary
@@ -430,7 +432,7 @@ const saveBillableMessage = async ({ agentId, conversationId, message, response,
  */
 const updateAgentBillingSummary = async (agentId, usage) => {
   try {
-    const summaryRef = doc(db, 'agent_billing_summary', agentId);
+    const summaryRef = doc(db, 'agent_usage_summary', agentId);
     const summaryDoc = await getDoc(summaryRef);
 
     if (summaryDoc.exists()) {
@@ -462,7 +464,7 @@ const updateAgentBillingSummary = async (agentId, usage) => {
  */
 export const getBillingInfo = async (agentId) => {
   try {
-    const summaryRef = doc(db, 'agent_billing_summary', agentId);
+    const summaryRef = doc(db, 'agent_usage_summary', agentId);
     const summaryDoc = await getDoc(summaryRef);
 
     if (summaryDoc.exists()) {
@@ -643,7 +645,7 @@ export const getBillingAnalytics = async (agentId, timeframe = '30days') => {
  */
 export const subscribeToBillingUpdates = (agentId, callback) => {
   try {
-    const summaryRef = doc(db, 'agent_billing_summary', agentId);
+    const summaryRef = doc(db, 'agent_usage_summary', agentId);
     
     return onSnapshot(summaryRef, (doc) => {
       if (doc.exists()) {

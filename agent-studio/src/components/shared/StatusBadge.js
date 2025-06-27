@@ -12,64 +12,51 @@ import {
   Warning as WarningIcon,
   InfoOutlined as InfoIcon
 } from '@mui/icons-material';
+import { 
+  DEPLOYMENT_STATUS, 
+  WORKFLOW_STAGE_STATUS,
+  getStatusMetadata,
+  getStatusVariant 
+} from '../../constants/workflowStates';
 
 const StatusBadge = ({ status, variant = 'outlined', size = 'small', ...props }) => {
   const getStatusConfig = (status) => {
-    const normalizedStatus = status?.toLowerCase();
-    
-    switch (normalizedStatus) {
-      case 'indexed':
-      case 'completed':
-      case 'success':
-      case 'deployed':
-      case 'running':
-        return {
-          label: 'Indexed',
-          color: 'success',
-          icon: <CheckCircleIcon sx={{ fontSize: 'inherit' }} />
-        };
+    try {
+      const metadata = getStatusMetadata(status);
+      const statusVariant = getStatusVariant(status);
       
-      case 'indexing':
-      case 'processing':
-      case 'deploying':
-      case 'pending':
-        return {
-          label: 'Processing',
-          color: 'warning',
-          icon: <ScheduleIcon sx={{ fontSize: 'inherit' }} />
-        };
+      // Icon mapping
+      const iconMap = {
+        'CheckCircle': <CheckCircleIcon sx={{ fontSize: 'inherit' }} />,
+        'Schedule': <ScheduleIcon sx={{ fontSize: 'inherit' }} />,
+        'Error': <ErrorIcon sx={{ fontSize: 'inherit' }} />,
+        'Warning': <WarningIcon sx={{ fontSize: 'inherit' }} />,
+        'Help': <InfoIcon sx={{ fontSize: 'inherit' }} />,
+        'CircleOutlined': <InfoIcon sx={{ fontSize: 'inherit' }} />,
+        'PlayArrow': <ScheduleIcon sx={{ fontSize: 'inherit' }} />,
+        'Lock': <InfoIcon sx={{ fontSize: 'inherit' }} />,
+        'Queue': <ScheduleIcon sx={{ fontSize: 'inherit' }} />,
+        'Refresh': <ScheduleIcon sx={{ fontSize: 'inherit' }} />,
+        'Code': <ScheduleIcon sx={{ fontSize: 'inherit' }} />,
+        'Build': <ScheduleIcon sx={{ fontSize: 'inherit' }} />,
+        'RocketLaunch': <ScheduleIcon sx={{ fontSize: 'inherit' }} />,
+        'Cancel': <InfoIcon sx={{ fontSize: 'inherit' }} />,
+        'AccessTime': <WarningIcon sx={{ fontSize: 'inherit' }} />,
+        'Block': <InfoIcon sx={{ fontSize: 'inherit' }} />
+      };
       
-      case 'failed':
-      case 'error':
-      case 'stopped':
-        return {
-          label: 'Failed',
-          color: 'error',
-          icon: <ErrorIcon sx={{ fontSize: 'inherit' }} />
-        };
-      
-      case 'warning':
-        return {
-          label: 'Warning',
-          color: 'warning',
-          icon: <WarningIcon sx={{ fontSize: 'inherit' }} />
-        };
-      
-      case 'not_indexed':
-      case 'not_deployed':
-      case 'inactive':
-        return {
-          label: 'Not Indexed',
-          color: 'default',
-          icon: <InfoIcon sx={{ fontSize: 'inherit' }} />
-        };
-      
-      default:
-        return {
-          label: status || 'Unknown',
-          color: 'default',
-          icon: <InfoIcon sx={{ fontSize: 'inherit' }} />
-        };
+      return {
+        label: metadata.label,
+        color: statusVariant,
+        icon: iconMap[metadata.icon] || <InfoIcon sx={{ fontSize: 'inherit' }} />
+      };
+    } catch (error) {
+      // Fallback for unknown statuses
+      return {
+        label: status || 'Unknown',
+        color: 'default',
+        icon: <InfoIcon sx={{ fontSize: 'inherit' }} />
+      };
     }
   };
 

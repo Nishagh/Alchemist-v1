@@ -20,10 +20,6 @@ class Collections:
     TRAINING_JOBS = "training_jobs"
     INTEGRATION_CHANNELS = "integration_channels"
     
-    # Deprecated collections
-    class Deprecated:
-        USER_CREDITS = "user_credits"
-        AGENT_BILLING_SUMMARY = "agent_billing_summary"
 
 
 class DocumentFields:

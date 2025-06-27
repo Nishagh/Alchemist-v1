@@ -53,9 +53,7 @@ class Collections:
     # GLOBAL NARRATIVE FRAMEWORK COLLECTIONS
     # ============================================================================
     
-    # Agent identity and narrative
-    AGENT_IDENTITIES = "agent_identities"
-    AGENT_INTERACTIONS = "agent_interactions"
+    # Agent identity and narrative are now integrated into main collections
     AGENT_MEMORIES = "agent_memories"
     EVOLUTION_EVENTS = "evolution_events"
     RESPONSIBILITY_ASSESSMENTS = "responsibility_assessments"
@@ -85,8 +83,6 @@ class Collections:
             cls.TRAINING_JOBS,
             cls.INTEGRATION_CHANNELS,
             # GNF Collections
-            cls.AGENT_IDENTITIES,
-            cls.AGENT_INTERACTIONS,
             cls.AGENT_MEMORIES,
             cls.EVOLUTION_EVENTS,
             cls.RESPONSIBILITY_ASSESSMENTS,

@@ -1,19 +1,14 @@
 # Google Cloud Build configuration for Global Narrative Framework
 steps:
-  # Build the container image from parent directory to include shared module
+  # Build the container image
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
-      - '--platform=linux/amd64'
-      - '-f'
-      - 'global-narative-framework/Dockerfile'
       - '-t'
       - 'gcr.io/$PROJECT_ID/global-narrative-framework:$BUILD_ID'
       - '-t'
       - 'gcr.io/$PROJECT_ID/global-narrative-framework:latest'
-      - '../'
-    env:
-      - 'DOCKER_BUILDKIT=1'
+      - '.'
 
   # Push the container image to Container Registry
   - name: 'gcr.io/cloud-builders/docker'
@@ -48,12 +43,10 @@ steps:
       - '5'
       - '--min-instances'
       - '0'
-      - '--port'
-      - '8080'
       - '--timeout'
       - '900'
       - '--concurrency'
-      - '100'
+      - '80'
       - '--set-env-vars'
       - 'ENVIRONMENT=production,FIREBASE_PROJECT_ID=$PROJECT_ID,PYTHONPATH=/app'
       - '--set-secrets'

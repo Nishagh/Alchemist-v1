@@ -6,6 +6,7 @@
 import { auth, Collections, DocumentFields, ErrorMessages } from '../../utils/firebase';
 import { api } from '../config/apiConfig';
 import { ENDPOINTS } from '../config/apiConfig';
+import identityService from '../identity/identityService';
 
 /**
  * Create a new agent
@@ -26,7 +27,46 @@ export const createAgent = async (agentData) => {
     }
     
     const response = await api.post(ENDPOINTS.AGENTS, agentData);
-    return response.data;
+    const createdAgent = response.data;
+    
+    // Trigger GNF tracking when agent is given a name
+    if (agentData.name && agentData.name.trim()) {
+      try {
+        const agentId = createdAgent.id || createdAgent.agent_id;
+        if (agentId) {
+          console.log('Creating GNF identity for agent:', agentId, 'with name:', agentData.name);
+          
+          // Create initial identity data for GNF
+          const identityData = {
+            agent_id: agentId,
+            name: agentData.name.trim(),
+            personality: {
+              traits: ['helpful', 'responsive', 'curious'],
+              values: ['assistance', 'accuracy', 'learning'],
+              goals: ['help users', 'provide accurate information', 'learn from interactions']
+            },
+            capabilities: {
+              skills: ['conversation', 'problem-solving'],
+              knowledge_domains: ['general']
+            },
+            background: {
+              origin: 'alchemist-platform',
+              creation_date: new Date().toISOString(),
+              created_by: userId
+            }
+          };
+          
+          // Create GNF identity - this will start tracking the agent
+          await identityService.createAgentIdentity(agentId, identityData);
+          console.log('GNF identity created successfully for agent:', agentId);
+        }
+      } catch (gnfError) {
+        // Log GNF error but don't fail agent creation
+        console.warn('Failed to create GNF identity for agent:', gnfError.message);
+      }
+    }
+    
+    return createdAgent;
   } catch (error) {
     console.error('Error creating agent:', error);
     throw error;
@@ -47,7 +87,54 @@ export const updateAgent = async (agentId, agentData) => {
     }
     
     const response = await api.put(`${ENDPOINTS.AGENTS}/${agentId}`, agentData);
-    return response.data;
+    const updatedAgent = response.data;
+    
+    // If agent is being given a name for the first time, create GNF identity
+    if (agentData.name && agentData.name.trim()) {
+      try {
+        // Check if GNF identity already exists
+        const existingIdentity = await identityService.getAgentIdentity(agentId);
+        
+        // Only create identity if it doesn't exist or is a default identity
+        if (!existingIdentity || existingIdentity.is_default) {
+          console.log('Creating/updating GNF identity for agent:', agentId, 'with name:', agentData.name);
+          
+          const identityData = {
+            agent_id: agentId,
+            name: agentData.name.trim(),
+            personality: {
+              traits: ['helpful', 'responsive', 'curious'],
+              values: ['assistance', 'accuracy', 'learning'],
+              goals: ['help users', 'provide accurate information', 'learn from interactions']
+            },
+            capabilities: {
+              skills: ['conversation', 'problem-solving'],
+              knowledge_domains: ['general']
+            },
+            background: {
+              origin: 'alchemist-platform',
+              creation_date: new Date().toISOString(),
+              created_by: userId
+            }
+          };
+          
+          if (existingIdentity && existingIdentity.is_default) {
+            // Update existing default identity
+            await identityService.updateAgentIdentity(agentId, identityData);
+            console.log('GNF identity updated successfully for agent:', agentId);
+          } else {
+            // Create new identity
+            await identityService.createAgentIdentity(agentId, identityData);
+            console.log('GNF identity created successfully for agent:', agentId);
+          }
+        }
+      } catch (gnfError) {
+        // Log GNF error but don't fail agent update
+        console.warn('Failed to create/update GNF identity for agent:', gnfError.message);
+      }
+    }
+    
+    return updatedAgent;
   } catch (error) {
     console.error(`Error updating agent ${agentId}:`, error);
     throw error;

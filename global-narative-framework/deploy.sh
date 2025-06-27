@@ -1,126 +1,132 @@
 #!/bin/bash
 # Deployment script for Global Narrative Framework to Google Cloud Run
+# Uses gcloud build and properly integrates alchemist-shared like other modules
 
 set -e
 
-# Text colors
+# Configuration
+PROJECT_ID="alchemist-e69bb"
+SERVICE_NAME="global-narrative-framework"
+REGION="us-central1"
+IMAGE_NAME="gcr.io/${PROJECT_ID}/${SERVICE_NAME}"
+
+# Colors for output
+RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-RED='\033[0;31m'
+BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-echo -e "${YELLOW}Deploying Global Narrative Framework to Google Cloud Run...${NC}"
+echo -e "${GREEN}🚀 Deploying Global Narrative Framework${NC}"
+echo "Project: ${PROJECT_ID}"
+echo "Service: ${SERVICE_NAME}"
+echo "Region: ${REGION}"
+echo ""
+
+# Check if required tools are installed
+if ! command -v gcloud &> /dev/null; then
+    echo -e "${RED}❌ gcloud CLI not found. Please install it first.${NC}"
+    exit 1
+fi
 
 # Check if .env file exists and load it
 if [ -f ".env" ]; then
-  echo -e "Loading environment variables from .env file..."
+  echo -e "${BLUE}📋 Loading environment variables from .env file...${NC}"
   source .env
 else
-  echo -e "${YELLOW}Warning: .env file not found. Will use default or provided values.${NC}"
+  echo -e "${YELLOW}⚠️  Warning: .env file not found. Will use default values.${NC}"
 fi
 
-# Set Firebase project ID
-FIREBASE_PROJECT_ID="alchemist-e69bb"
-echo -e "${YELLOW}Found Firebase project ID: ${FIREBASE_PROJECT_ID}${NC}"
-
-# Set GOOGLE_CLOUD_PROJECT to the Firebase project ID if not already set
-if [ -z "$GOOGLE_CLOUD_PROJECT" ]; then
-  GOOGLE_CLOUD_PROJECT=$FIREBASE_PROJECT_ID
-  echo -e "Setting GOOGLE_CLOUD_PROJECT to Firebase project ID: $GOOGLE_CLOUD_PROJECT"
+# Authenticate with Google Cloud
+echo -e "${YELLOW}🔐 Checking authentication...${NC}"
+if ! gcloud auth list --filter=status:ACTIVE --format="value(account)" | grep -q .; then
+    echo -e "${YELLOW}🔐 Authenticating with Google Cloud...${NC}"
+    gcloud auth login
 fi
 
-# Check if gcloud is installed
-if ! command -v gcloud &> /dev/null; then
-  echo -e "${RED}Error: gcloud CLI is not installed.${NC}"
-  echo "Please install it from: https://cloud.google.com/sdk/docs/install"
-  exit 1
-fi
-
-# Ensure user is authenticated with gcloud
-echo -e "\n${YELLOW}Checking gcloud authentication...${NC}"
-if ! gcloud auth list --filter=status:ACTIVE --format="value(account)" | grep -q "@"; then
-  echo -e "You need to authenticate with Google Cloud first."
-  gcloud auth login
-fi
-
-# Set default project
-echo -e "\n${YELLOW}Setting Google Cloud project to: ${GOOGLE_CLOUD_PROJECT}${NC}"
-gcloud config set project $GOOGLE_CLOUD_PROJECT
-
-# Check for OpenAI API key
-if [ -z "$OPENAI_API_KEY" ]; then
-  read -p "Enter your OpenAI API key: " OPENAI_API_KEY
-fi
-
-
-# Create .gcloudignore file
-echo -e "\n${YELLOW}Creating .gcloudignore file...${NC}"
-cat > .gcloudignore << EOF
-.git
-.github
-.gitignore
-.env
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-venv/
-ENV/
-.vscode/
-*.db
-*.sqlite
-*.log
-.DS_Store
-deploy*.sh
-cloudbuild*.yaml
-firebase-credentials.json
-gnf/tests/
-*.pytest_cache
-.coverage
-htmlcov/
-.mypy_cache/
-.pytest_cache/
-EOF
-
-# Create secrets in Google Secret Manager if they don't exist
-echo -e "\n${YELLOW}Creating/updating secrets in Google Secret Manager...${NC}"
-
+# Set project
+echo -e "${YELLOW}📁 Setting Google Cloud project to: ${PROJECT_ID}${NC}"
+gcloud config set project ${PROJECT_ID}
 
 # Enable required APIs
-echo -e "\n${YELLOW}Enabling required Google Cloud APIs...${NC}"
-gcloud services enable run.googleapis.com cloudbuild.googleapis.com secretmanager.googleapis.com --project=$GOOGLE_CLOUD_PROJECT
+echo -e "${BLUE}🔧 Ensuring required APIs are enabled...${NC}"
+gcloud services enable run.googleapis.com containerregistry.googleapis.com cloudbuild.googleapis.com secretmanager.googleapis.com
 
-# Grant Cloud Run service account access to secrets
-echo -e "\n${YELLOW}Setting up IAM permissions...${NC}"
-PROJECT_NUMBER=$(gcloud projects describe $GOOGLE_CLOUD_PROJECT --format="value(projectNumber)")
-COMPUTE_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+# Copy shared module to local directory for Docker context
+echo -e "${BLUE}📦 Preparing shared module...${NC}"
+if [ -d "./shared" ]; then
+    rm -rf ./shared
+fi
+cp -r ../shared ./shared
 
-# Grant secret accessor role
-gcloud projects add-iam-policy-binding $GOOGLE_CLOUD_PROJECT \
-  --member="serviceAccount:${COMPUTE_SA}" \
-  --role="roles/secretmanager.secretAccessor" \
-  --condition=None \
-  --quiet
+# Create or update OpenAI API key secret
+echo -e "${BLUE}🔐 Managing OpenAI API key secret...${NC}"
+SECRET_NAME="OPENAI_API_KEY"
 
-# Grant Cloud Build service account the necessary roles
-CLOUDBUILD_SA="${PROJECT_NUMBER}@cloudbuild.gserviceaccount.com"
-gcloud projects add-iam-policy-binding $GOOGLE_CLOUD_PROJECT \
-  --member="serviceAccount:${CLOUDBUILD_SA}" \
-  --role="roles/run.admin" \
-  --condition=None \
-  --quiet
+# Check if secret exists
+if gcloud secrets describe $SECRET_NAME --project=$PROJECT_ID >/dev/null 2>&1; then
+    echo -e "   Secret $SECRET_NAME already exists"
+else
+    echo -e "   Creating secret $SECRET_NAME..."
+    gcloud secrets create $SECRET_NAME --project=$PROJECT_ID
+fi
 
-gcloud projects add-iam-policy-binding $GOOGLE_CLOUD_PROJECT \
-  --member="serviceAccount:${CLOUDBUILD_SA}" \
-  --role="roles/iam.serviceAccountUser" \
-  --condition=None \
-  --quiet
+# Update secret value if OPENAI_API_KEY is set
+if [ ! -z "$OPENAI_API_KEY" ]; then
+    echo -e "   Updating secret value..."
+    echo -n "$OPENAI_API_KEY" | gcloud secrets versions add $SECRET_NAME --data-file=- --project=$PROJECT_ID
+else
+    echo -e "   ⚠️  OPENAI_API_KEY not set in environment - using existing secret value"
+fi
 
-# Start the build
-echo -e "\n${YELLOW}Starting Cloud Build deployment...${NC}"
-gcloud builds submit --config=cloudbuild.yaml --project=$GOOGLE_CLOUD_PROJECT
+# Build using Cloud Build
+echo -e "${BLUE}🔨 Building image with Cloud Build...${NC}"
+gcloud builds submit --tag=$IMAGE_NAME
 
-echo -e "\n${GREEN}Deployment initiated! Build and deployment progress can be monitored in the Google Cloud Console.${NC}"
-echo -e "Once complete, your service will be available at: https://global-narrative-framework-[hash].run.app"
+# Deploy to Cloud Run with secrets
+echo -e "${BLUE}🚀 Deploying to Cloud Run...${NC}"
+gcloud run deploy $SERVICE_NAME \
+  --image=$IMAGE_NAME \
+  --platform=managed \
+  --region=$REGION \
+  --allow-unauthenticated \
+  --memory=2Gi \
+  --cpu=2 \
+  --timeout=900 \
+  --concurrency=80 \
+  --max-instances=5 \
+  --min-instances=0 \
+  --set-env-vars="ENVIRONMENT=production,FIREBASE_PROJECT_ID=${PROJECT_ID},PYTHONPATH=/app" \
+  --set-secrets="OPENAI_API_KEY=${SECRET_NAME}:latest"
+
+# Get the service URL
+SERVICE_URL=$(gcloud run services describe ${SERVICE_NAME} --region=${REGION} --format="value(status.url)")
+
+# Cleanup shared directory
+echo -e "${BLUE}🧹 Cleaning up...${NC}"
+if [ -d "./shared" ]; then
+    rm -rf ./shared
+fi
+
+echo ""
+echo -e "${GREEN}✅ Deployment completed successfully!${NC}"
+echo -e "${GREEN}🌐 Service URL: ${SERVICE_URL}${NC}"
+echo -e "${GREEN}📊 Health Check: ${SERVICE_URL}/health${NC}"
+echo -e "${GREEN}📖 API Docs: ${SERVICE_URL}/docs${NC}"
+echo ""
+
+# Test the deployment
+echo -e "${YELLOW}🧪 Testing deployment...${NC}"
+sleep 10
+if curl -s -f "${SERVICE_URL}/health" > /dev/null; then
+    echo -e "${GREEN}✅ Health check passed!${NC}"
+else
+    echo -e "${RED}❌ Health check failed!${NC}"
+    echo "Service may still be starting up. Check logs with:"
+    echo "gcloud logs read --project=${PROJECT_ID} --filter=\"resource.labels.service_name=${SERVICE_NAME}\""
+fi
+
+echo ""
+echo -e "${GREEN}🎉 Global Narrative Framework deployment complete!${NC}"
+echo -e "${BLUE}💡 To view logs: gcloud logs read --project=${PROJECT_ID} --filter=\"resource.labels.service_name=${SERVICE_NAME}\"${NC}"
+echo -e "${BLUE}💡 To redeploy: ./deploy.sh${NC}"

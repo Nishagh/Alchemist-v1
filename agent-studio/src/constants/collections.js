@@ -62,20 +62,6 @@ export const Collections = {
   GLOBAL_EVENTS: 'global_events',
   AGENT_RELATIONSHIPS: 'agent_relationships',
   
-  // ============================================================================
-  // DEPRECATED COLLECTIONS (For Migration Reference)
-  // ============================================================================
-  
-  Deprecated: {
-    ALCHEMIST_AGENTS: 'alchemist_agents',
-    DEV_CONVERSATIONS: 'dev_conversations',
-    KNOWLEDGE_BASE_FILES: 'knowledge_base_files',
-    USER_CREDITS: 'user_credits',
-    AGENT_BILLING_SUMMARY: 'agent_billing_summary',
-    MANAGED_ACCOUNTS: 'managed_accounts',
-    WEBHOOK_LOGS: 'webhook_logs',
-    KNOWLEDGE_BASE_EMBEDDINGS: 'knowledge_base_embeddings',
-  },
 };
 
 /**

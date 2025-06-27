@@ -46,35 +46,29 @@ COMMUNICATION_LOGS = "communication_logs"
 AGENT_MEMORIES = "agent_memories"
 
 # Agent development milestones
-AGENT_EVOLUTION_EVENTS = "agent_evolution_events"
+EVOLUTION_EVENTS = "evolution_events"
 
 # Responsibility and accountability tracking
-AGENT_RESPONSIBILITY_RECORDS = "agent_responsibility_records"
+RESPONSIBILITY_ASSESSMENTS = "responsibility_assessments"
 
 # Multi-agent interactions and relationships
-CROSS_AGENT_INTERACTIONS = "cross_agent_interactions"
+AGENT_RELATIONSHIPS = "agent_relationships"
+
+# Cross-agent interactions (alias for agent relationships)
+CROSS_AGENT_INTERACTIONS = "agent_relationships"
 
 # System-wide narrative events
-GLOBAL_NARRATIVE_TIMELINE = "global_narrative_timeline"
+GLOBAL_EVENTS = "global_events"
 
 # ============================================================================
-# DEPRECATED COLLECTIONS (For Migration Reference)
+# LEGACY ALIASES FOR BACKWARD COMPATIBILITY
 # ============================================================================
 
-# Original GNF collections (to be migrated)
-DEPRECATED_GNF_INTERACTIONS = "interactions"
-DEPRECATED_GNF_MEMORIES = "memories"
-DEPRECATED_GNF_EVOLUTION_EVENTS = "evolution_events"
-DEPRECATED_GNF_ACTIONS = "gnf_actions"
-DEPRECATED_GNF_GLOBAL_NARRATIVE = "global_narrative"
+# Legacy aliases that may be used in existing code
+AGENT_EVOLUTION_EVENTS = EVOLUTION_EVENTS
+AGENT_RESPONSIBILITY_RECORDS = RESPONSIBILITY_ASSESSMENTS
+GLOBAL_NARRATIVE_TIMELINE = GLOBAL_EVENTS
 
-# Original Alchemist collections (from firebase-structure-optimized.yaml)
-DEPRECATED_ALCHEMIST_AGENTS = "alchemist_agents"
-DEPRECATED_DEV_CONVERSATIONS = "dev_conversations"
-DEPRECATED_USER_CREDITS = "user_credits"
-DEPRECATED_KNOWLEDGE_BASE_FILES = "knowledge_base_files"
-DEPRECATED_MANAGED_ACCOUNTS = "managed_accounts"
-DEPRECATED_WEBHOOK_LOGS = "webhook_logs"
 
 # ============================================================================
 # COLLECTION GROUPS FOR BATCH OPERATIONS
@@ -94,10 +88,10 @@ ACTIVE_COLLECTIONS = [
     INTEGRATION_CHANNELS,
     COMMUNICATION_LOGS,
     AGENT_MEMORIES,
-    AGENT_EVOLUTION_EVENTS,
-    AGENT_RESPONSIBILITY_RECORDS,
-    CROSS_AGENT_INTERACTIONS,
-    GLOBAL_NARRATIVE_TIMELINE,
+    EVOLUTION_EVENTS,
+    RESPONSIBILITY_ASSESSMENTS,
+    AGENT_RELATIONSHIPS,
+    GLOBAL_EVENTS,
 ]
 
 # Core GNF collections for narrative tracking
@@ -105,10 +99,10 @@ GNF_CORE_COLLECTIONS = [
     AGENTS,  # Enhanced with GNF identity
     CONVERSATIONS,  # Enhanced with GNF analysis
     AGENT_MEMORIES,
-    AGENT_EVOLUTION_EVENTS,
-    AGENT_RESPONSIBILITY_RECORDS,
-    CROSS_AGENT_INTERACTIONS,
-    GLOBAL_NARRATIVE_TIMELINE,
+    EVOLUTION_EVENTS,
+    RESPONSIBILITY_ASSESSMENTS,
+    AGENT_RELATIONSHIPS,
+    GLOBAL_EVENTS,
 ]
 
 # Collections requiring agent ownership validation
@@ -116,8 +110,8 @@ AGENT_OWNED_COLLECTIONS = [
     AGENTS,
     CONVERSATIONS,
     AGENT_MEMORIES,
-    AGENT_EVOLUTION_EVENTS,
-    AGENT_RESPONSIBILITY_RECORDS,
+    EVOLUTION_EVENTS,
+    RESPONSIBILITY_ASSESSMENTS,
     KNOWLEDGE_FILES,
     KNOWLEDGE_EMBEDDINGS,
     TRAINING_JOBS,
@@ -136,8 +130,8 @@ REAL_TIME_COLLECTIONS = [
 AGGREGATION_SOURCE_COLLECTIONS = [
     CONVERSATIONS,
     CREDIT_TRANSACTIONS,
-    AGENT_RESPONSIBILITY_RECORDS,
-    AGENT_EVOLUTION_EVENTS,
+    RESPONSIBILITY_ASSESSMENTS,
+    EVOLUTION_EVENTS,
 ]
 
 # ============================================================================
@@ -289,26 +283,6 @@ class ResponsibilityFields:
     SOURCE_INTERACTION_ID = "source_interaction_id"
 
 
-# ============================================================================
-# MIGRATION MAPPING
-# ============================================================================
-
-MIGRATION_MAPPINGS = {
-    # GNF collection migrations
-    DEPRECATED_GNF_INTERACTIONS: CONVERSATIONS,
-    DEPRECATED_GNF_MEMORIES: AGENT_MEMORIES,
-    DEPRECATED_GNF_EVOLUTION_EVENTS: AGENT_EVOLUTION_EVENTS,
-    DEPRECATED_GNF_ACTIONS: AGENT_RESPONSIBILITY_RECORDS,
-    DEPRECATED_GNF_GLOBAL_NARRATIVE: GLOBAL_NARRATIVE_TIMELINE,
-    
-    # Alchemist collection migrations (from optimized structure)
-    DEPRECATED_ALCHEMIST_AGENTS: AGENTS,
-    DEPRECATED_DEV_CONVERSATIONS: CONVERSATIONS,
-    DEPRECATED_USER_CREDITS: USER_ACCOUNTS,
-    DEPRECATED_KNOWLEDGE_BASE_FILES: KNOWLEDGE_FILES,
-    DEPRECATED_MANAGED_ACCOUNTS: INTEGRATION_CHANNELS,
-    DEPRECATED_WEBHOOK_LOGS: COMMUNICATION_LOGS,
-}
 
 # ============================================================================
 # VALIDATION FUNCTIONS
@@ -318,13 +292,6 @@ def is_valid_collection(collection_name: str) -> bool:
     """Check if collection name is valid in current schema"""
     return collection_name in ACTIVE_COLLECTIONS
 
-def is_deprecated_collection(collection_name: str) -> bool:
-    """Check if collection name is deprecated"""
-    return collection_name in MIGRATION_MAPPINGS.keys()
-
-def get_migrated_collection(deprecated_name: str) -> str:
-    """Get the new collection name for a deprecated collection"""
-    return MIGRATION_MAPPINGS.get(deprecated_name, deprecated_name)
 
 def is_gnf_enhanced_collection(collection_name: str) -> bool:
     """Check if collection has GNF enhancements"""
@@ -337,3 +304,9 @@ def requires_agent_ownership(collection_name: str) -> bool:
 def supports_real_time_updates(collection_name: str) -> bool:
     """Check if collection supports real-time listeners"""
     return collection_name in REAL_TIME_COLLECTIONS
+
+
+def get_migrated_collection(collection_name: str) -> str:
+    """Get the migrated collection name (for backward compatibility)"""
+    # Return the current collection name as-is since we're using the optimized structure
+    return collection_name

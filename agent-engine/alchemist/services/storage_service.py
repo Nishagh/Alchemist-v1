@@ -14,6 +14,8 @@ import time
 from firebase_admin import firestore
 from .agent_generation_service import generate_agent_name, generate_agent_description, generate_agent_purpose
 from ..config.firebase_config import get_firestore_client
+from alchemist_shared.constants.collections import Collections, DocumentFields
+from alchemist_shared.constants.workflow_states import DeploymentStatus
 # Set up module-level logger early
 logger = logging.getLogger(__name__)
 
@@ -45,8 +47,8 @@ class StorageService:
             Agent configuration dictionary or None if not found
         """
         try:
-            # Get agent from the standard 'agents' collection
-            agent_ref = self.db.collection('agents').document(agent_id)
+            # Get agent from the standard agents collection
+            agent_ref = self.db.collection(Collections.AGENTS).document(agent_id)
             doc = agent_ref.get()
             
             if doc.exists:
@@ -70,25 +72,22 @@ class StorageService:
             Returns:
                 Agent configuration dictionary or None if not found
             """
-            agent_ref = self.db.collection('agents').document(agent_id)
+            agent_ref = self.db.collection(Collections.AGENTS).document(agent_id)
             agent_name = await generate_agent_name(message)
             agent_description = await generate_agent_description(message)
             agent_purpose = await generate_agent_purpose(message)
             agent_config = {
-                'agent_id': agent_id,
-                'id': agent_id,  # Include both for compatibility
+                'id': agent_id,
                 'name': agent_name,
                 'description': agent_description,
-                'purpose': agent_purpose,
-                'instructions': '',  # Standard field
-                'personality': '',   # Standard field
-                'agent_type': 'general',  # Standard field
-                'config': {},  # Standard field
-                'owner_id': userId,  # Standard field
-                'userId': userId,    # Legacy compatibility
+                'type': 'general',
+                'owner_id': userId,
+                'deployment_status': DeploymentStatus.QUEUED,
+                'active_deployment_id': None,
+                'service_url': None,
                 'created_at': firestore.SERVER_TIMESTAMP,
                 'updated_at': firestore.SERVER_TIMESTAMP,
-                'status': 'draft'
+                'last_deployed_at': None
             }
             
             agent_ref.set(agent_config)
@@ -98,7 +97,7 @@ class StorageService:
     async def get_agent_prompt(self, agent_id: str) -> Optional[str]:
         """Get the prompt for an agent."""
         try:
-            agent_ref = self.db.collection('agents').document(agent_id).collection('system_prompt').order_by('created_at', direction=firestore.Query.DESCENDING).limit(1).get()
+            agent_ref = self.db.collection(Collections.AGENTS).document(agent_id).collection('system_prompt').order_by('created_at', direction=firestore.Query.DESCENDING).limit(1).get()
             doc = agent_ref[0].to_dict()
             return doc.get('content', '')
         except Exception as e:
@@ -130,7 +129,7 @@ class StorageService:
                 'message_count': 0
             }                
             # Save to Firestore
-            doc_ref = self.db.collection('conversations').document(conversation_id)
+            doc_ref = self.db.collection(Collections.CONVERSATIONS).document(conversation_id)
             doc_ref.set(conversation_data)
             
             logger.info(f"Created conversation {conversation_id} for user {user_id}")
@@ -152,7 +151,7 @@ class StorageService:
         """
         try:
             # Get conversation document
-            doc_ref = self.db.collection('conversations').document(conversation_id)
+            doc_ref = self.db.collection(Collections.CONVERSATIONS).document(conversation_id)
             doc = doc_ref.get()
             
             if doc.exists:
@@ -184,7 +183,7 @@ class StorageService:
             data['updated_at'] = firestore.SERVER_TIMESTAMP
             
             # Update conversation document
-            doc_ref = self.db.collection('conversations').document(conversation_id)
+            doc_ref = self.db.collection(Collections.CONVERSATIONS).document(conversation_id)
             doc_ref.update(data)
             
             logger.debug(f"Updated conversation {conversation_id}")
@@ -220,12 +219,12 @@ class StorageService:
             }
                             
             # Save message to Firestore
-            message_ref = self.db.collection('conversations').document(conversation_id) \
+            message_ref = self.db.collection(Collections.CONVERSATIONS).document(conversation_id) \
                             .collection('messages').document(message_id)
             message_ref.set(message_data)
             
             # Check if the conversation document exists before updating it
-            conversation_ref = self.db.collection('conversations').document(conversation_id)
+            conversation_ref = self.db.collection(Collections.CONVERSATIONS).document(conversation_id)
             conversation_doc = conversation_ref.get()
             
             if conversation_doc.exists:
@@ -277,7 +276,7 @@ class StorageService:
         """
         try:
             # Query messages
-            query = self.db.collection('conversations').document(conversation_id) \
+            query = self.db.collection(Collections.CONVERSATIONS).document(conversation_id) \
                        .collection('messages') \
                        .order_by('created_at', direction=firestore.Query.DESCENDING) \
                        .limit(limit).offset(offset)
@@ -313,16 +312,11 @@ class StorageService:
             
         try:
             # Query the standard 'agents' collection
-            query = self.db.collection('agents')
+            query = self.db.collection(Collections.AGENTS)
             
-            # Filter by userId if provided (check both userId and owner_id fields)
+            # Filter by userId if provided
             if userId:
-                # Use owner_id as the primary field, fallback to userId for compatibility
-                try:
-                    query = query.where('owner_id', '==', userId)
-                except:
-                    # Fallback to userId field if owner_id doesn't exist
-                    query = query.where('userId', '==', userId)
+                query = query.where('owner_id', '==', userId)
                 
             query = query.order_by('created_at', direction=firestore.Query.DESCENDING) \
                 .limit(limit).offset(offset)
@@ -336,8 +330,6 @@ class StorageService:
                 agent_data = doc.to_dict()
                 
                 # Include the document ID if not already present
-                if 'agent_id' not in agent_data:
-                    agent_data['agent_id'] = doc.id
                 if 'id' not in agent_data:
                     agent_data['id'] = doc.id
                 
@@ -373,7 +365,7 @@ class StorageService:
             print(f"Updating agent config {agent_id} with {config_updates}")
             
             # Update agent document
-            agent_ref = self.db.collection('agents').document(agent_id)
+            agent_ref = self.db.collection(Collections.AGENTS).document(agent_id)
             agent_ref.update(config_updates)
             
             logger.debug(f"Updated agent config {agent_id}")

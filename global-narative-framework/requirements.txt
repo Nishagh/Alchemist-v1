@@ -11,6 +11,8 @@ google-cloud-firestore==2.13.1
 # OpenAI Integration
 openai==1.3.7
 
+# Production server
+gunicorn==21.2.0
 
 # Utilities
 python-multipart==0.0.6
