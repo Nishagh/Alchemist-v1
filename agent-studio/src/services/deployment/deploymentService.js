@@ -9,11 +9,11 @@ import { apiConfig } from '../config/apiConfig';
 import { db, Collections, DocumentFields, StatusValues, serverTimestamp } from '../../utils/firebase';
 import { collection, query, where, orderBy, getDocs, doc, getDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 
-const DEPLOYMENT_SERVICE_URL = process.env.REACT_APP_DEPLOYMENT_SERVICE_URL || 'http://0.0.0.0:8080';
+const AGENT_LAUNCHER_URL = process.env.REACT_APP_AGENT_LAUNCHER_URL || 'http://0.0.0.0:8080';
 
 class DeploymentService {
   constructor() {
-    this.baseURL = DEPLOYMENT_SERVICE_URL;
+    this.baseURL = AGENT_LAUNCHER_URL;
   }
 
   /**
@@ -29,7 +29,7 @@ class DeploymentService {
         priority: options.priority || 5
       };
 
-      const response = await fetch(`${DEPLOYMENT_SERVICE_URL}/api/deploy`, {
+      const response = await fetch(`${AGENT_LAUNCHER_URL}/api/deploy`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -6,23 +6,23 @@
 import axios from 'axios';
 
 // Configure the base URLs for different services
-export const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
-export const KNOWLEDGE_BASE_URL = process.env.REACT_APP_KNOWLEDGE_BASE_URL;
-export const MCP_MANAGER_URL = process.env.REACT_APP_MCP_MANAGER_URL;
+export const AGENT_ENGINE_URL = process.env.REACT_APP_AGENT_ENGINE_URL;
+export const KNOWLEDGE_VAULT_URL = process.env.REACT_APP_KNOWLEDGE_VAULT_URL;
+export const TOOL_FORGE_URL = process.env.REACT_APP_TOOL_FORGE_URL;
 export const TUNING_SERVICE_URL = process.env.REACT_APP_TUNING_SERVICE_URL;
 export const BILLING_SERVICE_URL = process.env.REACT_APP_BILLING_SERVICE_URL || 'https://billing-service-851487020021.us-central1.run.app';
 export const GNF_SERVICE_URL = process.env.REACT_APP_GNF_SERVICE_URL || 'https://global-narrative-framework-851487020021.us-central1.run.app';
 
 // Create axios instances with default config
 export const api = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: AGENT_ENGINE_URL,
   headers: {
     'Content-Type': 'application/json'
   }
 });
 
 export const kbApi = axios.create({
-  baseURL: KNOWLEDGE_BASE_URL,
+  baseURL: KNOWLEDGE_VAULT_URL,
   headers: {
     'Content-Type': 'application/json'
   }
@@ -30,7 +30,7 @@ export const kbApi = axios.create({
 
 // Default axios instance for MCP operations
 export const mcpApi = axios.create({
-  baseURL: MCP_MANAGER_URL,
+  baseURL: TOOL_FORGE_URL,
   headers: {
     'Content-Type': 'application/json'
   }
@@ -124,15 +124,15 @@ export const getApiConfig = () => {
   const config = {
     baseUrl: GNF_SERVICE_URL || 'https://global-narrative-framework-851487020021.us-central1.run.app', // For identity service compatibility
     alchemist: {
-      url: API_BASE_URL,
+      url: AGENT_ENGINE_URL,
       timeout: 30000
     },
     knowledgeBase: {
-      url: KNOWLEDGE_BASE_URL,
+      url: KNOWLEDGE_VAULT_URL,
       timeout: 60000
     },
     mcpManager: {
-      url: MCP_MANAGER_URL,
+      url: TOOL_FORGE_URL,
       timeout: 60000
     },
     tuningService: {

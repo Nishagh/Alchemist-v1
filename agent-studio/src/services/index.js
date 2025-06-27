@@ -10,7 +10,7 @@ import identityService from './identity/identityService';
 
 // Core services
 export { initializeAuthInterceptors, getAuthToken, verifyTokenWithServer } from './auth/authService';
-export { API_BASE_URL, KNOWLEDGE_BASE_URL, MCP_MANAGER_URL, TUNING_SERVICE_URL, ENDPOINTS, api, kbApi, mcpApi, tuningApi, getApiConfig } from './config/apiConfig';
+export { AGENT_ENGINE_URL, KNOWLEDGE_VAULT_URL, TOOL_FORGE_URL, TUNING_SERVICE_URL, ENDPOINTS, api, kbApi, mcpApi, tuningApi, getApiConfig } from './config/apiConfig';
 
 // Agent services
 export {

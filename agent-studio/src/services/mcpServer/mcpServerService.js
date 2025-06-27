@@ -7,7 +7,7 @@
 import axios from 'axios';
 import { auth } from '../../utils/firebase';
 import { getAuthToken } from '../auth/authService';
-import { MCP_MANAGER_URL } from '../config/apiConfig';
+import { TOOL_FORGE_URL } from '../config/apiConfig';
 
 /**
  * Deploy MCP server for an agent
@@ -32,7 +32,7 @@ export const deployMcpServer = async (agentId) => {
     
     const response = await axios({
       method: 'post',
-      url: `${MCP_MANAGER_URL}/deploy`,
+      url: `${TOOL_FORGE_URL}/deploy`,
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -60,7 +60,7 @@ export const deployMcpServer = async (agentId) => {
  */
 export const checkDeploymentStatus = async (agentId, deploymentId) => {
   try {
-    const url = `${MCP_MANAGER_URL}/deployments/${agentId}/${deploymentId}`;
+    const url = `${TOOL_FORGE_URL}/deployments/${agentId}/${deploymentId}`;
     console.log('Checking deployment status URL:', url);
     
     const response = await axios({
@@ -78,7 +78,7 @@ export const checkDeploymentStatus = async (agentId, deploymentId) => {
     console.error('Error checking deployment status:', error);
     console.error('Error details:', {
       message: error.message,
-      url: `${MCP_MANAGER_URL}/deployments/${agentId}/${deploymentId}`,
+      url: `${TOOL_FORGE_URL}/deployments/${agentId}/${deploymentId}`,
       agentId,
       deploymentId
     });
@@ -95,7 +95,7 @@ export const checkDeploymentStatus = async (agentId, deploymentId) => {
  */
 export const getDeploymentLogs = async (agentId, deploymentId) => {
   try {
-    const url = `${MCP_MANAGER_URL}/deployments/${agentId}/${deploymentId}/logs`;
+    const url = `${TOOL_FORGE_URL}/deployments/${agentId}/${deploymentId}/logs`;
     console.log('Getting deployment logs URL:', url);
     
     const response = await axios({
@@ -142,7 +142,7 @@ export const deleteMcpServer = async (agentId) => {
     
     const response = await axios({
       method: 'delete',
-      url: `${MCP_MANAGER_URL}/servers/${agentId}`,
+      url: `${TOOL_FORGE_URL}/servers/${agentId}`,
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -168,7 +168,7 @@ export const deleteMcpServer = async (agentId) => {
  */
 export const checkServerStatus = async (agentId) => {
   try {
-    const url = `${MCP_MANAGER_URL}/servers/${agentId}`;
+    const url = `${TOOL_FORGE_URL}/servers/${agentId}`;
     console.log('Checking server status URL:', url);
     
     const response = await axios({
@@ -186,7 +186,7 @@ export const checkServerStatus = async (agentId) => {
     console.error('Error checking server status:', error);
     console.error('Error details:', {
       message: error.message,
-      url: `${MCP_MANAGER_URL}/servers/${agentId}`,
+      url: `${TOOL_FORGE_URL}/servers/${agentId}`,
       agentId
     });
     if (error.response) {
@@ -220,7 +220,7 @@ export const getIntegrationSummary = async (agentId) => {
     
     const response = await axios({
       method: 'get',
-      url: `${MCP_MANAGER_URL}/agents/${agentId}/integration-summary`,
+      url: `${TOOL_FORGE_URL}/agents/${agentId}/integration-summary`,
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -271,7 +271,7 @@ export const getLiveTools = async (agentId) => {
     
     const response = await axios({
       method: 'get',
-      url: `${MCP_MANAGER_URL}/agents/${agentId}/tools`,
+      url: `${TOOL_FORGE_URL}/agents/${agentId}/tools`,
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -315,7 +315,7 @@ export const testTool = async (agentId, toolName, testParams = {}) => {
     
     const response = await axios({
       method: 'post',
-      url: `${MCP_MANAGER_URL}/agents/${agentId}/tools/${toolName}/test`,
+      url: `${TOOL_FORGE_URL}/agents/${agentId}/tools/${toolName}/test`,
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',

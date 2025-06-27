@@ -151,9 +151,9 @@ Configure these in `.env`:
 
 ```env
 # Core service URLs
-REACT_APP_API_BASE_URL=https://alchemist-agent-engine-851487020021.us-central1.run.app
-REACT_APP_KNOWLEDGE_BASE_URL=https://alchemist-knowledge-vault-851487020021.us-central1.run.app
-REACT_APP_MCP_MANAGER_URL=https://alchemist-tool-forge-851487020021.us-central1.run.app
+REACT_APP_AGENT_ENGINE_URL=https://alchemist-agent-engine-851487020021.us-central1.run.app
+REACT_APP_KNOWLEDGE_VAULT_URL=https://alchemist-knowledge-vault-851487020021.us-central1.run.app
+REACT_APP_TOOL_FORGE_URL=https://alchemist-tool-forge-851487020021.us-central1.run.app
 
 # Firebase configuration
 REACT_APP_FIREBASE_API_KEY=your-api-key
@@ -166,10 +166,10 @@ REACT_APP_FIREBASE_PROJECT_ID=alchemist-e69bb
 The frontend uses axios instances configured in `src/services/config/apiConfig.js`:
 
 ```javascript
-import { API_BASE_URL } from './apiConfig';
+import { AGENT_ENGINE_URL } from './apiConfig';
 
 export const api = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: AGENT_ENGINE_URL,
   headers: {
     'Content-Type': 'application/json'
   }
@@ -232,7 +232,7 @@ export const api = axios.create({
 
 2. **Update frontend environment:**
    ```env
-   REACT_APP_API_BASE_URL=http://localhost:8080
+   REACT_APP_AGENT_ENGINE_URL=http://localhost:8080
    ```
 
 3. **Start frontend:**

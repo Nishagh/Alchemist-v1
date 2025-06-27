@@ -26,7 +26,7 @@ import {
   Psychology as PsychologyIcon
 } from '@mui/icons-material';
 // Standalone agent URL for testing
-const user_agent_url = process.env.REACT_APP_USER_AGENT_URL || 'https://standalone-agent-851487020021.us-central1.run.app';
+const SANDBOX_CONSOLE_URL = process.env.REACT_APP_SANDBOX_CONSOLE_URL || 'https://standalone-agent-851487020021.us-central1.run.app';
 
 const AgentTestingInterface = ({ 
   agentId, 
@@ -64,7 +64,7 @@ const AgentTestingInterface = ({
     
     try {
       // Call the standalone agent API to create a new conversation
-      const apiUrl = new URL('/api/agent/create_conversation', user_agent_url).toString();
+      const apiUrl = new URL('/api/agent/create_conversation', SANDBOX_CONSOLE_URL).toString();
       console.log('Making request to:', apiUrl);
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -137,7 +137,7 @@ const AgentTestingInterface = ({
       }
 
       // Use the standalone agent API to process the message
-      const apiUrl = new URL('/api/agent/process_message', user_agent_url).toString();
+      const apiUrl = new URL('/api/agent/process_message', SANDBOX_CONSOLE_URL).toString();
       console.log('Making request to:', apiUrl);
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -506,7 +506,7 @@ const AgentTestingInterface = ({
             </Typography>
             
             <Alert severity="info" sx={{ mb: 3 }}>
-              Testing uses the standalone agent API ({user_agent_url}). Test interactions are isolated and won't affect production data.
+              Testing uses the standalone agent API ({SANDBOX_CONSOLE_URL}). Test interactions are isolated and won't affect production data.
             </Alert>
 
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>

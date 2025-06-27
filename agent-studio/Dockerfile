@@ -22,9 +22,9 @@ ENV REACT_APP_FIREBASE_MESSAGING_SENDER_ID=103214520240448237488
 ENV REACT_APP_FIREBASE_APP_ID=1:851487020021:web:527efbdbe1ded9aa2686bc
 
 # Set service URLs for build
-ENV REACT_APP_API_BASE_URL=https://alchemist-agent-engine-851487020021.us-central1.run.app
-ENV REACT_APP_KNOWLEDGE_BASE_URL=https://alchemist-knowledge-vault-851487020021.us-central1.run.app
-ENV REACT_APP_MCP_MANAGER_URL=https://alchemist-tool-forge-851487020021.us-central1.run.app
+ENV REACT_APP_AGENT_ENGINE_URL=https://alchemist-agent-engine-851487020021.us-central1.run.app
+ENV REACT_APP_KNOWLEDGE_VAULT_URL=https://alchemist-knowledge-vault-851487020021.us-central1.run.app
+ENV REACT_APP_TOOL_FORGE_URL=https://alchemist-tool-forge-851487020021.us-central1.run.app
 ENV REACT_APP_BILLING_SERVICE_URL=https://billing-service-851487020021.us-central1.run.app
 
 # Build the React app

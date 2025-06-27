@@ -48,7 +48,7 @@ The most elegant way to create intelligent AI agents without code. Build, test, 
    REACT_APP_FIREBASE_APP_ID=your-app-id
    
    # API Configuration
-   REACT_APP_API_BASE_URL=http://localhost:3001
+   REACT_APP_AGENT_ENGINE_URL=http://localhost:3001
    REACT_APP_UNIVERSAL_AGENT_URL=https://your-agent-service-url
    
    # WhatsApp Business API (optional)
@@ -193,7 +193,7 @@ The application can also be deployed to:
 |----------|-------------|----------|
 | `REACT_APP_FIREBASE_API_KEY` | Firebase API key | Yes |
 | `REACT_APP_FIREBASE_PROJECT_ID` | Firebase project ID | Yes |
-| `REACT_APP_API_BASE_URL` | Backend API URL | Yes |
+| `REACT_APP_AGENT_ENGINE_URL` | Backend API URL | Yes |
 | `REACT_APP_UNIVERSAL_AGENT_URL` | Deployed agent service URL | For production testing |
 | `REACT_APP_WHATSAPP_SERVICE_URL` | WhatsApp service URL | For WhatsApp integration |
 

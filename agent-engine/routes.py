@@ -151,35 +151,14 @@ def register_routes(app: FastAPI):
                 }
             )
         
-        try:
-            # Check OpenAI API key
-            openai_key_set = bool(os.environ.get("OPENAI_API_KEY"))
-            
-            # Check Firebase project ID
-            firebase_project = os.environ.get("FIREBASE_PROJECT_ID")
-            
+        try:            
             # Basic health status
             health_status = {
                 "service": "agent-engine",
                 "status": "healthy",
                 "timestamp": datetime.now().isoformat(),
-                "version": "1.0.0",
-                "components": {
-                    "openai": {
-                        "status": "healthy" if openai_key_set else "unhealthy",
-                        "configured": openai_key_set
-                    },
-                    "firebase": {
-                        "status": "healthy" if firebase_project else "unhealthy",
-                        "project_id": firebase_project
-                    }
-                }
-            }
-            
-            # Determine overall status
-            if not openai_key_set or not firebase_project:
-                health_status["status"] = "degraded"
-            
+                "version": "1.0.0"
+            }            
             return health_status
             
         except Exception as e:
@@ -575,51 +554,6 @@ def register_routes(app: FastAPI):
             return {"status": "success", "files": files}
         except Exception as e:
             logger.error(f"Error getting knowledge base for agent {agent_id}: {str(e)}")
-            return JSONResponse(
-                status_code=500,
-                content={"status": "error", "message": f"Error: {str(e)}"}
-            )
-
-    # Firebase configuration endpoint
-    @app.get("/api/firebase-config")
-    async def get_firebase_config():
-        """Get Firebase configuration for frontend"""
-        try:
-            # Get required values from environment variables
-            project_id = os.environ.get("FIREBASE_PROJECT_ID")
-            web_api_key = os.environ.get("FIREBASE_WEB_API_KEY") or os.environ.get("FIREBASE_API_KEY")
-            
-            # Check if we have the minimum required values
-            if not project_id:
-                return JSONResponse(
-                    status_code=500,
-                    content={
-                        "status": "error", 
-                        "message": "Firebase project ID not found. Check your environment variables."
-                    }
-                )
-            
-            # If no web API key is found, log a warning
-            if not web_api_key:
-                logger.warning("No Firebase Web API key found. Client authentication will not work.")
-                web_api_key = "missing-api-key-see-server-logs"
-            
-            # Return configuration
-            config = {
-                "apiKey": web_api_key,
-                "authDomain": f"{project_id}.firebaseapp.com",
-                "projectId": project_id,
-                "storageBucket": f"{project_id}.appspot.com",
-                "messagingSenderId": os.environ.get("FIREBASE_MESSAGING_SENDER_ID", ""),
-                "appId": os.environ.get("FIREBASE_APP_ID", ""),
-            }
-            
-            return {
-                "status": "success",
-                "config": config
-            }
-        except Exception as e:
-            logger.error(f"Error getting Firebase config: {str(e)}", exc_info=True)
             return JSONResponse(
                 status_code=500,
                 content={"status": "error", "message": f"Error: {str(e)}"}

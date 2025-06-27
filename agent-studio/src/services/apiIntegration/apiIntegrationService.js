@@ -7,7 +7,7 @@
 import axios from 'axios';
 import { auth } from '../../utils/firebase';
 import { getAuthToken } from '../auth/authService';
-import { API_BASE_URL, ENDPOINTS } from '../config/apiConfig';
+import { AGENT_ENGINE_URL, ENDPOINTS } from '../config/apiConfig';
 
 /**
  * Upload an OpenAPI specification or MCP config for an agent
@@ -50,7 +50,7 @@ export const uploadApiSpecification = async (agentId, file) => {
     // Use axios directly with proper authentication
     const response = await axios({
       method: 'post',
-      url: `${API_BASE_URL}/api/agents/${agentId}/config`,
+      url: `${AGENT_ENGINE_URL}/api/agents/${agentId}/config`,
       data: formData,
       headers: {
         'Authorization': `Bearer ${token}`
@@ -105,7 +105,7 @@ export const getApiIntegrations = async (agentId) => {
     // Use axios directly instead of the api instance to avoid interceptor issues
     const response = await axios({
       method: 'get',
-      url: `${API_BASE_URL}/api/agents/${agentId}/api-integrations-files`,
+      url: `${AGENT_ENGINE_URL}/api/agents/${agentId}/api-integrations-files`,
       headers: {
         'Authorization': `Bearer ${token}`,
         'userId': userId
@@ -194,7 +194,7 @@ export const deleteApiIntegration = async (agentId, integrationId) => {
     
     const response = await axios({
       method: 'delete',
-      url: `${API_BASE_URL}/api/agents/${agentId}/api-integrations/${integrationId}`,
+      url: `${AGENT_ENGINE_URL}/api/agents/${agentId}/api-integrations/${integrationId}`,
       headers: {
         'Authorization': `Bearer ${token}`,
         'userId': userId
@@ -235,7 +235,7 @@ export const getApiSpecification = async (agentId, apiId) => {
     
     const response = await axios({
       method: 'get',
-      url: `${API_BASE_URL}/api/agents/${agentId}/api-integrations/${apiId}/spec`,
+      url: `${AGENT_ENGINE_URL}/api/agents/${agentId}/api-integrations/${apiId}/spec`,
       headers: {
         'Authorization': `Bearer ${token}`,
         'userId': userId
@@ -276,7 +276,7 @@ export const downloadApiSpecification = async (agentId, apiId) => {
     console.log(`Generating download URL for API spec: agent ${agentId}, API ${apiId}`);
     
     // Return the full URL since this endpoint redirects to the file or serves it directly
-    return `${API_BASE_URL}/api/agents/${agentId}/api-integrations/${apiId}/download?token=${encodeURIComponent(token)}&userId=${encodeURIComponent(userId)}`;
+    return `${AGENT_ENGINE_URL}/api/agents/${agentId}/api-integrations/${apiId}/download?token=${encodeURIComponent(token)}&userId=${encodeURIComponent(userId)}`;
   } catch (error) {
     console.error('Error generating API spec download URL:', error);
     throw error;
@@ -306,7 +306,7 @@ export const getTestableEndpoints = async (agentId) => {
     
     const response = await axios({
       method: 'get',
-      url: `${API_BASE_URL}/api/agents/${agentId}/testable-endpoints`,
+      url: `${AGENT_ENGINE_URL}/api/agents/${agentId}/testable-endpoints`,
       headers: {
         'Authorization': `Bearer ${token}`,
         'userId': userId
@@ -363,7 +363,7 @@ export const testApiEndpoint = async (agentId, endpointId, queryParams = {}, pat
 
     const response = await axios({
       method: 'post',
-      url: `${API_BASE_URL}/api/agents/${agentId}/api-integrations/${endpointId}/test`,
+      url: `${AGENT_ENGINE_URL}/api/agents/${agentId}/api-integrations/${endpointId}/test`,
       headers: {
         'Authorization': `Bearer ${token}`,
         'userId': userId
@@ -405,7 +405,7 @@ export const getApiIntegrationFiles = async (agentId) => {
     
     const response = await axios({
       method: 'get',
-      url: `${API_BASE_URL}/api/agents/${agentId}/api-integrations-files`,
+      url: `${AGENT_ENGINE_URL}/api/agents/${agentId}/api-integrations-files`,
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',

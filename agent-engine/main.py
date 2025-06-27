@@ -41,10 +41,6 @@ logging.basicConfig(
 
 logger = logging.getLogger("alchemist-api")
 
-# In Cloud Run, we use environment variables directly
-logger.info(f"FIREBASE_PROJECT_ID from environment: {os.environ.get('FIREBASE_PROJECT_ID')}")
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan management"""
@@ -146,7 +142,6 @@ async def root():
         "service": "agent-engine",
         "message": "Alchemist Agent Engine is running",
         "version": "1.0.0",
-        "firebase_project": os.environ.get("FIREBASE_PROJECT_ID", "Not set")
     }
 
 # This is what Cloud Run will look for when the container starts
