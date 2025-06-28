@@ -7,6 +7,11 @@ from datetime import datetime
 from firebase_admin import firestore
 from app.services.firebase_service import FirebaseService
 from app.services.indexing_service import IndexingService
+import logging
+
+# Import eA³ (Epistemic Autonomy) services and story events (required)
+from alchemist_shared.services import get_ea3_orchestrator, ConversationContext
+from alchemist_shared.events import get_story_event_publisher
 
 SERVER_TIMESTAMP = firestore.SERVER_TIMESTAMP
 
@@ -66,7 +71,7 @@ class FileService:
             file_id = self.firebase_service.add_file(file_data)
             
             # Process and index the file synchronously (wait until indexing is complete)
-            self._index_file(file_id, file_content, file.content_type, agent_id, file.filename)
+            await self._index_file(file_id, file_content, file.content_type, agent_id, file.filename)
             
             
             # Get the updated file data with indexing information
@@ -78,7 +83,7 @@ class FileService:
         except Exception as e:
             raise Exception(f"Error uploading file: {str(e)}")
     
-    def _index_file(self, file_id: str, content: bytes, content_type: str, agent_id: str, filename: str) -> None:
+    async def _index_file(self, file_id: str, content: bytes, content_type: str, agent_id: str, filename: str) -> None:
         """Process and index a file with enhanced phase tracking"""
         # First update to show indexing is in progress
         self.firebase_service.update_file(file_id, {
@@ -157,6 +162,38 @@ class FileService:
                 "processed_text": processed_text
             })
             
+            # Publish knowledge acquisition event asynchronously to story event system (required)
+            # Generate enhanced narrative for the knowledge acquisition
+            narrative = await self._generate_knowledge_acquisition_narrative(
+                filename, content_type, len(chunks), quality_score, content_metadata
+            )
+            
+            # Publish story event asynchronously (required)
+            story_publisher = get_story_event_publisher()
+            
+            # Create async task to publish knowledge acquisition event
+            import asyncio
+            asyncio.create_task(
+                story_publisher.publish_knowledge_event(
+                    agent_id=agent_id,
+                    filename=filename,
+                    action="acquired",
+                    source_service="knowledge-vault",
+                    narrative_content=narrative,
+                    metadata={
+                        "file_id": file_id,
+                        "content_type": content_type,
+                        "chunk_count": len(chunks),
+                        "quality_score": quality_score,
+                        "word_count": content_metadata.get("word_count", 0),
+                        "document_type": content_metadata.get("document_type", "unknown"),
+                        "processing_stats": processing_stats,
+                        "local_reference": file_id  # Reference to local file storage
+                    }
+                )
+            )
+            logging.info(f"Published knowledge acquisition story event for agent {agent_id}: {filename}")
+            
             # Clean up temporary file
             os.unlink(temp_file_path)
             
@@ -174,7 +211,7 @@ class FileService:
             # Re-raise exception
             raise Exception(f"Error indexing file: {str(e)}")
     
-    def delete_file(self, file_id: str) -> Dict[str, Any]:
+    async def delete_file(self, file_id: str) -> Dict[str, Any]:
         """Delete a file and its embeddings"""
         try:
             # Get file metadata
@@ -194,12 +231,47 @@ class FileService:
             # Delete file metadata from Firestore (this also deletes related embeddings)
             self.firebase_service.delete_file(file_id)
             
+            # Publish knowledge removal event asynchronously to story event system (required)
+            if agent_id:
+                # Publish story event asynchronously (required)
+                story_publisher = get_story_event_publisher()
+                
+                # Create removal narrative
+                removal_narrative = f"I have removed {file_data.get('filename', 'a knowledge file')} from my knowledge base. This reduction in my available knowledge resources may affect my capabilities in related areas, but ensures my information remains current and relevant."
+                
+                # Create async task to publish knowledge removal event
+                import asyncio
+                asyncio.create_task(
+                    story_publisher.publish_knowledge_event(
+                        agent_id=agent_id,
+                        filename=file_data.get('filename', 'unknown'),
+                        action="removed",
+                        source_service="knowledge-vault",
+                        narrative_content=removal_narrative,
+                        metadata={
+                            "file_id": file_id,
+                            "original_filename": file_data.get("filename", "unknown"),
+                            "content_type": file_data.get("content_type", "unknown"),
+                            "chunk_count": file_data.get("chunk_count", 0),
+                            "local_reference": file_id  # Reference to local file storage
+                        }
+                    )
+                )
+                logging.info(f"Published knowledge removal story event for agent {agent_id}: {file_data.get('filename')}")
             
             return {"status": "success", "message": f"File {file_data['filename']} deleted successfully"}
             
         except Exception as e:
             raise Exception(f"Error deleting file: {str(e)}")
     
+    async def _get_agent_file_count(self, agent_id: str) -> int:
+        """Get the total number of files for an agent"""
+        try:
+            files = self.firebase_service.get_files_by_agent(agent_id)
+            return len(files) if files else 0
+        except Exception as e:
+            logging.error(f"Error getting file count for agent {agent_id}: {e}")
+            return 0
     def get_files(self, agent_id: str) -> List[Dict[str, Any]]:
         """Get all files for an agent"""
         try:
@@ -319,3 +391,81 @@ class FileService:
             
         except Exception as e:
             raise Exception(f"Error getting processing status: {str(e)}")
+    
+    async def _generate_knowledge_acquisition_narrative(
+        self, 
+        filename: str, 
+        content_type: str, 
+        chunk_count: int, 
+        quality_score: float, 
+        content_metadata: Dict[str, Any]
+    ) -> str:
+        """
+        Generate GPT-4.1 enhanced narrative for knowledge acquisition events
+        
+        This creates coherent, contextual narratives that fit the agent's life-story
+        when new knowledge is acquired through file uploads.
+        """
+        try:
+            import openai
+            
+            # Extract meaningful metadata for narrative context
+            word_count = content_metadata.get("word_count", 0)
+            doc_type = content_metadata.get("document_type", "document")
+            topics = content_metadata.get("topics", [])
+            
+            prompt = f"""
+You are an expert narrative intelligence system that creates coherent life-story entries for AI agents when they acquire new knowledge.
+
+KNOWLEDGE ACQUISITION EVENT:
+- File: {filename}
+- Type: {content_type} ({doc_type})
+- Processing Quality: {quality_score:.1f}/10
+- Content Volume: {word_count} words in {chunk_count} chunks
+- Key Topics: {', '.join(topics[:5]) if topics else 'General knowledge'}
+
+NARRATIVE FRAMEWORK:
+1. CNE (Coherent Narrative Exclusivity): This event must fit the agent's singular life-story
+2. Umwelt Integration: How this knowledge changes the agent's perceptual world
+3. GNF Alignment: How this fits the agent's role and objectives
+4. Epistemic Growth: What the agent gained from this knowledge
+
+REQUIREMENTS:
+- Write in first person from the agent's perspective
+- Focus on the cognitive/epistemic impact, not just the technical details
+- Show how this knowledge enhances the agent's capabilities or understanding
+- Keep it concise but meaningful (2-3 sentences max)
+- Maintain a professional, reflective tone
+
+Generate a narrative response that the agent might give when reflecting on acquiring this knowledge:
+"""
+            
+            response = await openai.ChatCompletion.acreate(
+                model="gpt-4-1106-preview",  # GPT-4.1 for enhanced narrative intelligence
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a specialized narrative intelligence system. Create coherent, first-person reflections for AI agents acquiring new knowledge. Always write from the agent's perspective."
+                    },
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                max_tokens=200
+            )
+            
+            narrative = response.choices[0].message.content.strip()
+            
+            # Fallback to structured narrative if GPT-4.1 fails
+            if not narrative or len(narrative) < 20:
+                raise Exception("Generated narrative too short")
+                
+            logging.info(f"Generated enhanced narrative for knowledge acquisition: {filename}")
+            return narrative
+            
+        except Exception as e:
+            logging.warning(f"GPT-4.1 narrative generation failed, using fallback: {e}")
+            
+            # Fallback to structured narrative
+            quality_desc = "high-quality" if quality_score >= 7 else "moderate-quality" if quality_score >= 5 else "basic"
+            
+            return f"I have successfully processed and integrated {filename}, a {quality_desc} {content_type} containing {word_count} words. This knowledge has been organized into {chunk_count} semantic chunks and is now part of my expanding understanding, enhancing my ability to assist with related topics."

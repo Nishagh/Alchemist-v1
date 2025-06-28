@@ -27,6 +27,10 @@ except ImportError:
     logging.warning("Metrics middleware not available - install alchemist-shared package")
     METRICS_AVAILABLE = False
 
+# Import eA³ (Epistemic Autonomy) services and story event system (required)
+from alchemist_shared.services import init_ea3_orchestrator
+from alchemist_shared.events import init_story_event_publisher
+
 # Load environment variables
 load_dotenv()
 
@@ -54,6 +58,28 @@ async def lifespan(app: FastAPI):
     if METRICS_AVAILABLE:
         await start_background_metrics_collection("agent-engine")
         logger.info("Metrics collection started")
+    
+    # Initialize eA³ (Epistemic Autonomy, Accountability, Alignment) services with story event system (required)
+    # Get Google Cloud project ID from environment (required)
+    project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
+    if not project_id:
+        logger.error("GOOGLE_CLOUD_PROJECT environment variable is required")
+        raise RuntimeError("Missing required environment variable: GOOGLE_CLOUD_PROJECT")
+    
+    # Initialize story event publisher (required)
+    story_publisher = init_story_event_publisher(project_id)
+    logger.info("Story event publisher initialized")
+    
+    # Initialize eA³ orchestrator with Spanner Graph and event processing (required)
+    redis_url = os.environ.get("REDIS_URL")  # Optional Redis for caching
+    await init_ea3_orchestrator(
+        project_id=project_id,
+        instance_id=os.environ.get("SPANNER_INSTANCE_ID", "alchemist-graph"),
+        database_id=os.environ.get("SPANNER_DATABASE_ID", "agent-stories"),
+        redis_url=redis_url,
+        enable_event_processing=True
+    )
+    logger.info("eA³ services initialized with story event system and Google Cloud Spanner Graph")
     
     yield
     

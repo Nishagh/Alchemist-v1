@@ -28,12 +28,18 @@ import {
   Assignment as GoalIcon,
   Favorite as ValueIcon,
   EmojiEvents as AchievementIcon,
-  AutoGraph as AnalyticsIcon
+  AutoGraph as AnalyticsIcon,
+  Visibility as UmweltIcon,
+  ShowChart as MetricsIcon
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 
 // Import identity service
 import { getAgentIdentity } from '../../../services';
+
+// Import components
+import UmweltDisplay from './UmweltDisplay';
+import StoryLossSparkline from '../StoryLossSparkline';
 
 // Styled components
 const IdentityCard = styled(Card)(({ theme }) => ({
@@ -412,6 +418,34 @@ const AgentIdentityPanel = ({
     return stageProgression[stage] || 0;
   };
 
+  const renderUmweltPanel = () => (
+    <Grid container spacing={3}>
+      <Grid item xs={12}>
+        <UmweltDisplay agentId={agentId} onError={onError} />
+      </Grid>
+    </Grid>
+  );
+
+  const renderMetricsPanel = () => (
+    <Grid container spacing={3}>
+      <Grid item xs={12} md={6}>
+        <IdentityCard>
+          <CardHeader
+            title="Story-Loss Metrics"
+            avatar={<MetricsIcon color="primary" />}
+            subheader="Narrative coherence monitoring"
+          />
+          <CardContent>
+            <StoryLossSparkline agentId={agentId} height={200} showDetails={true} />
+          </CardContent>
+        </IdentityCard>
+      </Grid>
+      <Grid item xs={12} md={6}>
+        {renderDevelopmentMetrics()}
+      </Grid>
+    </Grid>
+  );
+
   return (
     <Box sx={{ width: '100%' }}>
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
@@ -420,6 +454,8 @@ const AgentIdentityPanel = ({
           <Tab label="Development" icon={<GrowthIcon />} iconPosition="start" />
           <Tab label="Narrative" icon={<TimelineIcon />} iconPosition="start" />
           <Tab label="Responsibility" icon={<ResponsibilityIcon />} iconPosition="start" />
+          <Tab label="Umwelt" icon={<UmweltIcon />} iconPosition="start" />
+          <Tab label="Metrics" icon={<MetricsIcon />} iconPosition="start" />
         </Tabs>
       </Box>
 
@@ -459,6 +495,14 @@ const AgentIdentityPanel = ({
             </Grid>
           )}
         </Grid>
+      </IdentityTabPanel>
+
+      <IdentityTabPanel value={activeTab} index={4}>
+        {renderUmweltPanel()}
+      </IdentityTabPanel>
+
+      <IdentityTabPanel value={activeTab} index={5}>
+        {renderMetricsPanel()}
       </IdentityTabPanel>
     </Box>
   );

@@ -828,6 +828,454 @@ collections:
         description: "When the relationship was last updated"
         required: true
 
+  # ============================================================================
+  # STORY-LOSS METRIC & EPISTEMIC AUTONOMY COLLECTIONS
+  # ============================================================================
+
+  agent_graphs:
+    description: "Agent narrative graphs for Global Narrative Framework"
+    fields:
+      id:
+        type: string
+        description: "Unique graph identifier (agent_id)"
+        required: true
+      agent_id:
+        type: string
+        description: "Reference to the agent"
+        required: true
+      nodes:
+        type: array
+        description: "Graph nodes (beliefs, facts, actions)"
+        required: true
+        fields:
+          - id: string
+          - type: string  # fact, goal, action, belief, event
+          - content: string
+          - timestamp: timestamp
+          - confidence: number
+          - metadata: object
+      edges:
+        type: array
+        description: "Graph edges (relationships between nodes)"
+        required: true
+        fields:
+          - id: string
+          - source_id: string
+          - target_id: string
+          - type: string  # belief, action, causal, temporal, contradiction
+          - weight: number
+          - confidence: number
+          - timestamp: timestamp
+          - metadata: object
+      last_updated:
+        type: timestamp
+        description: "When the graph was last modified"
+        required: true
+      version:
+        type: number
+        description: "Graph version number"
+        required: true
+
+  agent_metrics:
+    description: "Agent-specific metrics including story-loss data"
+    fields:
+      id:
+        type: string
+        description: "Unique metrics identifier (agent_id)"
+        required: true
+      agent_id:
+        type: string
+        description: "Reference to the agent"
+        required: true
+      story_loss:
+        type: number
+        description: "Current story-loss value (0-1)"
+        required: true
+      timestamp:
+        type: timestamp
+        description: "When the metric was recorded"
+        required: true
+      metadata:
+        type: object
+        description: "Additional metric metadata"
+        required: false
+      version:
+        type: number
+        description: "Metric version"
+        required: true
+
+  agent_metrics/{agent_id}/time_series:
+    description: "Time-series story-loss data for 24h tracking"
+    fields:
+      id:
+        type: string
+        description: "Time-based document ID (YYYYMMDD_HHMMSS)"
+        required: true
+      story_loss:
+        type: number
+        description: "Story-loss value at this time"
+        required: true
+      timestamp:
+        type: timestamp
+        description: "When the measurement was taken"
+        required: true
+      metadata:
+        type: object
+        description: "Measurement context and details"
+        required: false
+
+  agents/{agent_id}/cognitive_memory:
+    description: "Agent cognitive memory including Umwelt data"
+    subcollections:
+      umwelt:
+        description: "Agent's filtered world snapshot"
+        fields:
+          id:
+            type: string
+            description: "Document ID (always 'umwelt')"
+            required: true
+          agent_id:
+            type: string
+            description: "Reference to the agent"
+            required: true
+          umwelt_data:
+            type: object
+            description: "Key-value pairs of environmental signals"
+            required: true
+          last_updated:
+            type: timestamp
+            description: "When Umwelt was last updated"
+            required: true
+
+  agent_events:
+    description: "System events for story-loss and Umwelt conflicts"
+    fields:
+      id:
+        type: string
+        description: "Unique event identifier"
+        required: true
+      agent_id:
+        type: string
+        description: "Reference to the agent"
+        required: true
+      event_type:
+        type: string
+        description: "Type of event (story_loss_threshold, umwelt_conflict)"
+        required: true
+      story_loss:
+        type: number
+        description: "Story-loss value (for story-loss events)"
+        required: false
+      threshold:
+        type: number
+        description: "Threshold value that was exceeded"
+        required: false
+      threshold_exceeded:
+        type: boolean
+        description: "Whether threshold was exceeded"
+        required: false
+      conflict_type:
+        type: string
+        description: "Type of conflict (for Umwelt events)"
+        required: false
+      severity:
+        type: string
+        description: "Event severity (low, medium, high, critical)"
+        required: false
+      confidence:
+        type: number
+        description: "Confidence in the conflict detection"
+        required: false
+      description:
+        type: string
+        description: "Event description"
+        required: true
+      gnf_nodes_involved:
+        type: array
+        description: "GNF node IDs involved in conflict"
+        required: false
+      umwelt_keys_involved:
+        type: array
+        description: "Umwelt keys involved in conflict"
+        required: false
+      suggested_resolution:
+        type: string
+        description: "Suggested resolution for the conflict"
+        required: false
+      timestamp:
+        type: timestamp
+        description: "When the event occurred"
+        required: true
+      requires_attention:
+        type: boolean
+        description: "Whether event requires human attention"
+        required: true
+      auto_resolvable:
+        type: boolean
+        description: "Whether event can be auto-resolved"
+        required: false
+
+  minion_tasks:
+    description: "Self-reflection and minion agent tasks"
+    fields:
+      id:
+        type: string
+        description: "Unique task identifier"
+        required: true
+      agent_id:
+        type: string
+        description: "Reference to the agent"
+        required: true
+      minion_type:
+        type: string
+        description: "Type of minion (self_reflection, narrative_repair)"
+        required: true
+      trigger_event:
+        type: string
+        description: "Event that triggered the task"
+        required: true
+      trigger_data:
+        type: object
+        description: "Data from the triggering event"
+        required: true
+      priority:
+        type: number
+        description: "Task priority (1-5)"
+        required: true
+      max_retries:
+        type: number
+        description: "Maximum number of retry attempts"
+        required: true
+      current_retry:
+        type: number
+        description: "Current retry attempt"
+        required: true
+      status:
+        type: string
+        description: "Task status (idle, active, completed, failed, retrying)"
+        required: true
+      created_at:
+        type: timestamp
+        description: "When the task was created"
+        required: true
+      started_at:
+        type: timestamp
+        description: "When the task was started"
+        required: false
+      completed_at:
+        type: timestamp
+        description: "When the task was completed"
+        required: false
+      result:
+        type: object
+        description: "Task execution result"
+        required: false
+      error_message:
+        type: string
+        description: "Error message if task failed"
+        required: false
+
+  minion_logs:
+    description: "Logs of minion agent activities"
+    fields:
+      id:
+        type: string
+        description: "Unique log identifier"
+        required: true
+      minion_type:
+        type: string
+        description: "Type of minion that logged activity"
+        required: true
+      agent_id:
+        type: string
+        description: "Reference to the agent"
+        required: true
+      activity:
+        type: string
+        description: "Description of the activity"
+        required: true
+      timestamp:
+        type: timestamp
+        description: "When the activity occurred"
+        required: true
+      metadata:
+        type: object
+        description: "Additional activity metadata"
+        required: false
+
+  alerts:
+    description: "System alerts for story-loss and conflicts"
+    fields:
+      id:
+        type: string
+        description: "Unique alert identifier"
+        required: true
+      rule_id:
+        type: string
+        description: "ID of the alert rule that triggered"
+        required: true
+      agent_id:
+        type: string
+        description: "Reference to the agent (if applicable)"
+        required: false
+      alert_type:
+        type: string
+        description: "Type of alert (story_loss_threshold, umwelt_conflict)"
+        required: true
+      severity:
+        type: string
+        description: "Alert severity (info, warning, error, critical)"
+        required: true
+      status:
+        type: string
+        description: "Alert status (active, acknowledged, resolved, suppressed)"
+        required: true
+      title:
+        type: string
+        description: "Alert title"
+        required: true
+      description:
+        type: string
+        description: "Alert description"
+        required: true
+      event_data:
+        type: object
+        description: "Original event data that triggered alert"
+        required: true
+      created_at:
+        type: timestamp
+        description: "When the alert was created"
+        required: true
+      updated_at:
+        type: timestamp
+        description: "When the alert was last updated"
+        required: true
+      acknowledged_at:
+        type: timestamp
+        description: "When the alert was acknowledged"
+        required: false
+      resolved_at:
+        type: timestamp
+        description: "When the alert was resolved"
+        required: false
+      acknowledged_by:
+        type: string
+        description: "User who acknowledged the alert"
+        required: false
+
+  alert_rules:
+    description: "Alert rule definitions and configurations"
+    fields:
+      id:
+        type: string
+        description: "Unique alert rule identifier"
+        required: true
+      name:
+        type: string
+        description: "Rule name"
+        required: true
+      alert_type:
+        type: string
+        description: "Type of alert this rule handles"
+        required: true
+      severity:
+        type: string
+        description: "Severity level for alerts from this rule"
+        required: true
+      conditions:
+        type: object
+        description: "Conditions that trigger the alert"
+        required: true
+      enabled:
+        type: boolean
+        description: "Whether the rule is active"
+        required: true
+      cooldown_minutes:
+        type: number
+        description: "Cooldown period between alerts"
+        required: true
+      description:
+        type: string
+        description: "Rule description"
+        required: false
+
+  notification_channels:
+    description: "Notification channel configurations"
+    fields:
+      id:
+        type: string
+        description: "Unique channel identifier"
+        required: true
+      type:
+        type: string
+        description: "Channel type (email, webhook, sms)"
+        required: true
+      enabled:
+        type: boolean
+        description: "Whether the channel is active"
+        required: true
+      recipients:
+        type: array
+        description: "List of recipients (for email/sms)"
+        required: false
+      url:
+        type: string
+        description: "Webhook URL (for webhook channels)"
+        required: false
+      min_severity:
+        type: string
+        description: "Minimum severity to send notifications"
+        required: true
+
+  traces:
+    description: "Explain-Your-Work trace data for agent decisions"
+    fields:
+      id:
+        type: string
+        description: "Unique trace identifier"
+        required: true
+      agent_id:
+        type: string
+        description: "Reference to the agent"
+        required: true
+      conversation_id:
+        type: string
+        description: "Reference to the conversation"
+        required: false
+      start_time:
+        type: timestamp
+        description: "When the trace started"
+        required: true
+      end_time:
+        type: timestamp
+        description: "When the trace ended"
+        required: false
+      status:
+        type: string
+        description: "Trace status (active, completed, failed)"
+        required: true
+      total_steps:
+        type: number
+        description: "Total number of steps in trace"
+        required: true
+      steps:
+        type: array
+        description: "Array of trace steps with Umwelt diffs"
+        required: true
+        fields:
+          - id: string
+          - type: string  # thinking, action, observation, decision
+          - title: string
+          - description: string
+          - start_time: timestamp
+          - end_time: timestamp
+          - reasoning: string
+          - input: object
+          - output: object
+          - umwelt_diff: object
+          - conflicts: array
+          - metrics: object
+
 # ============================================================================
 # COLLECTION USAGE GUIDELINES
 # ============================================================================

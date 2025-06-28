@@ -19,6 +19,12 @@ except ImportError:
     logging.warning("Alchemist shared package not available - some features may be limited")
     SHARED_AVAILABLE = False
 
+# Import eA³ (Epistemic Autonomy) services and story event system (required)
+from alchemist_shared.services import (
+    init_ea3_orchestrator, get_ea3_orchestrator, ConversationContext
+)
+from alchemist_shared.events import init_story_event_publisher
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -47,6 +53,56 @@ async def lifespan(app: FastAPI):
     if SHARED_AVAILABLE:
         await start_background_metrics_collection("knowledge-vault")
         logger.info("Metrics collection started")
+    
+    # Initialize eA³ (Epistemic Autonomy) services and story event system (required)
+    # Get Google Cloud project ID - try multiple methods
+    project_id = None
+    
+    # Method 1: Environment variables (most reliable in Cloud Run)
+    project_id = os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("FIREBASE_PROJECT_ID")
+    
+    if not project_id:
+        # Method 2: Google Cloud metadata service (available in Cloud Run)
+        try:
+            import requests
+            response = requests.get(
+                "http://metadata.google.internal/computeMetadata/v1/project/project-id",
+                headers={"Metadata-Flavor": "Google"},
+                timeout=5
+            )
+            if response.status_code == 200:
+                project_id = response.text
+                logger.info(f"Using project from metadata service: {project_id}")
+        except Exception as e:
+            logger.warning(f"Failed to get project from metadata service: {e}")
+    
+    if not project_id:
+        # Method 3: Try gcloud config (local development)
+        try:
+            from alchemist_shared.config.base_settings import get_gcp_project_id
+            project_id = get_gcp_project_id()
+            logger.info(f"Using gcloud current project: {project_id}")
+        except Exception as e:
+            logger.warning(f"Failed to get gcloud current project: {e}")
+    
+    if not project_id:
+        logger.error("Could not determine Google Cloud project ID")
+        raise RuntimeError("Failed to get Google Cloud project ID - ensure environment is properly configured")
+    
+    # Initialize story event publisher (required)
+    story_publisher = init_story_event_publisher(project_id)
+    logger.info("Story event publisher initialized in knowledge vault")
+    
+    # Initialize eA³ orchestrator with Spanner Graph (no event processing in knowledge vault)
+    redis_url = os.environ.get("REDIS_URL")  # Optional Redis for caching
+    await init_ea3_orchestrator(
+        project_id=project_id,
+        instance_id=os.environ.get("SPANNER_INSTANCE_ID", "alchemist-graph"),
+        database_id=os.environ.get("SPANNER_DATABASE_ID", "agent-stories"),
+        redis_url=redis_url,
+        enable_event_processing=False  # Knowledge vault publishes events but doesn't process them
+    )
+    logger.info("eA³ services initialized in knowledge vault for agent story tracking")
     
     yield
     

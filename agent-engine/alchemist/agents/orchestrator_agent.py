@@ -44,6 +44,17 @@ except ImportError as e:
     logging.warning(f"GNF integration not available: {e}")
     GNF_AVAILABLE = False
 
+# Import epistemic autonomy services
+try:
+    from alchemist_shared.services import (
+        get_story_loss_calculator, get_gnf_service, get_minion_coordinator,
+        get_alert_service
+    )
+    EPISTEMIC_SERVICES_AVAILABLE = True
+except ImportError as e:
+    logging.warning(f"Epistemic autonomy services not available: {e}")
+    EPISTEMIC_SERVICES_AVAILABLE = False
+
 load_dotenv()
 
 logger = logging.getLogger(__name__)
@@ -520,6 +531,66 @@ class OrchestratorAgent():
                     'steps_taken': len(steps) if steps else 0
                 }
             )
+            
+            # Epistemic autonomy: Story-loss monitoring
+            if EPISTEMIC_SERVICES_AVAILABLE and agent_id:
+                try:
+                    # Calculate story-loss after the interaction
+                    story_loss_calculator = get_story_loss_calculator()
+                    gnf_service = get_gnf_service()
+                    
+                    # Get current agent graph
+                    agent_graph = await gnf_service.get_agent_graph(agent_id)
+                    if agent_graph:
+                        # Calculate current story-loss
+                        story_loss = await story_loss_calculator.calculate_story_loss(
+                            agent_id=agent_id,
+                            new_edges=[],  # No new edges to evaluate in this context
+                            current_nodes=agent_graph.nodes,
+                            current_edges=agent_graph.edges
+                        )
+                        
+                        logger.info(f"Agent {agent_id} story-loss: {story_loss}")
+                        
+                        # Check if story-loss exceeds threshold
+                        STORY_LOSS_THRESHOLD = 0.15
+                        if story_loss > STORY_LOSS_THRESHOLD:
+                            logger.warning(f"Agent {agent_id} story-loss threshold exceeded: {story_loss}")
+                            
+                            # Trigger self-reflection minion
+                            minion_coordinator = get_minion_coordinator()
+                            await minion_coordinator.trigger_self_reflection(
+                                agent_id=agent_id,
+                                story_loss=story_loss,
+                                context={
+                                    "interaction_type": "conversation",
+                                    "user_message": input_text,
+                                    "agent_response": response,
+                                    "timestamp": datetime.now().isoformat()
+                                }
+                            )
+                            
+                            # Create alert for threshold exceedance
+                            alert_service = get_alert_service()
+                            await alert_service.create_alert(
+                                rule_id="story_loss_threshold",
+                                agent_id=agent_id,
+                                alert_type="story_loss_threshold",
+                                severity="warning",
+                                title=f"Story-Loss Threshold Exceeded",
+                                description=f"Agent story-loss {story_loss:.3f} exceeds threshold {STORY_LOSS_THRESHOLD}",
+                                event_data={
+                                    "story_loss": story_loss,
+                                    "threshold": STORY_LOSS_THRESHOLD,
+                                    "interaction_context": {
+                                        "user_message": input_text[:200],  # Truncate for storage
+                                        "response_length": len(response)
+                                    }
+                                }
+                            )
+                except Exception as e:
+                    logger.error(f"Story-loss monitoring failed for agent {agent_id}: {e}")
+                    # Continue execution - don't fail conversation due to monitoring errors
             
             # Update the conversation with the new message
             if agent_id:

@@ -92,7 +92,7 @@ async def delete_file(file_id: str):
     Delete a file and its embeddings from the knowledge base.
     """
     try:
-        result = file_service.delete_file(file_id)
+        result = await file_service.delete_file(file_id)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -307,3 +307,144 @@ async def batch_reprocess_files(request: BatchReprocessRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# eA³ (Epistemic Autonomy) Agent Story Tracking Endpoints
+
+@router.get("/knowledge-base/{agent_id}/story-coherence", tags=["ea3"])
+async def check_agent_story_coherence(agent_id: str):
+    """
+    Check the narrative coherence of an agent's life-story from knowledge-vault perspective.
+    
+    This endpoint uses GPT-4.1 enhanced analysis to assess how knowledge acquisition
+    events fit into the agent's overall narrative and suggests improvements.
+    """
+    try:
+        # Import eA³ services
+        from alchemist_shared.services import get_ea3_orchestrator
+        
+        ea3_orchestrator = get_ea3_orchestrator()
+        if not ea3_orchestrator:
+            raise HTTPException(
+                status_code=503, 
+                detail="eA³ services not available - Spanner Graph may not be initialized"
+            )
+        
+        # Force a comprehensive narrative coherence check
+        coherence_result = await ea3_orchestrator.force_narrative_coherence_check(agent_id)
+        
+        # Add knowledge-vault specific context
+        file_count = await file_service._get_agent_file_count(agent_id)
+        
+        return {
+            "agent_id": agent_id,
+            "service": "knowledge-vault",
+            "knowledge_context": {
+                "total_files": file_count,
+                "knowledge_integration_score": coherence_result.get("enhanced_coherence_score", 0.5)
+            },
+            "narrative_coherence": coherence_result,
+            "recommendations": {
+                "knowledge_specific": [
+                    "Ensure new knowledge files align with agent's core objectives",
+                    "Monitor for contradictory information in uploaded documents",
+                    "Maintain consistent terminology across knowledge sources"
+                ]
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to check story coherence: {str(e)}")
+
+@router.post("/knowledge-base/{agent_id}/trigger-reflection", tags=["ea3"])
+async def trigger_agent_reflection(agent_id: str):
+    """
+    Trigger autonomous reflection for an agent based on their knowledge acquisition patterns.
+    
+    This uses GPT-4.1 to analyze how recent knowledge changes should influence
+    the agent's worldview and decision-making processes.
+    """
+    try:
+        # Import eA³ services
+        from alchemist_shared.services import get_ea3_orchestrator
+        
+        ea3_orchestrator = get_ea3_orchestrator()
+        if not ea3_orchestrator:
+            raise HTTPException(
+                status_code=503, 
+                detail="eA³ services not available - Spanner Graph may not be initialized"
+            )
+        
+        # Get recent knowledge acquisition events
+        file_count = await file_service._get_agent_file_count(agent_id)
+        
+        # Trigger autonomous reflection with knowledge context
+        reflection_result = await ea3_orchestrator.trigger_autonomous_reflection(
+            agent_id=agent_id,
+            context={
+                "trigger_source": "knowledge_vault",
+                "knowledge_file_count": file_count,
+                "reflection_focus": "knowledge_integration"
+            }
+        )
+        
+        return {
+            "agent_id": agent_id,
+            "reflection_triggered": True,
+            "service": "knowledge-vault",
+            "context": {
+                "total_knowledge_files": file_count,
+                "focus": "knowledge_integration_and_worldview_update"
+            },
+            "reflection_result": reflection_result
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to trigger reflection: {str(e)}")
+
+@router.get("/knowledge-base/{agent_id}/ea3-status", tags=["ea3"])
+async def get_agent_ea3_status(agent_id: str):
+    """
+    Get the current eA³ (Epistemic Autonomy, Accountability, Alignment) status
+    for an agent from the knowledge-vault perspective.
+    """
+    try:
+        # Import eA³ services
+        from alchemist_shared.services import get_ea3_orchestrator
+        
+        ea3_orchestrator = get_ea3_orchestrator()
+        if not ea3_orchestrator:
+            return {
+                "agent_id": agent_id,
+                "ea3_status": "unavailable",
+                "message": "eA³ services not initialized",
+                "knowledge_context": {
+                    "total_files": await file_service._get_agent_file_count(agent_id)
+                }
+            }
+        
+        # Get comprehensive eA³ status
+        ea3_status = await ea3_orchestrator.get_ea3_assessment(agent_id)
+        file_count = await file_service._get_agent_file_count(agent_id)
+        
+        return {
+            "agent_id": agent_id,
+            "service": "knowledge-vault",
+            "ea3_status": ea3_status,
+            "knowledge_context": {
+                "total_files": file_count,
+                "knowledge_base_health": "healthy" if file_count > 0 else "empty",
+                "epistemic_growth_potential": "high" if file_count < 10 else "moderate"
+            },
+            "narrative_intelligence": {
+                "gpt41_enhanced": True,
+                "coherence_tracking": "active",
+                "story_integration": "automatic"
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get eA³ status: {str(e)}")

@@ -44,8 +44,20 @@ if [ -f ".env" ]; then
 elif [ -f "agent-engine/.env" ]; then
   echo -e "${BLUE}📋 Loading environment variables from agent-engine/.env file...${NC}"
   source agent-engine/.env
+elif [ -f "shared/.env.spanner" ]; then
+  echo -e "${BLUE}📋 Loading eA³ Spanner environment variables...${NC}"
+  source shared/.env.spanner
 else
   echo -e "${YELLOW}⚠️  Warning: .env file not found. Will use default values.${NC}"
+fi
+
+# Check for eA³ Spanner setup
+if [ -f "shared/spanner-key.json" ]; then
+  echo -e "${GREEN}✅ Found eA³ Spanner service account key${NC}"
+  SPANNER_KEY_EXISTS=true
+else
+  echo -e "${YELLOW}⚠️  eA³ Spanner key not found. Run 'shared/setup-spanner-ea3.sh' for full functionality${NC}"
+  SPANNER_KEY_EXISTS=false
 fi
 
 # Authenticate with Google Cloud

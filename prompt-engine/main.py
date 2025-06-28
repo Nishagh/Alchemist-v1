@@ -12,16 +12,15 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 # Import metrics functionality
-try:
-    from alchemist_shared.middleware import (
-        setup_metrics_middleware,
-        start_background_metrics_collection,
-        stop_background_metrics_collection
-    )
-    METRICS_AVAILABLE = True
-except ImportError:
-    logging.warning("Metrics middleware not available - install alchemist-shared package")
-    METRICS_AVAILABLE = False
+from alchemist_shared.middleware import (
+    setup_metrics_middleware,
+    start_background_metrics_collection,
+    stop_background_metrics_collection
+)
+
+# Import story event system (required)
+from alchemist_shared.events import init_story_event_publisher
+from alchemist_shared.config.base_settings import get_gcp_project_id
 
 # Set up logging
 logging.basicConfig(
@@ -45,10 +44,18 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Prompt Engine service...")
     logger.info(f"Environment: {os.environ.get('ENVIRONMENT', 'development')}")
     
-    # Start metrics collection if available
-    if METRICS_AVAILABLE:
-        await start_background_metrics_collection("prompt-engine")
-        logger.info("Metrics collection started")
+    # Initialize story event publisher (required)
+    try:
+        project_id = get_gcp_project_id()
+        init_story_event_publisher(project_id)
+        logger.info("Story event publisher initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize story event publisher: {e}")
+        raise
+    
+    # Start metrics collection
+    await start_background_metrics_collection("prompt-engine")
+    logger.info("Metrics collection started")
     
     yield
     
@@ -56,9 +63,8 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down Prompt Engine service...")
     
     # Stop metrics collection
-    if METRICS_AVAILABLE:
-        await stop_background_metrics_collection()
-        logger.info("Metrics collection stopped")
+    await stop_background_metrics_collection()
+    logger.info("Metrics collection stopped")
 
 
 # Create the FastAPI app
@@ -77,10 +83,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Add metrics middleware if available
-if METRICS_AVAILABLE:
-    setup_metrics_middleware(app, "prompt-engine")
-    logger.info("Metrics middleware enabled")
+# Add metrics middleware
+setup_metrics_middleware(app, "prompt-engine")
+logger.info("Metrics middleware enabled")
 
 # Include the routes
 app.include_router(router)
@@ -96,20 +101,9 @@ async def root():
     return {"message": "Welcome to the Prompt Engineer Service. See /docs for API documentation."}
 
 # Add API logging middleware
-try:
-    from alchemist_shared.middleware.api_logging_middleware import setup_api_logging_middleware
-    setup_api_logging_middleware(app, "prompt-engine")
-    logger.info("API logging middleware enabled")
-except ImportError:
-    logger.warning("API logging middleware not available")
-    
-    # Fallback to basic logging middleware
-    @app.middleware("http")
-    async def log_requests(request: Request, call_next):
-        logger.info(f"Request: {request.method} {request.url.path}")
-        response = await call_next(request)
-        logger.info(f"Response status: {response.status_code}")
-        return response
+from alchemist_shared.middleware.api_logging_middleware import setup_api_logging_middleware
+setup_api_logging_middleware(app, "prompt-engine")
+logger.info("API logging middleware enabled")
 
 if __name__ == "__main__":
     # Get port from environment variable or use default

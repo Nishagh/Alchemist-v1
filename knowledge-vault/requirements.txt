@@ -6,11 +6,13 @@ python-dotenv>=1.0.0
 pydantic>=2.4.2
 gunicorn>=21.2.0
 
-# Alchemist shared services
+# Alchemist shared services with eA³ support
 # Note: alchemist-shared will be installed from ../shared during Docker build
+# Includes google-cloud-spanner, networkx, and dataclasses-json for agent story tracking
 
 # Firebase & Google Cloud
 firebase-admin>=6.2.0
+requests>=2.31.0
 
 # OpenAI for embeddings
 openai>=1.0.0

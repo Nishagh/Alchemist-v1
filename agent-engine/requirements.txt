@@ -6,6 +6,7 @@ python-dotenv==1.0.0
 Jinja2>=3.0.0,<4.0.0
 
 # Shared Alchemist libraries are installed separately in Dockerfile
+# eA³ (Epistemic Autonomy) dependencies are included in alchemist-shared
 
 # AI and LLM dependencies
 pydantic

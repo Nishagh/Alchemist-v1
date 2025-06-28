@@ -73,7 +73,7 @@ gcloud run deploy ${IMAGE_NAME} \
   --timeout 300 \
   --memory 1Gi \
   --cpu 1 \
-  --set-env-vars="FIREBASE_STORAGE_BUCKET=${FIREBASE_STORAGE_BUCKET},FIREBASE_PROJECT_ID=${PROJECT_ID}" \
+  --set-env-vars="FIREBASE_STORAGE_BUCKET=${FIREBASE_STORAGE_BUCKET},FIREBASE_PROJECT_ID=${PROJECT_ID},GOOGLE_CLOUD_PROJECT=${PROJECT_ID}" \
   --update-secrets=OPENAI_API_KEY=OPENAI_API_KEY:latest \
   --min-instances=0
 

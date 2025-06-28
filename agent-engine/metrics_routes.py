@@ -2,14 +2,14 @@
 Metrics API Routes
 
 Provides REST endpoints for retrieving performance metrics for the admin dashboard.
-Aggregates data from all Alchemist services.
+Aggregates data from all Alchemist services including story-loss metrics.
 """
 
 import logging
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
-from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, Query, Path
+from pydantic import BaseModel, Field
 from firebase_admin.firestore import SERVER_TIMESTAMP
 
 logger = logging.getLogger(__name__)
@@ -19,6 +19,7 @@ router = APIRouter(prefix="/api/metrics", tags=["metrics"])
 
 # Check if metrics functionality is available
 METRICS_AVAILABLE = False
+GNF_AVAILABLE = False
 try:
     from alchemist_shared.services.metrics_service import MetricsService, get_metrics_service
     from alchemist_shared.models.metrics_models import (
@@ -28,6 +29,13 @@ try:
     logger.info("Metrics service available")
 except ImportError as e:
     logger.warning(f"Metrics service not available: {e}")
+
+try:
+    from alchemist_shared.services.gnf_service import get_gnf_service
+    GNF_AVAILABLE = True
+    logger.info("GNF service available")
+except ImportError as e:
+    logger.warning(f"GNF service not available: {e}")
 
 
 class MetricsResponse(BaseModel):
@@ -46,6 +54,22 @@ class ServiceHealthResponse(BaseModel):
     current_cpu: float
     current_memory: float
     current_response_time: float
+
+
+class StoryLossMetricsRequest(BaseModel):
+    """Request model for story-loss metrics"""
+    story_loss: float = Field(..., ge=0.0, le=1.0, description="Story-loss value between 0 and 1")
+    timestamp: Optional[datetime] = Field(default_factory=datetime.utcnow, description="Timestamp of the metric")
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional metadata")
+
+
+class StoryLossHistoryResponse(BaseModel):
+    """Response model for story-loss history"""
+    agent_id: str
+    story_loss_history: List[Dict[str, Any]]
+    hours: int
+    current_story_loss: Optional[float] = None
+    threshold_exceeded: bool = False
 
 
 # Mock data for fallback
@@ -376,4 +400,193 @@ async def trigger_metrics_collection():
         return MetricsResponse(
             data={"error": str(e)},
             message=f"Failed to trigger metrics collection: {str(e)}"
+        )
+
+
+# Story-Loss Metrics Endpoints
+
+@router.post("/agent/{agent_id}/story-loss", response_model=MetricsResponse)
+async def push_story_loss_metric(
+    agent_id: str = Path(..., description="Agent ID"),
+    metrics_data: StoryLossMetricsRequest = None
+):
+    """
+    Push story-loss metric for an agent
+    
+    This endpoint is called by the GNF service when story-loss is calculated.
+    The JSON payload format is: {"story_loss": 0.034, "timestamp": "...", "metadata": {...}}
+    """
+    try:
+        if not GNF_AVAILABLE:
+            logger.warning("GNF service not available")
+            return MetricsResponse(
+                success=False,
+                data={"agent_id": agent_id},
+                message="GNF service not available - cannot store story-loss metrics"
+            )
+        
+        # Extract metrics data from the request
+        story_loss = metrics_data.story_loss if metrics_data else 0.0
+        timestamp = metrics_data.timestamp if metrics_data else datetime.utcnow()
+        metadata = metrics_data.metadata if metrics_data else {}
+        
+        logger.info(f"Receiving story-loss metric for agent {agent_id}: {story_loss:.3f}")
+        
+        # Get GNF service to handle the metric storage
+        gnf_service = await get_gnf_service()
+        
+        # The GNF service already handles Firebase storage through its callbacks,
+        # so we just need to acknowledge receipt here
+        
+        # Check if threshold is exceeded
+        threshold_exceeded = story_loss > 0.15
+        
+        response_data = {
+            "agent_id": agent_id,
+            "story_loss": story_loss,
+            "timestamp": timestamp,
+            "threshold_exceeded": threshold_exceeded,
+            "metadata": metadata
+        }
+        
+        if threshold_exceeded:
+            logger.warning(f"Story-loss threshold exceeded for agent {agent_id}: {story_loss:.3f}")
+            response_data["warning"] = "Story-loss threshold (0.15) exceeded - self-reflection triggered"
+        
+        return MetricsResponse(
+            data=response_data,
+            message=f"Story-loss metric recorded for agent {agent_id}"
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to record story-loss metric for agent {agent_id}: {e}")
+        return MetricsResponse(
+            success=False,
+            data={"agent_id": agent_id, "error": str(e)},
+            message=f"Failed to record story-loss metric: {str(e)}"
+        )
+
+
+@router.get("/agent/{agent_id}/story-loss", response_model=MetricsResponse)
+async def get_story_loss_metrics(
+    agent_id: str = Path(..., description="Agent ID"),
+    hours: int = Query(24, ge=1, le=168, description="Hours of history to retrieve (1-168)")
+):
+    """
+    Get story-loss metrics history for an agent
+    
+    Returns the story-loss history for the specified time period,
+    used by the dashboard sparkline component.
+    """
+    try:
+        if not GNF_AVAILABLE:
+            logger.warning("GNF service not available")
+            return MetricsResponse(
+                success=False,
+                data={"agent_id": agent_id, "hours": hours},
+                message="GNF service not available - cannot retrieve story-loss metrics"
+            )
+        
+        logger.info(f"Getting story-loss history for agent {agent_id}, last {hours} hours")
+        
+        # Get GNF service
+        gnf_service = await get_gnf_service()
+        
+        # Get story-loss history
+        history = await gnf_service.get_story_loss_history(agent_id, hours)
+        
+        # Calculate current story-loss and threshold status
+        current_story_loss = None
+        threshold_exceeded = False
+        
+        if history:
+            # Get the most recent value
+            latest_entry = max(history, key=lambda x: x['timestamp'])
+            current_story_loss = latest_entry['story_loss']
+            threshold_exceeded = current_story_loss > 0.15
+        
+        response_data = StoryLossHistoryResponse(
+            agent_id=agent_id,
+            story_loss_history=history,
+            hours=hours,
+            current_story_loss=current_story_loss,
+            threshold_exceeded=threshold_exceeded
+        )
+        
+        return MetricsResponse(
+            data=response_data.dict(),
+            message=f"Story-loss history retrieved for agent {agent_id} ({len(history)} data points)"
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to get story-loss history for agent {agent_id}: {e}")
+        return MetricsResponse(
+            success=False,
+            data={"agent_id": agent_id, "hours": hours, "error": str(e)},
+            message=f"Failed to retrieve story-loss history: {str(e)}"
+        )
+
+
+@router.get("/agent/{agent_id}/story-loss/current", response_model=MetricsResponse)
+async def get_current_story_loss(
+    agent_id: str = Path(..., description="Agent ID")
+):
+    """
+    Get the current (most recent) story-loss value for an agent
+    
+    Returns the latest story-loss calculation and threshold status.
+    """
+    try:
+        if not GNF_AVAILABLE:
+            return MetricsResponse(
+                success=False,
+                data={"agent_id": agent_id},
+                message="GNF service not available"
+            )
+        
+        logger.info(f"Getting current story-loss for agent {agent_id}")
+        
+        # Get GNF service
+        gnf_service = await get_gnf_service()
+        
+        # Get recent history (last hour) to find current value
+        recent_history = await gnf_service.get_story_loss_history(agent_id, 1)
+        
+        if not recent_history:
+            return MetricsResponse(
+                data={
+                    "agent_id": agent_id,
+                    "story_loss": 0.0,
+                    "threshold_exceeded": False,
+                    "has_data": False
+                },
+                message="No story-loss data available for agent"
+            )
+        
+        # Get the most recent value
+        latest_entry = max(recent_history, key=lambda x: x['timestamp'])
+        current_story_loss = latest_entry['story_loss']
+        threshold_exceeded = current_story_loss > 0.15
+        
+        response_data = {
+            "agent_id": agent_id,
+            "story_loss": current_story_loss,
+            "timestamp": latest_entry['timestamp'],
+            "threshold_exceeded": threshold_exceeded,
+            "threshold": 0.15,
+            "has_data": True,
+            "metadata": latest_entry.get('metadata', {})
+        }
+        
+        return MetricsResponse(
+            data=response_data,
+            message=f"Current story-loss for agent {agent_id}: {current_story_loss:.3f}"
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to get current story-loss for agent {agent_id}: {e}")
+        return MetricsResponse(
+            success=False,
+            data={"agent_id": agent_id, "error": str(e)},
+            message=f"Failed to retrieve current story-loss: {str(e)}"
         )

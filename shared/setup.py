@@ -22,6 +22,14 @@ setup(
         "python-jose[cryptography]>=3.3.0",
         "structlog>=23.1.0",
         "psutil>=5.9.0",
+        # eA³ (Epistemic Autonomy) dependencies
+        "google-cloud-spanner>=3.47.0",
+        "networkx>=3.1",
+        "dataclasses-json>=0.6.0",
+        # Story event system dependencies
+        "google-cloud-pubsub>=2.18.0",
+        "redis>=4.5.0",
+        "aiohttp>=3.8.0",
     ],
     python_requires=">=3.11",
     classifiers=[
