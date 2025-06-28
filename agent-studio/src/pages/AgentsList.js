@@ -45,6 +45,7 @@ import {
   WhatsApp as WhatsAppIcon
 } from '@mui/icons-material';
 import { deleteAgent } from '../services';
+import { getAgentKnowledgeBase } from '../services/knowledgeBase/knowledgeBaseService';
 import { useAuth } from '../utils/AuthContext';
 import { db } from '../utils/firebase';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
@@ -56,19 +57,81 @@ const AgentsList = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [agentToDelete, setAgentToDelete] = useState(null);
   const [notification, setNotification] = useState({ open: false, message: '', severity: 'info' });
+  const [kbCounts, setKbCounts] = useState({}); // Track KB file counts for each agent
+  const [kbSizes, setKbSizes] = useState({}); // Track total KB file sizes for each agent
   
   const navigate = useNavigate();
   const theme = useTheme();
   const { currentUser } = useAuth();
 
+  // Function to format file size
+  const formatFileSize = (bytes) => {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  // Function to fetch KB count and size for a specific agent
+  const fetchKbData = async (agentId) => {
+    try {
+      const files = await getAgentKnowledgeBase(agentId);
+      if (!files || files.length === 0) {
+        return { count: 0, totalSize: 0 };
+      }
+      
+      const count = files.length;
+      const totalSize = files.reduce((sum, file) => sum + (file.size || 0), 0);
+      
+      return { count, totalSize };
+    } catch (error) {
+      console.error(`Error fetching KB data for agent ${agentId}:`, error);
+      return { count: 0, totalSize: 0 };
+    }
+  };
+
+  // Function to fetch KB data for all agents
+  const fetchAllKbData = async (agentList) => {
+    const counts = {};
+    const sizes = {};
+    await Promise.all(
+      agentList.map(async (agent) => {
+        const { count, totalSize } = await fetchKbData(agent.id);
+        counts[agent.id] = count;
+        sizes[agent.id] = totalSize;
+      })
+    );
+    setKbCounts(counts);
+    setKbSizes(sizes);
+  };
+
+  // Function to refresh KB data for a specific agent
+  const refreshAgentKbData = async (agentId) => {
+    const { count, totalSize } = await fetchKbData(agentId);
+    setKbCounts(prev => ({
+      ...prev,
+      [agentId]: count
+    }));
+    setKbSizes(prev => ({
+      ...prev,
+      [agentId]: totalSize
+    }));
+  };
+
   useEffect(() => {
     if (currentUser) {
       const agentsCollectionRef = collection(db, 'agents');
       const agentsQuery = query(agentsCollectionRef, where('userId', '==', currentUser.uid));
-      const unsubscribe = onSnapshot(agentsQuery, (snapshot) => {
+      const unsubscribe = onSnapshot(agentsQuery, async (snapshot) => {
         const agents = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setAgents(agents);
         setLoading(false);
+        
+        // Fetch KB data for all agents
+        if (agents.length > 0) {
+          fetchAllKbData(agents);
+        }
       });
       
       // Return cleanup function
@@ -77,6 +140,18 @@ const AgentsList = () => {
       setLoading(false);
     }
   }, [currentUser]);
+
+  // Refresh KB counts when page becomes visible (user returns from other pages)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && agents.length > 0) {
+        fetchAllKbData(agents);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [agents]);
 
   const handleDeleteClick = (agent, event) => {
     event.stopPropagation();
@@ -613,7 +688,9 @@ const AgentsList = () => {
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                 <MenuBookIcon sx={{ fontSize: 16, color: theme.palette.text.secondary }} />
                                 <Typography variant="caption" color="text.secondary">
-                                  {agent?.knowledge_base?.length || 0} KB items
+                                  {kbCounts[agent.id] !== undefined ? (
+                                    `${kbCounts[agent.id]} files ${kbSizes[agent.id] !== undefined ? `(${formatFileSize(kbSizes[agent.id])})` : ''}`
+                                  ) : '...'}
                                 </Typography>
                               </Box>
                               

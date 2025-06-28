@@ -22,7 +22,9 @@ import {
   DialogContent,
   DialogActions,
   Fade,
-  Chip
+  Chip,
+  LinearProgress,
+  CircularProgress
 } from '@mui/material';
 import {
   Delete as DeleteIcon,
@@ -42,6 +44,7 @@ const KBFileList = ({
   onFileUpload,
   onFileDelete,
   uploading = false,
+  uploadProgress = {},
   searchMode = false,
   searchQuery = '',
   disabled = false 
@@ -69,6 +72,117 @@ const KBFileList = ({
       onFileUpload(uploadedFiles);
     }
     setShowUpload(false);
+  };
+
+  const renderFileStatus = (file) => {
+    // Check if file is in upload progress by matching temp file ID or filename
+    let progressInfo = null;
+    
+    // First try to match by file ID (for temporary files)
+    if (file.id && uploadProgress[file.id]) {
+      progressInfo = uploadProgress[file.id];
+    } else {
+      // Fallback to filename matching for edge cases
+      progressInfo = Object.values(uploadProgress).find(p => 
+        p.filename === (file.filename || file.name)
+      );
+    }
+
+    if (progressInfo) {
+      if (progressInfo.status === 'uploading') {
+        return (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <CircularProgress size={16} />
+            <Typography variant="body2" color="primary">
+              Uploading... {progressInfo.progress}%
+            </Typography>
+          </Box>
+        );
+      } else if (progressInfo.status === 'indexing') {
+        return (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <CircularProgress size={16} />
+            <Typography variant="body2" color="warning.main">
+              Starting processing...
+            </Typography>
+          </Box>
+        );
+      }
+    }
+
+    // Check indexing status from file properties
+    if (file.indexing_status === 'uploading') {
+      return (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <CircularProgress size={16} />
+          <Typography variant="body2" color="primary">
+            Uploading...
+          </Typography>
+        </Box>
+      );
+    }
+
+    if (file.indexing_status === 'processing' || file.indexing_status === 'pending') {
+      const progress = file.progress_percent || 0;
+      const phase = file.indexing_phase || 'preparing';
+      
+      // Enhanced phase display with cleaning visibility
+      const getPhaseDisplay = (phase) => {
+        switch (phase) {
+          case 'preparing': return 'Preparing...';
+          case 'extracting_text': return 'Extracting Text';
+          case 'cleaning_content': return 'Cleaning Content 🧹';
+          case 'smart_chunking': return 'Smart Chunking';
+          case 'generating_embeddings': return 'Generating Embeddings';
+          case 'storing_embeddings': return 'Storing Embeddings';
+          default: return 'Processing...';
+        }
+      };
+      
+      return (
+        <Box sx={{ minWidth: 140 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+            <CircularProgress size={16} />
+            <Typography variant="body2" color="warning.main" sx={{ fontSize: '0.75rem' }}>
+              {getPhaseDisplay(phase)}
+            </Typography>
+          </Box>
+          <LinearProgress 
+            variant="determinate" 
+            value={progress} 
+            sx={{ height: 4, borderRadius: 1 }}
+          />
+          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+            {progress}% complete
+          </Typography>
+        </Box>
+      );
+    }
+
+    if (file.indexing_status === 'failed') {
+      return (
+        <Chip 
+          label="Failed" 
+          color="error" 
+          size="small"
+          sx={{ fontSize: '0.75rem' }}
+        />
+      );
+    }
+
+    if (file.indexing_status === 'complete' && file.indexed) {
+      return (
+        <Chip 
+          label="Indexed" 
+          color="success" 
+          size="small"
+          sx={{ fontSize: '0.75rem' }}
+        />
+      );
+    }
+
+    // Fallback to original status badge
+    return <StatusBadge status={file.indexed ? 'indexed' : 'not_indexed'} />;
   };
 
   const EmptyState = () => (
@@ -141,7 +255,7 @@ const KBFileList = ({
                 </TableCell>
                 
                 <TableCell>
-                  <StatusBadge status={file.indexed ? 'indexed' : 'not_indexed'} />
+                  {renderFileStatus(file)}
                 </TableCell>
                 
                 <TableCell>
@@ -178,6 +292,7 @@ const KBFileList = ({
                 file={file}
                 onDelete={() => handleDeleteClick(file)}
                 disabled={disabled}
+                renderStatus={() => renderFileStatus(file)}
               />
             </div>
           </Fade>

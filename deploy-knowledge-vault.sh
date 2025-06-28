@@ -5,7 +5,7 @@
 set -e
 
 # Configuration
-PROJECT_ID="alchemist-e69bb"
+PROJECT_ID=$(gcloud config get-value project)
 SERVICE_NAME="alchemist-knowledge-vault"
 REGION="us-central1"
 IMAGE_NAME="gcr.io/${PROJECT_ID}/${SERVICE_NAME}"
@@ -37,10 +37,6 @@ if ! command -v gcloud &> /dev/null; then
     exit 1
 fi
 
-if ! command -v docker &> /dev/null; then
-    echo -e "${RED}❌ Docker not found. Please install it first.${NC}"
-    exit 1
-fi
 
 # Check if .env file exists and load it
 if [ -f ".env" ]; then
@@ -63,10 +59,6 @@ fi
 # Set project
 echo -e "${YELLOW}📁 Setting Google Cloud project to: ${PROJECT_ID}${NC}"
 gcloud config set project ${PROJECT_ID}
-
-# Configure Docker for gcr.io
-echo -e "${YELLOW}🐳 Configuring Docker for Google Container Registry...${NC}"
-gcloud auth configure-docker
 
 # Create temporary Dockerfile for deployment
 echo -e "${YELLOW}📦 Creating deployment Dockerfile...${NC}"
@@ -239,21 +231,60 @@ fi
 # Use deployment .dockerignore
 cp .dockerignore.knowledge-vault .dockerignore
 
-# Build the Docker image from root directory
-echo -e "${YELLOW}🔨 Building Docker image...${NC}"
-docker build --platform linux/amd64 -f Dockerfile.knowledge-vault -t ${IMAGE_NAME}:latest .
-
-# Tag with timestamp
+# Build and submit to Cloud Build
+echo -e "${YELLOW}🔨 Building and pushing image with Cloud Build...${NC}"
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-docker tag ${IMAGE_NAME}:latest ${IMAGE_NAME}:${TIMESTAMP}
 
-# Push to Google Container Registry
-echo -e "${YELLOW}📤 Pushing image to Google Container Registry...${NC}"
-docker push ${IMAGE_NAME}:latest
-docker push ${IMAGE_NAME}:${TIMESTAMP}
+# Create a temporary cloudbuild.yaml for custom Dockerfile
+cat > cloudbuild-temp.yaml << EOF
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['build', '-f', 'Dockerfile.knowledge-vault', '-t', '${IMAGE_NAME}:latest', '.']
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['push', '${IMAGE_NAME}:latest']
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['tag', '${IMAGE_NAME}:latest', '${IMAGE_NAME}:${TIMESTAMP}']
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['push', '${IMAGE_NAME}:${TIMESTAMP}']
+EOF
+
+gcloud builds submit --config=cloudbuild-temp.yaml .
 
 # Deploy to Cloud Run
 echo -e "${YELLOW}🚀 Deploying to Cloud Run...${NC}"
+
+# Build environment variables from knowledge-vault/.env
+ENV_VARS=""
+if [ -f "knowledge-vault/.env" ]; then
+    echo -e "${BLUE}📋 Loading environment variables from knowledge-vault/.env...${NC}"
+    while IFS= read -r line || [ -n "$line" ]; do
+        # Skip comments and empty lines
+        if [[ "$line" =~ ^[[:space:]]*# ]] || [[ -z "${line// }" ]]; then
+            continue
+        fi
+        # Skip lines that don't contain =
+        if [[ ! "$line" =~ = ]]; then
+            continue
+        fi
+        # Extract key=value pairs
+        key=$(echo "$line" | cut -d'=' -f1 | xargs)
+        value=$(echo "$line" | cut -d'=' -f2- | xargs)
+        # Skip empty values and commented out variables
+        if [[ -n "$value" && ! "$line" =~ ^[[:space:]]*# ]]; then
+            if [ -n "$ENV_VARS" ]; then
+                ENV_VARS="$ENV_VARS,$key=$value"
+            else
+                ENV_VARS="$key=$value"
+            fi
+        fi
+    done < "knowledge-vault/.env"
+fi
+
+# Override with production-specific values
+ENV_VARS="$ENV_VARS,ENVIRONMENT=production,FIREBASE_PROJECT_ID=${PROJECT_ID}"
+
+echo -e "${BLUE}🔧 Setting environment variables: $ENV_VARS${NC}"
+
 gcloud run deploy ${SERVICE_NAME} \
     --image ${IMAGE_NAME}:latest \
     --platform managed \
@@ -264,15 +295,14 @@ gcloud run deploy ${SERVICE_NAME} \
     --timeout 3600 \
     --concurrency 80 \
     --max-instances 5 \
-    --set-env-vars "KNOWLEDGE_VAULT_ENVIRONMENT=production" \
-    --set-env-vars "FIREBASE_PROJECT_ID=${PROJECT_ID}"
+    --set-env-vars "$ENV_VARS"
 
 # Get the service URL
 SERVICE_URL=$(gcloud run services describe ${SERVICE_NAME} --region=${REGION} --format="value(status.url)")
 
 # Cleanup temporary files
 echo -e "${YELLOW}🧹 Cleaning up temporary files...${NC}"
-rm -f Dockerfile.knowledge-vault .dockerignore.knowledge-vault
+rm -f Dockerfile.knowledge-vault .dockerignore.knowledge-vault cloudbuild-temp.yaml
 
 # Restore original .dockerignore if it existed
 if [ -f ".dockerignore.backup" ]; then

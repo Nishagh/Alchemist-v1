@@ -33,6 +33,7 @@ const KnowledgeBaseManager = ({
   const [kbFiles, setKbFiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState({});
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -67,30 +68,115 @@ const KnowledgeBaseManager = ({
     if (!files || files.length === 0) return;
 
     setUploading(true);
+    setUploadProgress({});
     const uploadResults = [];
     const errors = [];
 
     try {
-      for (const file of files) {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const fileId = `temp_${Date.now()}_${i}`;
+        
         try {
           console.log(`Uploading file: ${file.name}`);
+          
+          // Set initial upload status
+          setUploadProgress(prev => ({
+            ...prev,
+            [fileId]: {
+              filename: file.name,
+              status: 'uploading',
+              progress: 0
+            }
+          }));
+
+          // Add temporary file to list for immediate display
+          const tempFile = {
+            id: fileId,
+            filename: file.name,
+            size: file.size,
+            content_type: file.type,
+            upload_date: new Date().toISOString(),
+            indexed: false,
+            indexing_status: 'uploading',
+            progress_percent: 0,
+            isTemporary: true
+          };
+          
+          setKbFiles(prev => [...prev, tempFile]);
+          
+          // Simulate upload progress
+          const progressInterval = setInterval(() => {
+            setUploadProgress(prev => {
+              const current = prev[fileId];
+              if (current && current.status === 'uploading' && current.progress < 90) {
+                return {
+                  ...prev,
+                  [fileId]: {
+                    ...current,
+                    progress: Math.min(current.progress + 10, 90)
+                  }
+                };
+              }
+              return prev;
+            });
+          }, 200);
+
           const response = await uploadKnowledgeBaseFile(agentId, file);
+          clearInterval(progressInterval);
           
           if (response.success && response.file) {
+            // Update progress to complete
+            setUploadProgress(prev => ({
+              ...prev,
+              [fileId]: {
+                ...prev[fileId],
+                status: 'indexing',
+                progress: 100
+              }
+            }));
+
+            // Replace temporary file with actual response and clear progress
+            setKbFiles(prev => prev.map(f => 
+              f.id === fileId ? { ...response.file, id: response.file.id } : f
+            ));
+            
+            // Clear the upload progress for this file
+            setUploadProgress(prev => {
+              const updated = { ...prev };
+              delete updated[fileId];
+              return updated;
+            });
+
             uploadResults.push(response.file);
+            
+            // Start monitoring indexing status
+            monitorIndexingStatus(response.file.id);
           } else {
             errors.push(`Failed to upload ${file.name}`);
+            // Remove failed file
+            setKbFiles(prev => prev.filter(f => f.id !== fileId));
           }
         } catch (error) {
           console.error(`Error uploading ${file.name}:`, error);
           errors.push(`Failed to upload ${file.name}: ${error.message}`);
+          // Remove failed file and clear progress
+          setKbFiles(prev => prev.filter(f => f.id !== fileId));
+          setUploadProgress(prev => {
+            const updated = { ...prev };
+            delete updated[fileId];
+            return updated;
+          });
         }
       }
 
-      // Update the files list with newly uploaded files
+      // Clear upload progress after completion
+      setTimeout(() => {
+        setUploadProgress({});
+      }, 2000);
+
+      // Update the files list notification
       if (uploadResults.length > 0) {
-        setKbFiles(prev => [...prev, ...uploadResults]);
-        
         onNotification?.(createNotification(
           `Successfully uploaded ${uploadResults.length} file${uploadResults.length > 1 ? 's' : ''}`,
           'success'
@@ -166,6 +252,32 @@ const KnowledgeBaseManager = ({
   const clearSearch = () => {
     setSearchQuery('');
     setSearchResults([]);
+  };
+
+  const monitorIndexingStatus = (fileId) => {
+    const checkStatus = async () => {
+      try {
+        // Refresh the file list to get updated indexing status
+        const files = await getAgentKnowledgeBase(agentId);
+        const updatedFile = files.find(f => f.id === fileId);
+        
+        if (updatedFile) {
+          setKbFiles(prev => prev.map(f => 
+            f.id === fileId ? updatedFile : f
+          ));
+          
+          // If still processing, check again in 2 seconds
+          if (updatedFile.indexing_status === 'processing' || updatedFile.indexing_status === 'pending') {
+            setTimeout(checkStatus, 2000);
+          }
+        }
+      } catch (error) {
+        console.error('Error checking indexing status:', error);
+      }
+    };
+    
+    // Start checking after a short delay
+    setTimeout(checkStatus, 1000);
   };
 
   if (loading) {
@@ -245,6 +357,7 @@ const KnowledgeBaseManager = ({
             onFileUpload={handleFileUpload}
             onFileDelete={handleFileDelete}
             uploading={uploading}
+            uploadProgress={uploadProgress}
             searchMode={!!searchQuery}
             searchQuery={searchQuery}
             disabled={disabled}

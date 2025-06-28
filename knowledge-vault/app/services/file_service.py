@@ -79,12 +79,12 @@ class FileService:
             raise Exception(f"Error uploading file: {str(e)}")
     
     def _index_file(self, file_id: str, content: bytes, content_type: str, agent_id: str, filename: str) -> None:
-        """Process and index a file with detailed phase tracking"""
+        """Process and index a file with enhanced phase tracking"""
         # First update to show indexing is in progress
         self.firebase_service.update_file(file_id, {
             "indexing_status": "processing",
             "indexing_phase": "preparing",
-            "progress_percent": 10,
+            "progress_percent": 5,
             "last_updated": SERVER_TIMESTAMP
         })
         
@@ -97,12 +97,26 @@ class FileService:
             # Update phase - text extraction
             self.firebase_service.update_file(file_id, {
                 "indexing_phase": "extracting_text",
-                "progress_percent": 30,
+                "progress_percent": 20,
                 "last_updated": SERVER_TIMESTAMP
             })
             
-            # Process the file and get chunks
-            chunks = self.indexing_service.process_file(
+            # Update phase - cleaning content
+            self.firebase_service.update_file(file_id, {
+                "indexing_phase": "cleaning_content",
+                "progress_percent": 40,
+                "last_updated": SERVER_TIMESTAMP
+            })
+            
+            # Update phase - smart chunking
+            self.firebase_service.update_file(file_id, {
+                "indexing_phase": "smart_chunking",
+                "progress_percent": 60,
+                "last_updated": SERVER_TIMESTAMP
+            })
+            
+            # Process the file and get chunks with enhanced processing
+            processing_result = self.indexing_service.process_file(
                 file_path=temp_file_path,
                 file_id=file_id,
                 content_type=content_type,
@@ -110,21 +124,37 @@ class FileService:
                 filename=filename
             )
             
-            # Update phase - storing embeddings
+            # Extract data from the new return structure
+            chunks = processing_result["chunks"]
+            original_text = processing_result["original_text"]
+            processed_text = processing_result["processed_text"]
+            processing_stats = processing_result["processing_stats"]
+            quality_score = processing_result["quality_score"]
+            content_metadata = processing_result["content_metadata"]
+            
+            # Update phase - generating embeddings
             self.firebase_service.update_file(file_id, {
-                "indexing_phase": "storing_embeddings",
-                "progress_percent": 70,
+                "indexing_phase": "generating_embeddings",
+                "progress_percent": 80,
                 "last_updated": SERVER_TIMESTAMP
             })
             
-            # Update file metadata
+            # Update file metadata with enhanced information including full text content
             self.firebase_service.update_file(file_id, {
                 "indexed": True,
                 "chunk_count": len(chunks),
                 "indexing_status": "complete",
                 "indexing_phase": "complete",
                 "progress_percent": 100,
-                "last_updated": SERVER_TIMESTAMP
+                "last_updated": SERVER_TIMESTAMP,
+                # Enhanced metadata
+                "processing_stats": processing_stats,
+                "quality_score": quality_score,
+                "content_metadata": content_metadata,
+                "processing_version": "v2_enhanced",
+                # Full text content for preview
+                "original_text": original_text,
+                "processed_text": processed_text
             })
             
             # Clean up temporary file
@@ -225,3 +255,67 @@ class FileService:
             return self.firebase_service.get_embedding_stats(agent_id)
         except Exception as e:
             raise Exception(f"Error getting agent embedding stats: {str(e)}")
+    
+    def reprocess_file(self, file_id: str) -> Dict[str, Any]:
+        """Reprocess an existing file with enhanced cleaning pipeline"""
+        try:
+            # Get file metadata
+            file_data = self.firebase_service.get_file(file_id)
+            
+            if not file_data:
+                raise Exception(f"File with ID {file_id} not found")
+            
+            agent_id = file_data.get("agent_id")
+            storage_path = file_data.get("storage_path")
+            content_type = file_data.get("content_type")
+            filename = file_data.get("filename")
+            
+            # Download file content from storage
+            file_content = self.firebase_service.download_file_from_storage(storage_path)
+            
+            # Delete existing embeddings
+            self.indexing_service.delete_file_vectors(file_id)
+            
+            # Reprocess the file
+            self._index_file(file_id, file_content, content_type, agent_id, filename)
+            
+            # Get updated file data
+            updated_file_data = self.firebase_service.get_file(file_id)
+            
+            return {
+                "status": "success",
+                "message": f"File {filename} reprocessed successfully",
+                "file_data": updated_file_data
+            }
+            
+        except Exception as e:
+            raise Exception(f"Error reprocessing file: {str(e)}")
+    
+    def get_processing_status(self, file_id: str) -> Dict[str, Any]:
+        """Get detailed processing status for a file"""
+        try:
+            file_data = self.firebase_service.get_file(file_id)
+            
+            if not file_data:
+                raise Exception(f"File with ID {file_id} not found")
+            
+            # Extract processing information
+            status_info = {
+                "file_id": file_id,
+                "filename": file_data.get("filename"),
+                "indexing_status": file_data.get("indexing_status", "unknown"),
+                "indexing_phase": file_data.get("indexing_phase", "unknown"),
+                "progress_percent": file_data.get("progress_percent", 0),
+                "processing_stats": file_data.get("processing_stats", {}),
+                "quality_score": file_data.get("quality_score", 0),
+                "content_metadata": file_data.get("content_metadata", {}),
+                "chunk_count": file_data.get("chunk_count", 0),
+                "processing_version": file_data.get("processing_version", "v2_enhanced"),
+                "last_updated": file_data.get("last_updated"),
+                "indexing_error": file_data.get("indexing_error")
+            }
+            
+            return status_info
+            
+        except Exception as e:
+            raise Exception(f"Error getting processing status: {str(e)}")

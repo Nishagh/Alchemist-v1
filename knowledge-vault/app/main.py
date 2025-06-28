@@ -6,17 +6,18 @@ from dotenv import load_dotenv
 import os
 import logging
 
-# Import metrics functionality
+# Import centralized configuration and middleware
 try:
+    from alchemist_shared.config.base_settings import BaseSettings
     from alchemist_shared.middleware import (
         setup_metrics_middleware,
         start_background_metrics_collection,
         stop_background_metrics_collection
     )
-    METRICS_AVAILABLE = True
+    SHARED_AVAILABLE = True
 except ImportError:
-    logging.warning("Metrics middleware not available - install alchemist-shared package")
-    METRICS_AVAILABLE = False
+    logging.warning("Alchemist shared package not available - some features may be limited")
+    SHARED_AVAILABLE = False
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -24,6 +25,16 @@ logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
+
+# Initialize centralized settings if available
+settings = None
+if SHARED_AVAILABLE:
+    try:
+        settings = BaseSettings()
+        logger.info("Centralized settings loaded successfully")
+    except Exception as e:
+        logger.warning(f"Failed to load centralized settings: {e}")
+        settings = None
 
 
 @asynccontextmanager
@@ -33,7 +44,7 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Knowledge Vault service...")
     
     # Start metrics collection if available
-    if METRICS_AVAILABLE:
+    if SHARED_AVAILABLE:
         await start_background_metrics_collection("knowledge-vault")
         logger.info("Metrics collection started")
     
@@ -43,7 +54,7 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down Knowledge Vault service...")
     
     # Stop metrics collection
-    if METRICS_AVAILABLE:
+    if SHARED_AVAILABLE:
         await stop_background_metrics_collection()
         logger.info("Metrics collection stopped")
 
@@ -66,7 +77,7 @@ app.add_middleware(
 )
 
 # Add metrics middleware if available
-if METRICS_AVAILABLE:
+if SHARED_AVAILABLE:
     setup_metrics_middleware(app, "knowledge-vault")
     logger.info("Metrics middleware enabled")
 
@@ -84,16 +95,27 @@ async def health_check():
     try:
         from datetime import datetime
         
-        # Check environment variables
-        openai_key_set = bool(os.environ.get("OPENAI_API_KEY"))
-        firebase_project = os.environ.get("FIREBASE_PROJECT_ID")
+        # Check configuration using centralized settings if available
+        if settings:
+            openai_config = settings.get_openai_config()
+            openai_key_set = bool(openai_config.get("api_key"))
+            firebase_project = settings.get_effective_firebase_project_id()
+        else:
+            # Fallback to environment variables
+            openai_key_set = bool(os.environ.get("OPENAI_API_KEY"))
+            firebase_project = os.environ.get("FIREBASE_PROJECT_ID") or os.environ.get("PROJECT_ID")
         
         health_status = {
             "service": "knowledge-vault",
             "status": "healthy",
             "timestamp": datetime.now().isoformat(),
             "version": "2.0.0",
+            "config_source": "centralized" if settings else "environment",
             "components": {
+                "alchemist_shared": {
+                    "status": "healthy" if SHARED_AVAILABLE else "unavailable",
+                    "configured": SHARED_AVAILABLE
+                },
                 "openai": {
                     "status": "healthy" if openai_key_set else "unhealthy",
                     "configured": openai_key_set

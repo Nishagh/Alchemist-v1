@@ -6,10 +6,16 @@
 # Exit on error
 set -e
 
-# Configuration
-PROJECT_ID="alchemist-e69bb"
+# Configuration - detect project from gcloud config
+PROJECT_ID=$(gcloud config get-value project)
 IMAGE_NAME="alchemist-knowledge-vault"
 REGION="us-central1"  # Change as needed
+
+# Validate that project ID was found
+if [ -z "$PROJECT_ID" ]; then
+    echo -e "${RED}Error: No Google Cloud project set. Run 'gcloud config set project YOUR_PROJECT_ID' first.${NC}"
+    exit 1
+fi
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -18,6 +24,7 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 echo -e "${YELLOW}Deploying Knowledge Base Service v2.0.0 to Google Cloud Run...${NC}"
+echo -e "${YELLOW}Using project: ${PROJECT_ID}${NC}"
 
 # Check if gcloud is installed
 if ! command -v gcloud &> /dev/null
@@ -53,9 +60,10 @@ gcloud builds submit --tag gcr.io/${PROJECT_ID}/${IMAGE_NAME} .
 echo -e "${YELLOW}Deploying to Cloud Run...${NC}"
 
 # Extract environment variables from .env file for cloud deployment
-PORT=$(grep "^PORT=" .env | cut -d '=' -f2- 2>/dev/null || echo "8080")
-ALCHEMIST_MODEL=$(grep "^ALCHEMIST_MODEL=" .env | cut -d '=' -f2- 2>/dev/null || echo "text-embedding-3-small")
-FIREBASE_STORAGE_BUCKET=$(grep "^FIREBASE_STORAGE_BUCKET=" .env | cut -d '=' -f2- 2>/dev/null || echo "${PROJECT_ID}.appspot.com")
+# Note: PORT is automatically set by Cloud Run
+# Knowledge vault uses hardcoded embeddings model (text-embedding-3-small)
+# Auto-generate Firebase storage bucket based on current project
+FIREBASE_STORAGE_BUCKET="${PROJECT_ID}.appspot.com"
 
 gcloud run deploy ${IMAGE_NAME} \
   --image gcr.io/${PROJECT_ID}/${IMAGE_NAME} \
@@ -65,7 +73,7 @@ gcloud run deploy ${IMAGE_NAME} \
   --timeout 300 \
   --memory 1Gi \
   --cpu 1 \
-  --set-env-vars="ALCHEMIST_MODEL=${ALCHEMIST_MODEL},FIREBASE_STORAGE_BUCKET=${FIREBASE_STORAGE_BUCKET}" \
+  --set-env-vars="FIREBASE_STORAGE_BUCKET=${FIREBASE_STORAGE_BUCKET},FIREBASE_PROJECT_ID=${PROJECT_ID}" \
   --update-secrets=OPENAI_API_KEY=OPENAI_API_KEY:latest \
   --min-instances=0
 

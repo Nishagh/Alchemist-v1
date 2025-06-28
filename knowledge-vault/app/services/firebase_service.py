@@ -98,13 +98,21 @@ class FirebaseService:
             chunk_id = str(uuid.uuid4())
             doc_ref = embeddings_collection.document(chunk_id)
             
-            # Prepare embedding document
+            # Extract chunk index from metadata for proper ordering
+            chunk_metadata = chunk.get('metadata', {})
+            chunk_index = chunk_metadata.get('chunk_index', 0)
+            
+            # Prepare embedding document with all chunk fields for content comparison
             embedding_doc = {
                 'id': chunk_id,
                 'file_id': chunk.get('file_id'),
                 'agent_id': agent_id,
                 'filename': chunk.get('filename'),
                 'content': chunk.get('content'),
+                'original_content': chunk.get('original_content'),  # For before/after comparison
+                'overlap_content': chunk.get('overlap_content'),    # For overlap analysis
+                'chunk_metadata': chunk_metadata,                   # Processing statistics
+                'chunk_index': chunk_index,                         # For proper ordering in preview
                 'page_number': chunk.get('page_number', 1),
                 'embedding': chunk.get('embedding'),
                 'created_at': chunk.get('created_at', SERVER_TIMESTAMP),

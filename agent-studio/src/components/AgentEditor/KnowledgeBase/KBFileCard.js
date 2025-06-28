@@ -3,7 +3,7 @@
  * 
  * Card view component for individual files in the knowledge base
  */
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Card,
   CardContent,
@@ -13,31 +13,88 @@ import {
   Box,
   Tooltip,
   useTheme,
-  alpha
+  alpha,
+  LinearProgress,
+  Chip,
+  Collapse,
+  Stack
 } from '@mui/material';
 import {
   Delete as DeleteIcon,
   Download as DownloadIcon,
-  Info as InfoIcon
+  Info as InfoIcon,
+  Refresh as RefreshIcon,
+  AutoFixHigh as CleanIcon,
+  Speed as QualityIcon,
+  Preview as PreviewIcon
 } from '@mui/icons-material';
 import { formatDate, formatFileSize } from '../../../utils/agentEditorHelpers';
 import { getFileTypeFromName } from '../../shared/FileIcon';
 import StatusBadge from '../../shared/StatusBadge';
 import FileIcon from '../../shared/FileIcon';
+import ContentPreview from './ContentPreview';
+import { getFileContentPreview } from '../../../services/knowledgeBase/knowledgeBaseService';
 
 const KBFileCard = ({ 
   file, 
   onDelete, 
   onDownload,
-  disabled = false 
+  onReprocess,
+  disabled = false,
+  renderStatus,
+  showDetails = false,
+  onToggleDetails
 }) => {
   const theme = useTheme();
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewData, setPreviewData] = useState(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
 
   const fileName = file.filename || file.name || 'Unknown File';
   const fileType = getFileTypeFromName(fileName);
   const fileSize = formatFileSize(file.size);
   const uploadDate = formatDate(file.upload_date);
   const isIndexed = file.indexed;
+  
+  // Enhanced processing status
+  const indexingStatus = file.indexing_status || 'unknown';
+  const indexingPhase = file.indexing_phase || 'unknown';
+  const progressPercent = file.progress_percent || 0;
+  const qualityScore = file.quality_score || 0;
+  const processingStats = file.processing_stats || {};
+  const contentMetadata = file.content_metadata || {};
+  const processingVersion = file.processing_version || 'v2_enhanced';
+  const chunkCount = file.chunk_count || 0;
+  
+  // Processing phase display mapping with cleaning visibility
+  const phaseDisplayMap = {
+    'preparing': 'Preparing...',
+    'extracting_text': 'Extracting Text',
+    'cleaning_content': 'Cleaning Content 🧹',
+    'smart_chunking': 'Smart Chunking 🧩',
+    'generating_embeddings': 'Generating Embeddings',
+    'storing_embeddings': 'Storing Embeddings',
+    'complete': 'Complete',
+    'failed': 'Failed'
+  };
+  
+  // Quality score color mapping
+  const getQualityColor = (score) => {
+    if (score >= 80) return 'success';
+    if (score >= 60) return 'warning';
+    return 'error';
+  };
+  
+  // Processing status color mapping
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'complete': return 'success';
+      case 'processing': return 'info';
+      case 'failed': return 'error';
+      case 'pending': return 'default';
+      default: return 'default';
+    }
+  };
 
   const handleDeleteClick = (event) => {
     event.stopPropagation();
@@ -51,6 +108,48 @@ const KBFileCard = ({
     if (onDownload) {
       onDownload(file);
     }
+  };
+
+  const handleReprocessClick = (event) => {
+    event.stopPropagation();
+    if (onReprocess) {
+      onReprocess(file);
+    }
+  };
+
+  const handleToggleDetails = (event) => {
+    event.stopPropagation();
+    if (onToggleDetails) {
+      onToggleDetails(file.id || file.file_id);
+    }
+  };
+
+  const handlePreviewClick = async (event) => {
+    event.stopPropagation();
+    setLoadingPreview(true);
+    try {
+      const data = await getFileContentPreview(file.id || file.file_id);
+      console.log('Preview data received for debugging:', {
+        filename: data?.filename,
+        processing_version: data?.processing_version,
+        has_original_text: !!data?.processing_stats?.original_text,
+        has_processed_text: !!data?.processing_stats?.processed_text,
+        original_length: data?.processing_stats?.original_text?.length || 0,
+        processed_length: data?.processing_stats?.processed_text?.length || 0
+      });
+      setPreviewData(data);
+      setShowPreview(true);
+    } catch (error) {
+      console.error('Error loading preview:', error);
+      // Show error to user
+    } finally {
+      setLoadingPreview(false);
+    }
+  };
+
+  const handleClosePreview = () => {
+    setShowPreview(false);
+    setPreviewData(null);
   };
 
   return (
@@ -82,12 +181,54 @@ const KBFileCard = ({
                 mr: 1
               }} 
             />
-            <StatusBadge 
-              status={isIndexed ? 'indexed' : 'not_indexed'} 
+            {renderStatus ? renderStatus() : (
+              <StatusBadge 
+                status={isIndexed ? 'indexed' : 'not_indexed'} 
+                size="small"
+              />
+            )}
+          </Box>
+          
+          {/* Quality Score Indicator */}
+          {qualityScore > 0 && (
+            <Chip
+              icon={<QualityIcon sx={{ fontSize: 16 }} />}
+              label={`${Math.round(qualityScore)}%`}
               size="small"
+              color={getQualityColor(qualityScore)}
+              variant="outlined"
+            />
+          )}
+        </Box>
+
+        {/* Processing Progress */}
+        {indexingStatus === 'processing' && (
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+              {phaseDisplayMap[indexingPhase] || indexingPhase}
+            </Typography>
+            <LinearProgress 
+              variant="determinate" 
+              value={progressPercent} 
+              sx={{ height: 6, borderRadius: 3 }}
+            />
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+              {progressPercent}% complete
+            </Typography>
+          </Box>
+        )}
+
+        {/* Processing Status Chip */}
+        {indexingStatus !== 'unknown' && (
+          <Box sx={{ mb: 2 }}>
+            <Chip
+              label={indexingStatus.charAt(0).toUpperCase() + indexingStatus.slice(1)}
+              size="small"
+              color={getStatusColor(indexingStatus)}
+              variant="filled"
             />
           </Box>
-        </Box>
+        )}
 
         {/* File Name */}
         <Typography 
@@ -133,6 +274,18 @@ const KBFileCard = ({
             </Typography>
           </Box>
 
+          {chunkCount > 0 && (
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Typography variant="caption" color="text.secondary">
+                Chunks
+              </Typography>
+              <Typography variant="caption" sx={{ fontWeight: 'medium' }}>
+                {chunkCount}
+              </Typography>
+            </Box>
+          )}
+
+
           {file.service && (
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <Typography variant="caption" color="text.secondary">
@@ -144,6 +297,67 @@ const KBFileCard = ({
             </Box>
           )}
         </Box>
+
+        {/* Enhanced Details Collapse */}
+        <Collapse in={showDetails}>
+          <Box sx={{ mt: 2, p: 2, bgcolor: 'action.hover', borderRadius: 1 }}>
+            <Typography variant="caption" sx={{ fontWeight: 'bold', mb: 1, display: 'block' }}>
+              Processing Details
+            </Typography>
+            
+            {processingStats.reduction_percentage && (
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Content Cleaned
+                </Typography>
+                <Typography variant="caption">
+                  {Math.round(processingStats.reduction_percentage)}%
+                </Typography>
+              </Box>
+            )}
+            
+            {contentMetadata.word_count && (
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Word Count
+                </Typography>
+                <Typography variant="caption">
+                  {contentMetadata.word_count.toLocaleString()}
+                </Typography>
+              </Box>
+            )}
+            
+            {contentMetadata.content_type_guess && (
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Content Type
+                </Typography>
+                <Typography variant="caption">
+                  {contentMetadata.content_type_guess}
+                </Typography>
+              </Box>
+            )}
+            
+            {contentMetadata.key_terms && contentMetadata.key_terms.length > 0 && (
+              <Box sx={{ mt: 1 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                  Key Terms
+                </Typography>
+                <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', gap: 0.5 }}>
+                  {contentMetadata.key_terms.slice(0, 5).map((term, index) => (
+                    <Chip
+                      key={index}
+                      label={term}
+                      size="small"
+                      variant="outlined"
+                      sx={{ height: 18, fontSize: '0.6rem' }}
+                    />
+                  ))}
+                </Stack>
+              </Box>
+            )}
+          </Box>
+        </Collapse>
 
         {/* Additional Info */}
         {file.description && (
@@ -172,6 +386,45 @@ const KBFileCard = ({
         </Box>
 
         <Box>
+          {onToggleDetails && (
+            <Tooltip title={showDetails ? "Hide details" : "Show details"}>
+              <IconButton
+                onClick={handleToggleDetails}
+                size="small"
+                disabled={disabled}
+                sx={{ mr: 1 }}
+              >
+                <InfoIcon />
+              </IconButton>
+            </Tooltip>
+          )}
+          
+          {indexingStatus === 'complete' && (
+            <Tooltip title="Preview content comparison">
+              <IconButton
+                onClick={handlePreviewClick}
+                size="small"
+                disabled={disabled || loadingPreview}
+                sx={{ mr: 1 }}
+              >
+                <PreviewIcon />
+              </IconButton>
+            </Tooltip>
+          )}
+          
+          {onReprocess && indexingStatus === 'complete' && (
+            <Tooltip title="Reprocess with enhanced cleaning">
+              <IconButton
+                onClick={handleReprocessClick}
+                size="small"
+                disabled={disabled}
+                sx={{ mr: 1 }}
+              >
+                <RefreshIcon />
+              </IconButton>
+            </Tooltip>
+          )}
+          
           {onDownload && (
             <Tooltip title="Download file">
               <IconButton
@@ -197,6 +450,17 @@ const KBFileCard = ({
           </Tooltip>
         </Box>
       </CardActions>
+      
+      {/* Content Preview Dialog */}
+      {previewData && (
+        <ContentPreview
+          file={previewData}
+          open={showPreview}
+          onClose={handleClosePreview}
+          onReprocess={onReprocess}
+          loading={loadingPreview}
+        />
+      )}
     </Card>
   );
 };

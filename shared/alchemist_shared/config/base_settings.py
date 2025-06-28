@@ -6,6 +6,7 @@ Handles common configuration patterns and environment variable loading.
 """
 
 import os
+import subprocess
 from enum import Enum
 from typing import Optional, Dict, Any
 from pydantic import Field
@@ -86,6 +87,61 @@ class BaseSettings(PydanticBaseSettings):
             os.environ.get("GOOGLE_CLOUD_PROJECT") or
             os.environ.get("GAE_APPLICATION")
         )
+    
+    @staticmethod
+    def get_gcloud_project() -> Optional[str]:
+        """
+        Get the current gcloud project ID from gcloud config.
+        
+        Returns:
+            str: Current gcloud project ID or None if not set or gcloud not available
+        """
+        try:
+            result = subprocess.run(
+                ["gcloud", "config", "get-value", "project"],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if result.returncode == 0:
+                project_id = result.stdout.strip()
+                if project_id and project_id != "(unset)":
+                    return project_id
+        except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.SubprocessError):
+            pass
+        return None
+    
+    def get_effective_firebase_project_id(self) -> Optional[str]:
+        """
+        Get the effective Firebase project ID using multiple sources in priority order:
+        1. Explicitly set FIREBASE_PROJECT_ID environment variable
+        2. Current gcloud project configuration
+        3. GOOGLE_CLOUD_PROJECT environment variable (Cloud Run)
+        4. PROJECT_ID environment variable (legacy)
+        
+        Returns:
+            str: Firebase project ID or None if not found
+        """
+        # First try explicitly set Firebase project ID
+        if self.firebase_project_id:
+            return self.firebase_project_id
+        
+        # Try gcloud config
+        gcloud_project = self.get_gcloud_project()
+        if gcloud_project:
+            return gcloud_project
+        
+        # Try Cloud Run environment variable
+        cloud_project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+        if cloud_project:
+            return cloud_project
+        
+        # Try legacy PROJECT_ID
+        legacy_project = os.environ.get("PROJECT_ID")
+        if legacy_project:
+            return legacy_project
+        
+        return None
     
     def get_service_url(self, service_name: str) -> Optional[str]:
         """Get URL for another service."""

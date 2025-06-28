@@ -1,14 +1,28 @@
-import os
+import logging
 from typing import Optional, List, Dict, Any
-from dotenv import load_dotenv
 import openai
 from tenacity import retry, wait_exponential, stop_after_attempt
 
-# Load environment variables
-load_dotenv()
+# Import centralized configuration from alchemist_shared
+from alchemist_shared.config.base_settings import BaseSettings
+from alchemist_shared.database.firebase_client import FirebaseClient
+
+logger = logging.getLogger(__name__)
 
 class OpenAIService:
+    """
+    OpenAI service for Knowledge Vault that uses centralized alchemist-shared configuration.
+    
+    This service handles:
+    - API key management through centralized settings
+    - Embedding generation for document chunks
+    - Integration with alchemist_shared configuration
+    """
+    
     _instance = None
+    _api_key: Optional[str] = None
+    _settings: Optional[BaseSettings] = None
+    _firebase_client: Optional[FirebaseClient] = None
     
     def __new__(cls):
         if cls._instance is None:
@@ -17,14 +31,37 @@ class OpenAIService:
         return cls._instance
     
     def _initialize(self):
-        """Initialize OpenAI service with API key"""
-        self.api_key = os.getenv("OPENAI_API_KEY")
-        if not self.api_key:
-            raise ValueError("OpenAI API key is required. Set OPENAI_API_KEY environment variable.")
+        """Initialize OpenAI service using centralized configuration"""
+        # Load centralized settings
+        self._settings = BaseSettings()
         
-        self.client = openai.OpenAI(api_key=self.api_key)
+        # Initialize Firebase client for potential future use
+        self._firebase_client = FirebaseClient()
+        
+        # Get OpenAI configuration from centralized settings
+        openai_config = self._settings.get_openai_config()
+        self._api_key = openai_config.get("api_key")
+        
+        if not self._api_key:
+            raise ValueError("OpenAI API key is required. Please set OPENAI_API_KEY environment variable.")
+        
+        self.client = openai.OpenAI(api_key=self._api_key)
         self.embeddings_model = "text-embedding-3-small"
         
+        logger.info(f"OpenAI service initialized with centralized config")
+        if self._api_key:
+            logger.info(f"OpenAI API key loaded: {self._api_key[:10]}...")
+        else:
+            logger.warning("No OpenAI API key found in centralized configuration")
+        
+    @property
+    def api_key(self) -> Optional[str]:
+        """Get the OpenAI API key"""
+        if not self._api_key and self._settings:
+            openai_config = self._settings.get_openai_config()
+            self._api_key = openai_config.get("api_key")
+        return self._api_key
+    
     def get_api_key(self) -> Optional[str]:
         """Get the current OpenAI API key"""
         return self.api_key

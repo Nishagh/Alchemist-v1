@@ -10,6 +10,8 @@ from bs4 import BeautifulSoup
 from firebase_admin import firestore
 from app.services.openai_service import OpenAIService
 from app.services.firebase_service import FirebaseService
+from app.services.content_processor import ContentProcessor
+from app.services.chunking_service import ChunkingService
 from app.utils.logging_config import get_logger, log_with_data
 
 SERVER_TIMESTAMP = firestore.SERVER_TIMESTAMP
@@ -23,46 +25,87 @@ class IndexingService:
         # Initialize services
         self.openai_service = OpenAIService()
         self.firebase_service = FirebaseService()
+        self.content_processor = ContentProcessor()
+        self.chunking_service = ChunkingService()
         
         self.chunk_size = 1000
         self.chunk_overlap = 200
         
         log_with_data(self.logger, "INFO", 
-                      "Indexing configuration: Firestore-only storage",
+                      "Indexing configuration: Enhanced with content processing",
                       {"chunk_size": self.chunk_size, "chunk_overlap": self.chunk_overlap})
         
     def process_file(self, file_path: str, file_id: str, content_type: str, agent_id: str, filename: str) -> List[Dict[str, Any]]:
-        """Process a file and return chunks with embeddings"""
-        # Extract text based on file type
-        text = self._extract_text(file_path, content_type)
+        """Process a file with enhanced cleaning and smart chunking"""
+        log_with_data(self.logger, "INFO", "Starting enhanced file processing", {
+            "file_id": file_id,
+            "filename": filename,
+            "content_type": content_type
+        })
         
-        # Split text into chunks
-        chunks = self._split_text(text)
+        # Step 1: Extract text based on file type
+        raw_text = self._extract_text(file_path, content_type)
         
-        # Create chunk documents with metadata
+        # Step 2: Process and clean content
+        processing_result = self.content_processor.process_content(
+            text=raw_text,
+            content_type=content_type,
+            filename=filename
+        )
+        
+        processed_text = processing_result["processed_text"]
+        content_metadata = processing_result["metadata"]
+        processing_stats = processing_result["processing_stats"]
+        
+        log_with_data(self.logger, "INFO", "Content processing completed", processing_stats)
+        
+        # Step 3: Create smart chunks
+        chunk_objects = self.chunking_service.create_smart_chunks(
+            text=processed_text,
+            metadata=content_metadata
+        )
+        
+        if not chunk_objects:
+            self.logger.warning(f"No chunks created for file {file_id}")
+            return []
+        
+        # Step 4: Generate embeddings for chunks
         chunk_docs = []
-        for i, chunk in enumerate(chunks):
-            # Skip empty chunks
-            if not chunk.strip():
-                continue
-                
-            # Generate embedding
-            embedding = self.openai_service.get_embedding(chunk)
+        for i, chunk_obj in enumerate(chunk_objects):
+            chunk_content = chunk_obj["content"]
             
-            # Create chunk document
+            # Skip empty chunks
+            if not chunk_content.strip():
+                continue
+            
+            # Generate embedding
+            embedding = self.openai_service.get_embedding(chunk_content)
+            
+            # Create enhanced chunk document
             chunk_doc = {
                 "file_id": file_id,
                 "agent_id": agent_id,
                 "filename": filename,
-                "content": chunk,
-                "page_number": i + 1,
+                "content": chunk_content,
+                "original_content": chunk_obj.get("original_content", ""),
+                "overlap_content": chunk_obj.get("overlap_content", ""),
+                "chunk_index": i,
                 "embedding": embedding,
-                "created_at": SERVER_TIMESTAMP
+                "created_at": SERVER_TIMESTAMP,
+                # Content processing metadata
+                "processing_stats": processing_stats,
+                "content_metadata": content_metadata,
+                "chunk_metadata": chunk_obj["metadata"],
+                # Quality indicators
+                "quality_score": processing_result["quality_score"],
+                "content_type_detected": content_metadata.get("content_type_guess", "general"),
+                # Legacy fields for compatibility
+                "page_number": i + 1
             }
             
             chunk_docs.append(chunk_doc)
         
-        # Store embeddings in Firestore
+        # Step 5: Store embeddings in Firestore
         embedding_ids = self.firebase_service.add_embeddings(agent_id, chunk_docs)
         
         # Update chunk docs with embedding IDs
@@ -70,7 +113,24 @@ class IndexingService:
             if i < len(embedding_ids):
                 chunk_doc['embedding_id'] = embedding_ids[i]
         
-        return chunk_docs
+        # Log final statistics
+        chunk_stats = self.chunking_service.get_chunk_statistics(chunk_objects)
+        log_with_data(self.logger, "INFO", "File processing completed", {
+            "file_id": file_id,
+            "chunks_created": len(chunk_docs),
+            "processing_stats": processing_stats,
+            "chunk_stats": chunk_stats
+        })
+        
+        # Return both chunks and full text content for preview
+        return {
+            "chunks": chunk_docs,
+            "original_text": raw_text,
+            "processed_text": processed_text,
+            "processing_stats": processing_stats,
+            "content_metadata": content_metadata,
+            "quality_score": processing_result["quality_score"]
+        }
     
     def _extract_text(self, file_path: str, content_type: str) -> str:
         """Extract text from a file based on its content type"""

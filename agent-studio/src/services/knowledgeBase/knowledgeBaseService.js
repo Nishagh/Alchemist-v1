@@ -62,18 +62,28 @@ export const uploadKnowledgeBaseFile = async (agentId, file) => {
     
     console.log('File upload response:', response.data);
     
-    // Return the response data or construct a file object if response doesn't include one
+    // Return the response data - the backend should return complete file object
     if (response.data && response.data.file) {
       return { success: true, file: response.data.file };
-    } else {
-      // If the API doesn't return the file object, create one with the information we have
+    } else if (response.data && response.data.id) {
+      // If no file object, create one with proper data from response and original file
       const newFile = {
-        id: response.data?.id || Date.now().toString(),
+        id: response.data.id,
         filename: file.name,
-        service: "alchemist-knowledge-vault",
-        indexed: true
+        size: file.size,
+        content_type: file.type || 'application/octet-stream',
+        agent_id: response.data.agent_id,
+        upload_date: new Date().toISOString(),
+        indexed: response.data.indexed || false,
+        indexing_status: response.data.indexing_status || 'pending',
+        indexing_phase: response.data.indexing_phase || null,
+        progress_percent: response.data.progress_percent || 0,
+        chunk_count: response.data.chunk_count || 0,
+        service: "alchemist-knowledge-vault"
       };
       return { success: true, file: newFile };
+    } else {
+      throw new Error('Invalid response from upload endpoint');
     }
   } catch (error) {
     console.error(`Error uploading file to knowledge base for agent ${agentId}:`, error);
@@ -150,6 +160,98 @@ export const getKnowledgeBaseSearchResults = async (agentId, query, options = {}
     return response.data.results || [];
   } catch (error) {
     console.error(`Error performing knowledge base search for agent ${agentId}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Reprocess a file with enhanced cleaning pipeline
+ */
+export const reprocessKnowledgeBaseFile = async (fileId) => {
+  try {
+    const response = await kbApi.post(`${ENDPOINTS.KB_FILES}/${fileId}/reprocess`);
+    
+    console.log('File reprocess response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error(`Error reprocessing file ${fileId}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Get detailed processing status for a file
+ */
+export const getFileProcessingStatus = async (fileId) => {
+  try {
+    const response = await kbApi.get(`${ENDPOINTS.KB_FILES}/${fileId}/status`);
+    
+    console.log('File status response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error(`Error getting processing status for file ${fileId}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Get processing statistics for all files of an agent
+ */
+export const getAgentProcessingStats = async (agentId) => {
+  try {
+    const response = await kbApi.get(`${ENDPOINTS.KNOWLEDGE_BASE}/${agentId}/stats`);
+    
+    console.log('Agent processing stats response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error(`Error getting processing stats for agent ${agentId}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Get file content preview (original vs processed)
+ */
+export const getFileContentPreview = async (fileId) => {
+  try {
+    const response = await kbApi.get(`${ENDPOINTS.KB_FILES}/${fileId}/preview`);
+    
+    console.log('File content preview response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error(`Error getting content preview for file ${fileId}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Batch reprocess multiple files
+ */
+export const batchReprocessFiles = async (fileIds) => {
+  try {
+    const response = await kbApi.post(`${ENDPOINTS.KB_FILES}/batch-reprocess`, {
+      file_ids: fileIds
+    });
+    
+    console.log('Batch reprocess response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error(`Error batch reprocessing files:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Get enhanced embedding statistics with quality metrics
+ */
+export const getEnhancedEmbeddingStats = async (agentId) => {
+  try {
+    const response = await kbApi.get(`${ENDPOINTS.KNOWLEDGE_BASE}/${agentId}/embeddings/stats`);
+    
+    console.log('Enhanced embedding stats response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error(`Error getting enhanced embedding stats for agent ${agentId}:`, error);
     throw error;
   }
 };

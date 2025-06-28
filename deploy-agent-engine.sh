@@ -5,7 +5,7 @@
 set -e
 
 # Configuration
-PROJECT_ID="alchemist-e69bb"
+PROJECT_ID=$(gcloud config get-value project)
 SERVICE_NAME="alchemist-agent-engine"
 REGION="us-central1"
 IMAGE_NAME="gcr.io/${PROJECT_ID}/${SERVICE_NAME}"

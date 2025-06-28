@@ -202,7 +202,10 @@ const FileUploadArea = ({
         <Button
           variant="outlined"
           startIcon={<AttachFileIcon />}
-          onClick={handleBrowseClick}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleBrowseClick();
+          }}
           sx={{ mt: 1 }}
         >
           Browse Files
