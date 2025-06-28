@@ -61,6 +61,7 @@ gcloud-credentials.json
 **/gcloud-credentials.json
 service-account-key.json
 **/service-account-key.json
+spanner-key.json
 
 # Logs
 *.log
