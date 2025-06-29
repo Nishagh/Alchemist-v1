@@ -18,9 +18,11 @@ from alchemist_shared.middleware import (
     stop_background_metrics_collection
 )
 
-# Import story event system (required)
-from alchemist_shared.events import init_story_event_publisher
-from alchemist_shared.config.base_settings import get_gcp_project_id
+# Import alchemist-shared components
+from alchemist_shared.events import init_story_event_publisher, get_story_event_publisher
+from alchemist_shared.config.environment import get_project_id
+from alchemist_shared.config.base_settings import BaseSettings
+from alchemist_shared.services import init_ea3_orchestrator, get_ea3_orchestrator
 
 # Set up logging
 logging.basicConfig(
@@ -44,23 +46,50 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Prompt Engine service...")
     logger.info(f"Environment: {os.environ.get('ENVIRONMENT', 'development')}")
     
-    # Initialize story event publisher (required)
-    try:
-        project_id = get_gcp_project_id()
-        init_story_event_publisher(project_id)
-        logger.info("Story event publisher initialized")
-    except Exception as e:
-        logger.error(f"Failed to initialize story event publisher: {e}")
-        raise
+    # Get project ID for cloud services
+    project_id = get_project_id()
+    logger.info(f"Using project ID: {project_id}")
     
     # Start metrics collection
     await start_background_metrics_collection("prompt-engine")
     logger.info("Metrics collection started")
     
+    # Initialize story event publisher for EA3 integration
+    if project_id:
+        try:
+            story_publisher = init_story_event_publisher(project_id)
+            logger.info("Story event publisher initialized")
+        except Exception as e:
+            logger.warning(f"Story event publisher initialization failed: {e}")
+    
+    # Initialize EA3 orchestrator for prompt optimization tracking
+    if project_id:
+        try:
+            redis_url = os.environ.get("REDIS_URL")
+            await init_ea3_orchestrator(
+                project_id=project_id,
+                instance_id=os.environ.get("SPANNER_INSTANCE_ID", "alchemist-graph"),
+                database_id=os.environ.get("SPANNER_DATABASE_ID", "agent-stories"),
+                redis_url=redis_url,
+                enable_event_processing=False  # Prompt engine publishes events but doesn't process them
+            )
+            logger.info("EA3 orchestrator initialized for prompt optimization tracking")
+        except Exception as e:
+            logger.warning(f"EA3 orchestrator initialization failed: {e}")
+    
     yield
     
     # Shutdown
     logger.info("Shutting down Prompt Engine service...")
+    
+    # Shutdown EA3 services
+    try:
+        ea3_orchestrator = get_ea3_orchestrator()
+        if ea3_orchestrator:
+            await ea3_orchestrator.shutdown()
+            logger.info("EA3 orchestrator shutdown completed")
+    except Exception as e:
+        logger.warning(f"Error shutting down EA3 services: {e}")
     
     # Stop metrics collection
     await stop_background_metrics_collection()
@@ -90,10 +119,36 @@ logger.info("Metrics middleware enabled")
 # Include the routes
 app.include_router(router)
 
+# Initialize centralized settings
+settings = BaseSettings()
+openai_config = settings.get_openai_config()
+openai_key_available = bool(openai_config.get("api_key"))
+
 # Add a health check endpoint
 @app.get("/health")
 async def health_check():
-    return {"status": "ok"}
+    from datetime import datetime
+    
+    # Get EA3 and story event status
+    ea3_orchestrator = get_ea3_orchestrator()
+    story_publisher = get_story_event_publisher()
+    
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "version": "1.0.0",
+        "service": "prompt-engine",
+        "project_id": get_project_id(),
+        "config_source": "alchemist-shared",
+        "components": {
+            "ea3_orchestrator": ea3_orchestrator is not None,
+            "story_event_publisher": story_publisher is not None,
+            "openai": {
+                "status": "configured" if openai_key_available else "not_configured",
+                "source": "alchemist-shared"
+            }
+        }
+    }
 
 # Add a root endpoint that redirects to docs
 @app.get("/")

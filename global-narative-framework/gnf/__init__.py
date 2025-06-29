@@ -10,10 +10,8 @@ __author__ = "Alchemist Platform"
 
 from .core.identity_schema import AgentIdentity
 from .core.narrative_tracker import NarrativeTracker
-from .api.main import create_app
 
 __all__ = [
     "AgentIdentity",
-    "NarrativeTracker", 
-    "create_app"
+    "NarrativeTracker"
 ]

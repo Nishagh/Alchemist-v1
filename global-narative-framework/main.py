@@ -14,18 +14,34 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import uvicorn
 
-from ..core.identity_schema import AgentIdentity
-from ..core.narrative_tracker import NarrativeTracker
-from ..core.memory_integration import MemoryIntegration
-from ..core.identity_evolution import IdentityEvolution
-from ..storage.firebase_client import FirebaseClient, get_firebase_client
-from ..storage.models import (
+from gnf.core.identity_schema import AgentIdentity
+from gnf.core.narrative_tracker import NarrativeTracker
+from gnf.core.memory_integration import MemoryIntegration
+from gnf.core.identity_evolution import IdentityEvolution
+from gnf.storage.firebase_client import FirebaseClient, get_firebase_client
+from gnf.storage.models import (
     InteractionRecord, MemoryType, DevelopmentStage,
     InteractionType, ImpactLevel, EmotionalTone
 )
-from ..ai.openai_client import OpenAIClient
-from ..ai.narrative_ai import NarrativeAI
+from gnf.ai.openai_client import OpenAIClient
+from gnf.ai.narrative_ai import NarrativeAI
 from dotenv import load_dotenv
+
+# Import alchemist-shared components
+from alchemist_shared.config.environment import get_project_id
+from alchemist_shared.config.base_settings import BaseSettings
+from alchemist_shared.middleware import (
+    setup_metrics_middleware,
+    start_background_metrics_collection,
+    stop_background_metrics_collection
+)
+from alchemist_shared.services import (
+    init_ea3_orchestrator, get_ea3_orchestrator
+)
+from alchemist_shared.events import (
+    init_story_event_publisher, get_story_event_publisher,
+    StoryEvent, StoryEventType, StoryEventPriority
+)
 
 load_dotenv()
 
@@ -37,31 +53,68 @@ narrative_tracker: Optional[NarrativeTracker] = None
 memory_integration: Optional[MemoryIntegration] = None
 identity_evolution: Optional[IdentityEvolution] = None
 narrative_ai: Optional[NarrativeAI] = None
+project_id: Optional[str] = None
+
+# Initialize centralized settings
+settings = BaseSettings()
+openai_config = settings.get_openai_config()
+openai_key_available = bool(openai_config.get("api_key"))
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application lifespan and initialization."""
-    global narrative_tracker, memory_integration, identity_evolution, narrative_ai
+    global narrative_tracker, memory_integration, identity_evolution, narrative_ai, project_id
     
     try:
+        # Get project ID for cloud services
+        project_id = get_project_id()
+        logger.info(f"Using project ID: {project_id}")
+        
+        # Start metrics collection
+        await start_background_metrics_collection("global-narrative-framework")
+        logger.info("Metrics collection started")
+        
+        # Initialize story event publisher for EA3 integration
+        if project_id:
+            try:
+                story_publisher = init_story_event_publisher(project_id)
+                logger.info("Story event publisher initialized")
+            except Exception as e:
+                logger.warning(f"Story event publisher initialization failed: {e}")
+        
+        # Initialize EA3 orchestrator for narrative coherence
+        if project_id:
+            try:
+                redis_url = os.environ.get("REDIS_URL")
+                await init_ea3_orchestrator(
+                    project_id=project_id,
+                    instance_id=os.environ.get("SPANNER_INSTANCE_ID", "alchemist-graph"),
+                    database_id=os.environ.get("SPANNER_DATABASE_ID", "agent-stories"),
+                    redis_url=redis_url,
+                    enable_event_processing=True  # GNF processes narrative events
+                )
+                logger.info("EA3 orchestrator initialized for narrative coherence")
+            except Exception as e:
+                logger.warning(f"EA3 orchestrator initialization failed: {e}")
+        
         # Initialize components
         firebase_client = get_firebase_client()
         narrative_tracker = NarrativeTracker(firebase_client)
         memory_integration = MemoryIntegration(firebase_client)
         identity_evolution = IdentityEvolution(firebase_client)
         
-        # Initialize AI components if OpenAI key is available
-        if os.getenv('OPENAI_API_KEY'):
+        # Initialize AI components if OpenAI key is available via shared library
+        if openai_key_available:
             try:
                 openai_client = OpenAIClient()
                 narrative_ai = NarrativeAI(openai_client)
-                logger.info("AI-enhanced analysis enabled")
+                logger.info("AI-enhanced analysis enabled via shared library")
             except Exception as e:
                 logger.warning(f"AI components disabled: {e}")
                 narrative_ai = None
         else:
-            logger.info("OpenAI API key not found, AI features disabled")
+            logger.info("OpenAI API key not found in shared library, AI features disabled")
             narrative_ai = None
         
         logger.info("Global Narrative Framework API initialized successfully")
@@ -71,6 +124,19 @@ async def lifespan(app: FastAPI):
         logger.error(f"Failed to initialize API: {e}")
         raise
     finally:
+        # Shutdown EA3 services
+        try:
+            ea3_orchestrator = get_ea3_orchestrator()
+            if ea3_orchestrator:
+                await ea3_orchestrator.shutdown()
+                logger.info("EA3 orchestrator shutdown completed")
+        except Exception as e:
+            logger.warning(f"Error shutting down EA3 services: {e}")
+        
+        # Stop metrics collection
+        await stop_background_metrics_collection()
+        logger.info("Metrics collection stopped")
+        
         # Cleanup
         if narrative_tracker:
             narrative_tracker.close()
@@ -79,7 +145,7 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app
 app = FastAPI(
     title="Global Narrative Framework API",
-    description="REST API for AI agent identity, narrative tracking, and evolution",
+    description="REST API for AI agent identity, narrative tracking, and evolution with EA3 integration",
     version="2.0.0",
     lifespan=lifespan
 )
@@ -87,11 +153,20 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=[
+        "https://alchemist.olbrain.com",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "*"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add metrics middleware
+setup_metrics_middleware(app, "global-narrative-framework")
+logger.info("Metrics middleware enabled")
 
 
 # Pydantic models for API
@@ -172,16 +247,28 @@ async def get_narrative_ai() -> Optional[NarrativeAI]:
 # Health check endpoint
 @app.get("/health")
 async def health_check():
-    """Health check endpoint."""
+    """Health check endpoint with EA3 integration status."""
+    ea3_orchestrator = get_ea3_orchestrator()
+    story_publisher = get_story_event_publisher()
+    
     return {
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
         "version": "2.0.0",
+        "service": "global-narrative-framework",
+        "project_id": project_id,
+        "config_source": "alchemist-shared",
         "components": {
             "narrative_tracker": narrative_tracker is not None,
             "memory_integration": memory_integration is not None,
             "identity_evolution": identity_evolution is not None,
-            "ai_enhancement": narrative_ai is not None
+            "ai_enhancement": narrative_ai is not None,
+            "ea3_orchestrator": ea3_orchestrator is not None,
+            "story_event_publisher": story_publisher is not None,
+            "openai": {
+                "status": "configured" if openai_key_available else "not_configured",
+                "source": "alchemist-shared"
+            }
         }
     }
 
@@ -306,6 +393,15 @@ async def record_interaction(
         
         result = await tracker.track_interaction(interaction_data)
         
+        # Publish story event for EA3 tracking
+        story_publisher = get_story_event_publisher()
+        if story_publisher:
+            background_tasks.add_task(
+                publish_interaction_story_event,
+                request.agent_id,
+                interaction_data
+            )
+        
         # Add AI enhancement in background if available
         if ai_system:
             background_tasks.add_task(
@@ -377,6 +473,15 @@ async def record_action(
         
         # Update agent in Firebase
         await tracker._persist_agent(agent)
+        
+        # Publish story event for EA3 tracking
+        story_publisher = get_story_event_publisher()
+        if story_publisher:
+            background_tasks.add_task(
+                publish_action_story_event,
+                request.agent_id,
+                action_data
+            )
         
         # Add AI enhancement in background if available
         if ai_system:
@@ -973,6 +1078,55 @@ async def backup_agent(
 
 
 # Background task functions
+async def publish_interaction_story_event(agent_id: str, interaction_data: Dict[str, Any]):
+    """Background task to publish interaction as story event for EA3 tracking."""
+    try:
+        story_publisher = get_story_event_publisher()
+        if story_publisher:
+            await story_publisher.publish_conversation_event(
+                agent_id=agent_id,
+                user_message=interaction_data.get('content', '')[:200],
+                agent_response="Interaction processed",
+                conversation_id=f"gnf-{agent_id}-{datetime.utcnow().timestamp()}",
+                source_service="global-narrative-framework",
+                metadata={
+                    "interaction_type": interaction_data.get('type'),
+                    "participants": interaction_data.get('participants', []),
+                    "impact_level": interaction_data.get('impact', 'medium'),
+                    "emotional_tone": interaction_data.get('emotional_tone', 'neutral')
+                }
+            )
+            logger.debug(f"Published interaction story event for agent {agent_id}")
+    except Exception as e:
+        logger.error(f"Failed to publish interaction story event: {e}")
+
+
+async def publish_action_story_event(agent_id: str, action_data: Dict[str, Any]):
+    """Background task to publish action as story event for EA3 tracking."""
+    try:
+        story_publisher = get_story_event_publisher()
+        if story_publisher:
+            event = StoryEvent(
+                agent_id=agent_id,
+                event_type=StoryEventType.DECISION_MADE,
+                content=f"Agent performed action: {action_data.get('description', 'Unknown action')}",
+                source_service="global-narrative-framework",
+                priority=StoryEventPriority.HIGH if action_data.get('ethical_weight', 0) > 0.7 else StoryEventPriority.MEDIUM,
+                metadata={
+                    "action_type": action_data.get('action_type'),
+                    "success": action_data.get('success', True),
+                    "responsibility_level": action_data.get('responsibility_level', 0.5),
+                    "ethical_weight": action_data.get('ethical_weight', 0.0),
+                    "intended_outcome": action_data.get('intended_outcome'),
+                    "actual_outcome": action_data.get('actual_outcome')
+                }
+            )
+            await story_publisher.publish_event(event)
+            logger.debug(f"Published action story event for agent {agent_id}")
+    except Exception as e:
+        logger.error(f"Failed to publish action story event: {e}")
+
+
 async def enhance_interaction_with_ai(agent_id: str, interaction_data: Dict[str, Any], ai_system: NarrativeAI):
     """Background task to enhance interaction with AI analysis."""
     try:
@@ -1013,7 +1167,7 @@ def create_app() -> FastAPI:
 if __name__ == "__main__":
     # Run the application
     uvicorn.run(
-        "gnf.api.main:app",
+        "main:app",
         host=os.getenv("HOST", "0.0.0.0"),
         port=int(os.getenv("PORT", 8080)),
         reload=False,

@@ -4,11 +4,17 @@
 
 set -e
 
-# Configuration
-PROJECT_ID="alchemist-e69bb"
+# Configuration - detect project from gcloud config
+PROJECT_ID=$(gcloud config get-value project)
 SERVICE_NAME="global-narrative-framework"
 REGION="us-central1"
 IMAGE_NAME="gcr.io/${PROJECT_ID}/${SERVICE_NAME}"
+
+# Validate that project ID was found
+if [ -z "$PROJECT_ID" ]; then
+    echo -e "${RED}Error: No Google Cloud project set. Run 'gcloud config set project YOUR_PROJECT_ID' first.${NC}"
+    exit 1
+fi
 
 # Colors for output
 RED='\033[0;31m'
@@ -50,7 +56,7 @@ gcloud config set project ${PROJECT_ID}
 
 # Enable required APIs
 echo -e "${BLUE}🔧 Ensuring required APIs are enabled...${NC}"
-gcloud services enable run.googleapis.com containerregistry.googleapis.com cloudbuild.googleapis.com secretmanager.googleapis.com
+gcloud services enable run.googleapis.com containerregistry.googleapis.com cloudbuild.googleapis.com secretmanager.googleapis.com pubsub.googleapis.com spanner.googleapis.com
 
 # Copy shared module to local directory for Docker context
 echo -e "${BLUE}📦 Preparing shared module...${NC}"
@@ -80,56 +86,17 @@ else
     echo -e "   ⚠️  OPENAI_API_KEY not set in environment - using existing secret value"
 fi
 
-# Create deployment-specific Dockerfile
-echo -e "${YELLOW}📦 Creating deployment Dockerfile...${NC}"
-cat > Dockerfile.deploy << EOF
-# Multi-stage Docker build for Global Narrative Framework
-FROM python:3.12-slim as base
-
-# Set environment variables
-ENV PYTHONDONTWRITEBYTECODE=1 \\
-    PYTHONUNBUFFERED=1 \\
-    PYTHONPATH=/app
-
-# Install system dependencies
-RUN apt-get update && apt-get install -y \\
-    curl \\
-    gcc \\
-    && rm -rf /var/lib/apt/lists/*
-
-# Create non-root user
-RUN groupadd -r appuser && useradd -r -g appuser appuser
-
-WORKDIR /app
-
-# Copy requirements and install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt gunicorn
-
-# Copy and install shared libraries
-COPY shared /app/shared
-RUN cd /app/shared && pip install -e .
-
-# Copy application code
-COPY gnf ./gnf
-COPY firebase.json firestore.rules firestore.indexes.json ./
-
-# Set ownership
-RUN chown -R appuser:appuser /app
-
-# Switch to non-root user
-USER appuser
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \\
-    CMD curl -f http://localhost:\${PORT:-8080}/health || exit 1
-
-# Expose port
-EXPOSE 8080
-
-# Command to run the application
-CMD exec gunicorn --bind :\${PORT:-8080} --workers 1 --worker-class uvicorn.workers.UvicornWorker --timeout 300 gnf.api.main:app
-EOF
+# Verify required files exist
+echo -e "${YELLOW}📦 Verifying project structure...${NC}"
+if [ ! -f "Dockerfile" ]; then
+    echo -e "${RED}❌ Dockerfile not found in global-narative-framework directory${NC}"
+    exit 1
+fi
+if [ ! -f "main.py" ]; then
+    echo -e "${RED}❌ main.py not found in global-narative-framework directory${NC}"
+    exit 1
+fi
+echo -e "${GREEN}✅ Project structure verified${NC}"
 
 # Create deployment-specific .dockerignore
 echo -e "${YELLOW}📝 Creating deployment .dockerignore...${NC}"
@@ -210,6 +177,7 @@ vector_data*/
 *.db
 
 # Include what we need
+!main.py
 !gnf/
 !shared/
 !requirements.txt
@@ -243,7 +211,7 @@ gcloud run deploy $SERVICE_NAME \
   --concurrency=80 \
   --max-instances=5 \
   --min-instances=0 \
-  --set-env-vars="ENVIRONMENT=production,FIREBASE_PROJECT_ID=${PROJECT_ID},PYTHONPATH=/app" \
+  --set-env-vars="ENVIRONMENT=production,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},FIREBASE_PROJECT_ID=${PROJECT_ID},SPANNER_INSTANCE_ID=alchemist-graph,SPANNER_DATABASE_ID=agent-stories,PYTHONPATH=/app" \
   --set-secrets="OPENAI_API_KEY=${SECRET_NAME}:latest"
 
 # Get the service URL
@@ -251,7 +219,7 @@ SERVICE_URL=$(gcloud run services describe ${SERVICE_NAME} --region=${REGION} --
 
 # Cleanup temporary files
 echo -e "${YELLOW}🧹 Cleaning up temporary files...${NC}"
-rm -f Dockerfile.deploy .dockerignore.deploy
+rm -f .dockerignore.deploy
 
 # Restore original .dockerignore if it existed
 if [ -f ".dockerignore.backup" ]; then

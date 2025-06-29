@@ -4,11 +4,17 @@
 
 set -e
 
-# Configuration
+# Configuration - detect project from gcloud config
 PROJECT_ID=$(gcloud config get-value project)
 SERVICE_NAME="alchemist-prompt-engine"
 REGION="us-central1"
 IMAGE_NAME="gcr.io/${PROJECT_ID}/${SERVICE_NAME}"
+
+# Validate that project ID was found
+if [ -z "$PROJECT_ID" ]; then
+    echo -e "${RED}Error: No Google Cloud project set. Run 'gcloud config set project YOUR_PROJECT_ID' first.${NC}"
+    exit 1
+fi
 
 # Colors for output
 RED='\033[0;31m'
@@ -59,204 +65,44 @@ fi
 echo -e "${YELLOW}📁 Setting Google Cloud project to: ${PROJECT_ID}${NC}"
 gcloud config set project ${PROJECT_ID}
 
+# Enable required APIs
+echo -e "${BLUE}🔧 Ensuring required APIs are enabled...${NC}"
+gcloud services enable run.googleapis.com containerregistry.googleapis.com cloudbuild.googleapis.com secretmanager.googleapis.com pubsub.googleapis.com spanner.googleapis.com
 
-# Create temporary Dockerfile for deployment
-echo -e "${YELLOW}📦 Creating deployment Dockerfile...${NC}"
-cat > Dockerfile.prompt-engine << EOF
-# Multi-stage Docker build for Prompt Engine
-FROM python:3.12-slim as base
 
-# Set environment variables
-ENV PYTHONDONTWRITEBYTECODE=1 \\
-    PYTHONUNBUFFERED=1 \\
-    PYTHONPATH=/app
+# Navigate to prompt-engine directory and use existing Dockerfile
+echo -e "${YELLOW}📦 Preparing prompt-engine for deployment...${NC}"
+cd prompt-engine
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \\
-    curl \\
-    gcc \\
-    && rm -rf /var/lib/apt/lists/*
-
-# Create non-root user
-RUN groupadd -r appuser && useradd -r -g appuser appuser
-
-WORKDIR /app
-
-# Copy requirements and install dependencies
-COPY prompt-engine/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt gunicorn
-
-# Copy and install shared libraries
-COPY shared /app/shared
-RUN cd /app/shared && pip install -e .
-
-# Copy application code
-COPY prompt-engine .
-
-# Set ownership
-RUN chown -R appuser:appuser /app
-
-# Switch to non-root user
-USER appuser
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \\
-    CMD curl -f http://localhost:\${PORT:-8080}/health || exit 1
-
-# Expose port
-EXPOSE 8080
-
-# Command to run the application
-CMD exec gunicorn --bind :\${PORT:-8080} --workers 1 --worker-class uvicorn.workers.UvicornWorker --timeout 300 main:app
-EOF
-
-# Create deployment-specific .dockerignore
-echo -e "${YELLOW}📝 Creating deployment .dockerignore...${NC}"
-cat > .dockerignore.prompt-engine << EOF
-# Exclude all other services except prompt-engine and shared
-admin-dashboard/
-agent-bridge/
-agent-studio/
-agent-tuning-service/
-agent-engine/
-alchemist-monitor-service/
-banking-api-service/
-knowledge-vault/
-mcp_config_generator/
-billing-service/
-sandbox-console/
-tool-forge/
-user-deployment-monitor/
-agent-launcher/
-global-narative-framework/
-
-# Exclude documentation and scripts
-docs/
-scripts/
-tools/
-deployment/
-
-# Exclude build artifacts and dependencies
-**/node_modules/
-**/build/
-**/dist/
-**/.next/
-**/coverage/
-
-# Exclude git and version control
-.git/
-.gitignore
-**/.gitkeep
-
-# Exclude temporary and cache files
-**/.cache/
-**/tmp/
-**/temp/
-**/*.tmp
-**/*.log
-**/*.pid
-**/*.seed
-**/*.pid.lock
-
-# Exclude test files and data
-**/tests/
-**/*test*/
-**/test_*/
-**/*.test.js
-**/*.spec.js
-
-# Exclude development files
-**/.env*
-!**/.env.example
-**/.vscode/
-**/.idea/
-**/*.swp
-**/*.swo
-
-# Exclude OS files
-.DS_Store
-Thumbs.db
-**/.DS_Store
-**/Thumbs.db
-
-# Exclude Python cache and virtual environments
-**/__pycache__/
-**/*.pyc
-**/*.pyo
-**/*.pyd
-**/venv/
-**/env/
-**/.venv/
-**/test_env/
-**/*.egg-info/
-
-# Exclude vector data and large files
-**/vector_data*/
-**/*.bin
-**/*.sqlite3
-**/*.db
-
-# Exclude credentials and config files that shouldn't be in container
-firebase-credentials.json
-**/firebase-credentials.json
-gcloud-credentials.json
-**/gcloud-credentials.json
-service-account-key.json
-**/service-account-key.json
-**/secrets/
-**/credentials/
-**/keys/
-**/certificates/
-
-# Exclude shared libraries build artifacts
-shared/build/
-shared/dist/
-
-# Include what we need for prompt-engine
-!prompt-engine/
-!shared/
-
-# Exclude deployment configs at root
-cloudbuild*.yaml
-deploy*.sh
-docker-compose*.yml
-Makefile
-EOF
-
-# Backup original .dockerignore if it exists
-if [ -f ".dockerignore" ]; then
-    cp .dockerignore .dockerignore.backup
+# Copy shared module to local directory for Docker context
+echo -e "${BLUE}📦 Preparing shared module...${NC}"
+if [ -d "./shared" ]; then
+    rm -rf ./shared
 fi
+cp -r ../shared ./shared
 
-# Use deployment .dockerignore
-cp .dockerignore.prompt-engine .dockerignore
+# Verify required files exist
+if [ ! -f "Dockerfile" ]; then
+    echo -e "${RED}❌ Dockerfile not found in prompt-engine directory${NC}"
+    exit 1
+fi
+if [ ! -f "main.py" ]; then
+    echo -e "${RED}❌ main.py not found in prompt-engine directory${NC}"
+    exit 1
+fi
+echo -e "${GREEN}✅ Prompt engine structure verified${NC}"
 
-# Build and submit to Cloud Build
+# Build using existing Dockerfile and gcloud builds submit
 echo -e "${YELLOW}🔨 Building and pushing image with Cloud Build...${NC}"
-TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-
-# Create a temporary cloudbuild.yaml for custom Dockerfile
-cat > cloudbuild-temp.yaml << EOF
-steps:
-- name: 'gcr.io/cloud-builders/docker'
-  args: ['build', '-f', 'Dockerfile.prompt-engine', '-t', '${IMAGE_NAME}:latest', '.']
-- name: 'gcr.io/cloud-builders/docker'
-  args: ['push', '${IMAGE_NAME}:latest']
-- name: 'gcr.io/cloud-builders/docker'
-  args: ['tag', '${IMAGE_NAME}:latest', '${IMAGE_NAME}:${TIMESTAMP}']
-- name: 'gcr.io/cloud-builders/docker'
-  args: ['push', '${IMAGE_NAME}:${TIMESTAMP}']
-EOF
-
-gcloud builds submit --config=cloudbuild-temp.yaml .
+gcloud builds submit --tag=${IMAGE_NAME}
 
 # Deploy to Cloud Run
 echo -e "${YELLOW}🚀 Deploying to Cloud Run...${NC}"
 
-# Build environment variables from prompt-engine/.env
+# Build environment variables from .env file if it exists
 ENV_VARS=""
-if [ -f "prompt-engine/.env" ]; then
-    echo -e "${BLUE}📋 Loading environment variables from prompt-engine/.env...${NC}"
+if [ -f ".env" ]; then
+    echo -e "${BLUE}📋 Loading environment variables from .env...${NC}"
     while IFS= read -r line || [ -n "$line" ]; do
         # Skip comments and empty lines
         if [[ "$line" =~ ^[[:space:]]*# ]] || [[ -z "${line// }" ]]; then
@@ -277,16 +123,16 @@ if [ -f "prompt-engine/.env" ]; then
                 ENV_VARS="$key=$value"
             fi
         fi
-    done < "prompt-engine/.env"
+    done < ".env"
 fi
 
-# Override with production-specific values
-ENV_VARS="$ENV_VARS,ENVIRONMENT=production,FIREBASE_PROJECT_ID=${PROJECT_ID}"
+# Override with production-specific values for EA3 integration
+ENV_VARS="$ENV_VARS,ENVIRONMENT=production,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},FIREBASE_PROJECT_ID=${PROJECT_ID},SPANNER_INSTANCE_ID=alchemist-graph,SPANNER_DATABASE_ID=agent-stories"
 
 echo -e "${BLUE}🔧 Setting environment variables: $ENV_VARS${NC}"
 
 gcloud run deploy ${SERVICE_NAME} \
-    --image ${IMAGE_NAME}:latest \
+    --image ${IMAGE_NAME} \
     --platform managed \
     --region ${REGION} \
     --allow-unauthenticated \
@@ -301,16 +147,14 @@ gcloud run deploy ${SERVICE_NAME} \
 # Get the service URL
 SERVICE_URL=$(gcloud run services describe ${SERVICE_NAME} --region=${REGION} --format="value(status.url)")
 
-# Cleanup temporary files
-echo -e "${YELLOW}🧹 Cleaning up temporary files...${NC}"
-rm -f Dockerfile.prompt-engine .dockerignore.prompt-engine cloudbuild-temp.yaml
-
-# Restore original .dockerignore if it existed
-if [ -f ".dockerignore.backup" ]; then
-    mv .dockerignore.backup .dockerignore
-else
-    rm -f .dockerignore
+# Cleanup shared directory
+echo -e "${YELLOW}🧹 Cleaning up...${NC}"
+if [ -d "./shared" ]; then
+    rm -rf ./shared
 fi
+
+# Go back to root directory
+cd ..
 
 echo ""
 echo -e "${GREEN}✅ Deployment completed successfully!${NC}"

@@ -5,11 +5,20 @@ This module defines the FastAPI routes for the Prompt Engineer Agent functionali
 """
 import logging
 from typing import Dict, Any, Optional
+from datetime import datetime
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 
 from api import prompt_engineer_api
+
+# Import story event system for EA3 integration
+from alchemist_shared.events import (
+    get_story_event_publisher, 
+    StoryEvent, 
+    StoryEventType, 
+    StoryEventPriority
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +39,10 @@ class PromptResponse(BaseModel):
     thought_process: Optional[list] = None
 
 @router.post("/prompt", response_model=PromptResponse)
-async def create_or_update_prompt(request: PromptInstructionsRequest) -> Dict[str, Any]:
+async def create_or_update_prompt(
+    request: PromptInstructionsRequest, 
+    background_tasks: BackgroundTasks
+) -> Dict[str, Any]:
     """
     Create or update an agent's system prompt based on the provided instructions.
     If the agent already has a system prompt, it will be updated.
@@ -65,13 +77,24 @@ async def create_or_update_prompt(request: PromptInstructionsRequest) -> Dict[st
         
         # Return the successful result
         created = result.get("mode", "") == "create"
-        return {
+        response = {
             "agent_id": request.agent_id,
             "prompt": result.get("updated_prompt", ""),
             "status": "success",
             "created": created,
             "thought_process": result.get("thought_process", [])
         }
+        
+        # Publish story event for EA3 tracking
+        background_tasks.add_task(
+            publish_prompt_update_event,
+            request.agent_id,
+            created,
+            result.get("updated_prompt", ""),
+            request.instructions
+        )
+        
+        return response
         
     except Exception as e:
         error_message = f"Error in prompt engineer route: {str(e)}"
@@ -90,3 +113,37 @@ async def create_or_update_prompt(request: PromptInstructionsRequest) -> Dict[st
         # We can either raise an HTTPException or return the error_response
         # Return the error response to match the expected response model
         return error_response
+
+
+# Background task functions
+async def publish_prompt_update_event(
+    agent_id: str, 
+    created: bool, 
+    prompt: str, 
+    instructions: str
+):
+    """Background task to publish prompt update as story event for EA3 tracking."""
+    try:
+        story_publisher = get_story_event_publisher()
+        if story_publisher:
+            event_type = StoryEventType.SYSTEM_UPDATE
+            action = "created" if created else "updated"
+            
+            event = StoryEvent(
+                agent_id=agent_id,
+                event_type=event_type,
+                content=f"Agent prompt {action} based on instructions: {instructions[:100]}...",
+                source_service="prompt-engine",
+                priority=StoryEventPriority.HIGH,  # Prompt changes are important for narrative
+                metadata={
+                    "action": action,
+                    "prompt_length": len(prompt),
+                    "instructions": instructions,
+                    "created": created,
+                    "prompt_preview": prompt[:200] + "..." if len(prompt) > 200 else prompt
+                }
+            )
+            await story_publisher.publish_event(event)
+            logger.debug(f"Published prompt {action} story event for agent {agent_id}")
+    except Exception as e:
+        logger.error(f"Failed to publish prompt update story event: {e}")

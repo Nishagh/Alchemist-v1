@@ -5,11 +5,17 @@
 # Exit on error
 set -e
 
-# Configuration
+# Configuration - detect project from gcloud config
 PROJECT_ID=$(gcloud config get-value project)
 SERVICE_NAME="alchemist-prompt-engine"
 REGION="us-central1"
 IMAGE_NAME="gcr.io/$PROJECT_ID/$SERVICE_NAME"
+
+# Validate that project ID was found
+if [ -z "$PROJECT_ID" ]; then
+    echo -e "${RED}Error: No Google Cloud project set. Run 'gcloud config set project YOUR_PROJECT_ID' first.${NC}"
+    exit 1
+fi
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -33,7 +39,7 @@ gcloud config set project $PROJECT_ID
 
 # Enable required APIs
 echo -e "${BLUE}Ensuring required APIs are enabled...${NC}"
-gcloud services enable run.googleapis.com containerregistry.googleapis.com cloudbuild.googleapis.com secretmanager.googleapis.com
+gcloud services enable run.googleapis.com containerregistry.googleapis.com cloudbuild.googleapis.com secretmanager.googleapis.com pubsub.googleapis.com spanner.googleapis.com
 
 # Copy shared module to local directory for Docker context
 echo -e "${BLUE}📦 Preparing shared module...${NC}"
@@ -75,7 +81,7 @@ gcloud run deploy $SERVICE_NAME \
   --allow-unauthenticated \
   --memory=1Gi \
   --timeout=300 \
-  --set-env-vars="ENVIRONMENT=production" \
+  --set-env-vars="ENVIRONMENT=production,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},SPANNER_INSTANCE_ID=alchemist-graph,SPANNER_DATABASE_ID=agent-stories" \
   --set-secrets="OPENAI_API_KEY=${SECRET_NAME}:latest"
 
 # Cleanup shared directory

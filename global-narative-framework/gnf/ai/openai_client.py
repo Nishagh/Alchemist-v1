@@ -7,9 +7,17 @@ import asyncio
 import logging
 from typing import Dict, List, Optional, Any, Union
 from datetime import datetime
-import openai
-from openai import AsyncOpenAI
 import json
+
+# Use shared OpenAI service for consistency
+try:
+    from alchemist_shared.services.openai_service import OpenAIService
+    SHARED_OPENAI_AVAILABLE = True
+except ImportError:
+    # Fallback to direct OpenAI import
+    import openai
+    from openai import AsyncOpenAI
+    SHARED_OPENAI_AVAILABLE = False
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -21,12 +29,29 @@ class OpenAIClient:
     """
     
     def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4"):
-        self.api_key = api_key or os.getenv('OPENAI_API_KEY')
         self.model = model
-        self.client = AsyncOpenAI(api_key=self.api_key)
         
-        if not self.api_key:
-            raise ValueError("OpenAI API key is required. Set OPENAI_API_KEY environment variable.")
+        if SHARED_OPENAI_AVAILABLE:
+            # Use shared OpenAI service for consistency
+            try:
+                self.openai_service = OpenAIService()
+                self.client = self.openai_service.client
+                logger.info("Using shared OpenAI service for narrative analysis")
+            except Exception as e:
+                logger.warning(f"Failed to initialize shared OpenAI service: {e}")
+                # Fallback to direct client
+                self.api_key = api_key or os.getenv('OPENAI_API_KEY')
+                if not self.api_key:
+                    raise ValueError("OpenAI API key is required. Set OPENAI_API_KEY environment variable.")
+                self.client = AsyncOpenAI(api_key=self.api_key)
+                self.openai_service = None
+        else:
+            # Direct OpenAI client fallback
+            self.api_key = api_key or os.getenv('OPENAI_API_KEY')
+            if not self.api_key:
+                raise ValueError("OpenAI API key is required. Set OPENAI_API_KEY environment variable.")
+            self.client = AsyncOpenAI(api_key=self.api_key)
+            self.openai_service = None
         
         # Configuration for different analysis types
         self.analysis_configs = self._setup_analysis_configs()

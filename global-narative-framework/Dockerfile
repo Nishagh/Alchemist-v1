@@ -27,6 +27,7 @@ COPY shared /app/shared
 RUN cd /app/shared && pip install -e .
 
 # Copy application code
+COPY main.py ./
 COPY gnf ./gnf
 COPY firebase.json firestore.rules firestore.indexes.json ./
 
@@ -43,4 +44,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
 
 # Run FastAPI backend service with gunicorn
-CMD exec gunicorn --bind :${PORT:-8080} --workers 1 --worker-class uvicorn.workers.UvicornWorker --timeout 300 gnf.api.main:app
+CMD exec gunicorn --bind :${PORT:-8080} --workers 1 --worker-class uvicorn.workers.UvicornWorker --timeout 300 main:app
