@@ -5,20 +5,13 @@ from app.routes import files, vectors
 from dotenv import load_dotenv
 import os
 import logging
-
-# Import centralized configuration and middleware
-try:
-    from alchemist_shared.config.base_settings import BaseSettings
-    from alchemist_shared.middleware import (
+from alchemist_shared.config.base_settings import BaseSettings
+from alchemist_shared.config.environment import get_project_id
+from alchemist_shared.middleware import (
         setup_metrics_middleware,
         start_background_metrics_collection,
         stop_background_metrics_collection
     )
-    SHARED_AVAILABLE = True
-except ImportError:
-    logging.warning("Alchemist shared package not available - some features may be limited")
-    SHARED_AVAILABLE = False
-
 # Import eA³ (Epistemic Autonomy) services and story event system (required)
 from alchemist_shared.services import (
     init_ea3_orchestrator, get_ea3_orchestrator, ConversationContext
@@ -33,15 +26,10 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # Initialize centralized settings if available
-settings = None
-if SHARED_AVAILABLE:
-    try:
-        settings = BaseSettings()
-        logger.info("Centralized settings loaded successfully")
-    except Exception as e:
-        logger.warning(f"Failed to load centralized settings: {e}")
-        settings = None
-
+settings = BaseSettings()
+project_id = get_project_id()  # Use the proper environment-aware function
+openai_config = settings.get_openai_config()
+openai_key_set = bool(openai_config.get("api_key"))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -50,45 +38,9 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Knowledge Vault service...")
     
     # Start metrics collection if available
-    if SHARED_AVAILABLE:
-        await start_background_metrics_collection("knowledge-vault")
-        logger.info("Metrics collection started")
-    
-    # Initialize eA³ (Epistemic Autonomy) services and story event system (required)
-    # Get Google Cloud project ID - try multiple methods
-    project_id = None
-    
-    # Method 1: Environment variables (most reliable in Cloud Run)
-    project_id = os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("FIREBASE_PROJECT_ID")
-    
-    if not project_id:
-        # Method 2: Google Cloud metadata service (available in Cloud Run)
-        try:
-            import requests
-            response = requests.get(
-                "http://metadata.google.internal/computeMetadata/v1/project/project-id",
-                headers={"Metadata-Flavor": "Google"},
-                timeout=5
-            )
-            if response.status_code == 200:
-                project_id = response.text
-                logger.info(f"Using project from metadata service: {project_id}")
-        except Exception as e:
-            logger.warning(f"Failed to get project from metadata service: {e}")
-    
-    if not project_id:
-        # Method 3: Try gcloud config (local development)
-        try:
-            from alchemist_shared.config.base_settings import get_gcp_project_id
-            project_id = get_gcp_project_id()
-            logger.info(f"Using gcloud current project: {project_id}")
-        except Exception as e:
-            logger.warning(f"Failed to get gcloud current project: {e}")
-    
-    if not project_id:
-        logger.error("Could not determine Google Cloud project ID")
-        raise RuntimeError("Failed to get Google Cloud project ID - ensure environment is properly configured")
-    
+    await start_background_metrics_collection("knowledge-vault")
+    logger.info("Metrics collection started")
+        
     # Initialize story event publisher (required)
     story_publisher = init_story_event_publisher(project_id)
     logger.info("Story event publisher initialized in knowledge vault")
@@ -110,9 +62,8 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down Knowledge Vault service...")
     
     # Stop metrics collection
-    if SHARED_AVAILABLE:
-        await stop_background_metrics_collection()
-        logger.info("Metrics collection stopped")
+    await stop_background_metrics_collection()
+    logger.info("Metrics collection stopped")
 
 
 app = FastAPI(
@@ -133,9 +84,8 @@ app.add_middleware(
 )
 
 # Add metrics middleware if available
-if SHARED_AVAILABLE:
-    setup_metrics_middleware(app, "knowledge-vault")
-    logger.info("Metrics middleware enabled")
+setup_metrics_middleware(app, "knowledge-vault")
+logger.info("Metrics middleware enabled")
 
 # Include routers
 app.include_router(files.router, prefix="/api", tags=["files"])
@@ -150,17 +100,7 @@ async def health_check():
     """Health check endpoint for monitoring services"""
     try:
         from datetime import datetime
-        
-        # Check configuration using centralized settings if available
-        if settings:
-            openai_config = settings.get_openai_config()
-            openai_key_set = bool(openai_config.get("api_key"))
-            firebase_project = settings.get_effective_firebase_project_id()
-        else:
-            # Fallback to environment variables
-            openai_key_set = bool(os.environ.get("OPENAI_API_KEY"))
-            firebase_project = os.environ.get("FIREBASE_PROJECT_ID") or os.environ.get("PROJECT_ID")
-        
+                
         health_status = {
             "service": "knowledge-vault",
             "status": "healthy",
@@ -169,24 +109,19 @@ async def health_check():
             "config_source": "centralized" if settings else "environment",
             "components": {
                 "alchemist_shared": {
-                    "status": "healthy" if SHARED_AVAILABLE else "unavailable",
-                    "configured": SHARED_AVAILABLE
+                    "status": "healthy",
+                    "configured": True
                 },
                 "openai": {
                     "status": "healthy" if openai_key_set else "unhealthy",
                     "configured": openai_key_set
                 },
                 "firebase": {
-                    "status": "healthy" if firebase_project else "unhealthy",
-                    "project_id": firebase_project
+                    "status": "healthy",
+                    "project_id": project_id
                 }
             }
-        }
-        
-        # Determine overall status
-        if not openai_key_set or not firebase_project:
-            health_status["status"] = "degraded"
-        
+        }        
         return health_status
         
     except Exception as e:

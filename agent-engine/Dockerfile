@@ -1,7 +1,7 @@
 # Multi-stage Docker build for Agent Engine
-FROM python:3.12-slim as base
+FROM python:3.12-slim AS base
 
-# Set environment variables
+# Set environment variables (non-sensitive only)
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app
@@ -19,6 +19,7 @@ WORKDIR /app
 
 # Copy requirements and install dependencies
 COPY agent-engine/requirements.txt .
+RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt gunicorn
 
 # Copy and install shared libraries
@@ -42,4 +43,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 EXPOSE 8080
 
 # Command to run the application
-CMD exec gunicorn --bind :${PORT:-8080} --workers 1 --worker-class uvicorn.workers.UvicornWorker --timeout 300 main:app
+CMD ["sh", "-c", "exec gunicorn --bind :${PORT:-8080} --workers 1 --worker-class uvicorn.workers.UvicornWorker --timeout 300 main:app"]

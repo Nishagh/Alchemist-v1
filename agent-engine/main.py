@@ -13,21 +13,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from dotenv import load_dotenv
 from alchemist.services.openai_init import initialize_openai
+from alchemist_shared.config.environment import get_project_id
 from routes import register_routes
 
 # Import metrics functionality
-try:
-    from alchemist_shared.middleware import (
+from alchemist_shared.middleware import (
         setup_metrics_middleware,
         start_background_metrics_collection,
         stop_background_metrics_collection
     )
-    METRICS_AVAILABLE = True
-except ImportError:
-    logging.warning("Metrics middleware not available - install alchemist-shared package")
-    METRICS_AVAILABLE = False
 
-# Import eA³ (Epistemic Autonomy) services and story event system (required)
+# Import eA³ (Epistemic Autonomy) services and story event system (optional)
 from alchemist_shared.services import init_ea3_orchestrator
 from alchemist_shared.events import init_story_event_publisher
 
@@ -52,44 +48,60 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Agent Engine service...")
     
     # Initialize OpenAI API
-    initialize_openai()
+    try:
+        initialize_openai()
+        logger.info("OpenAI API initialized successfully")
+    except Exception as e:
+        logger.warning(f"Failed to initialize OpenAI API: {e} - some features may be limited")
     
     # Start metrics collection if available
-    if METRICS_AVAILABLE:
-        await start_background_metrics_collection("agent-engine")
-        logger.info("Metrics collection started")
+    await start_background_metrics_collection("agent-engine")
+    logger.info("Metrics collection started")
     
     # Initialize eA³ (Epistemic Autonomy, Accountability, Alignment) services with story event system (required)
-    # Get Google Cloud project ID from environment (required)
-    project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
-    if not project_id:
-        logger.error("GOOGLE_CLOUD_PROJECT environment variable is required")
-        raise RuntimeError("Missing required environment variable: GOOGLE_CLOUD_PROJECT")
-    
-    # Initialize story event publisher (required)
-    story_publisher = init_story_event_publisher(project_id)
-    logger.info("Story event publisher initialized")
-    
-    # Initialize eA³ orchestrator with Spanner Graph and event processing (required)
-    redis_url = os.environ.get("REDIS_URL")  # Optional Redis for caching
-    await init_ea3_orchestrator(
-        project_id=project_id,
-        instance_id=os.environ.get("SPANNER_INSTANCE_ID", "alchemist-graph"),
-        database_id=os.environ.get("SPANNER_DATABASE_ID", "agent-stories"),
-        redis_url=redis_url,
-        enable_event_processing=True
-    )
-    logger.info("eA³ services initialized with story event system and Google Cloud Spanner Graph")
+    # Get Google Cloud project ID - try multiple methods
+    project_id = get_project_id()
+                
+    # Initialize eA³ services if available
+    if init_story_event_publisher and init_ea3_orchestrator:
+        try:
+            # Initialize story event publisher
+            story_publisher = init_story_event_publisher(project_id)
+            logger.info("Story event publisher initialized")
+            
+            # Initialize eA³ orchestrator with Spanner Graph and event processing
+            redis_url = os.environ.get("REDIS_URL")  # Optional Redis for caching
+            await init_ea3_orchestrator(
+                project_id=project_id,
+                instance_id=os.environ.get("SPANNER_INSTANCE_ID", "alchemist-graph"),
+                database_id=os.environ.get("SPANNER_DATABASE_ID", "agent-stories"),
+                redis_url=redis_url,
+                enable_event_processing=True  # Now safe with thread-based processing
+            )
+            logger.info("eA³ services initialized with story event system and Google Cloud Spanner Graph")
+        except Exception as e:
+            logger.warning(f"Failed to initialize eA³ services: {e} - continuing without advanced features")
+    else:
+        logger.info("eA³ services not available - running with basic functionality")
     
     yield
     
     # Shutdown
     logger.info("Shutting down Agent Engine service...")
     
+    # Shutdown eA³ services if available
+    try:
+        from alchemist_shared.services import get_ea3_orchestrator
+        ea3_orchestrator = get_ea3_orchestrator()
+        if ea3_orchestrator:
+            await ea3_orchestrator.shutdown()
+            logger.info("eA³ services shutdown completed")
+    except Exception as e:
+            logger.warning(f"Error shutting down eA³ services: {e}")
+    
     # Stop metrics collection
-    if METRICS_AVAILABLE:
-        await stop_background_metrics_collection()
-        logger.info("Metrics collection stopped")
+    await stop_background_metrics_collection()
+    logger.info("Metrics collection stopped")
 
 
 # Create FastAPI app with lifespan management
@@ -117,9 +129,8 @@ app.add_middleware(
 )
 
 # Add metrics middleware if available
-if METRICS_AVAILABLE:
-    setup_metrics_middleware(app, "agent-engine")
-    logger.info("Metrics middleware enabled")
+setup_metrics_middleware(app, "agent-engine")
+logger.info("Metrics middleware enabled")
 
 # Add middleware directly to ensure headers are properly set for all responses
 @app.middleware("http")

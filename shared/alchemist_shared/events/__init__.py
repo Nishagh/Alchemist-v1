@@ -17,7 +17,8 @@ from .story_events import (
 
 from .story_context_cache import (
     StoryContextCache,
-    CachedStoryContext
+    CachedStoryContext,
+    init_story_context_cache
 )
 
 __all__ = [
@@ -29,5 +30,6 @@ __all__ = [
     'get_story_event_publisher',
     'init_story_event_publisher',
     'StoryContextCache',
-    'CachedStoryContext'
+    'CachedStoryContext',
+    'init_story_context_cache'
 ]

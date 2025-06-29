@@ -4,6 +4,12 @@ Configuration loader for the Knowledge Base Service.
 import os
 import subprocess
 from dotenv import load_dotenv
+from alchemist_shared.config import base_settings
+
+settings = base_settings()
+project_id = settings.get_project_id()
+openai_config = settings.get_openai_config()
+openai_key = openai_config.get("api_key")
 
 def get_gcloud_project():
     """
@@ -12,20 +18,7 @@ def get_gcloud_project():
     Returns:
         str: Current gcloud project ID or None if not set
     """
-    try:
-        result = subprocess.run(
-            ["gcloud", "config", "get-value", "project"],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-        if result.returncode == 0:
-            project_id = result.stdout.strip()
-            if project_id and project_id != "(unset)":
-                return project_id
-    except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.SubprocessError):
-        pass
-    return None
+    return settings.get_project_id()
 
 def load_config():
     """
@@ -41,13 +34,7 @@ def load_config():
     config = {}
     
     # Google Cloud configuration - use gcloud config as primary source
-    gcloud_project = get_gcloud_project()
-    config["GOOGLE_PROJECT_ID"] = (
-        gcloud_project or 
-        os.getenv("GOOGLE_PROJECT_ID") or 
-        os.getenv("PROJECT_ID") or
-        os.getenv("FIREBASE_PROJECT_ID")
-    )
+    config["GOOGLE_PROJECT_ID"] = project_id
     
     config["GOOGLE_REGION"] = os.getenv("GOOGLE_REGION") or os.getenv("GCP_REGION", "us-central1")
     
@@ -56,12 +43,9 @@ def load_config():
     # - For local development: Will use GOOGLE_APPLICATION_CREDENTIALS if set
     
     # OpenAI configuration
-    config["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY")
+    config["OPENAI_API_KEY"] = openai_key
     
     # Firebase configuration - auto-generate bucket name if not provided
-    config["FIREBASE_STORAGE_BUCKET"] = (
-        os.getenv("FIREBASE_STORAGE_BUCKET") or
-        f"{config['GOOGLE_PROJECT_ID']}.appspot.com" if config["GOOGLE_PROJECT_ID"] else None
-    )
+    config["FIREBASE_STORAGE_BUCKET"]  = os.getenv("FIREBASE_STORAGE_BUCKET")
         
     return config

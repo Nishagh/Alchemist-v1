@@ -30,7 +30,10 @@ import {
   EmojiEvents as AchievementIcon,
   AutoGraph as AnalyticsIcon,
   Visibility as UmweltIcon,
-  ShowChart as MetricsIcon
+  ShowChart as MetricsIcon,
+  CenterFocusStrong as EA3Icon,
+  MovieCreation as StoryIcon,
+  MonitorHeart as CoherenceIcon
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 
@@ -40,6 +43,9 @@ import { getAgentIdentity } from '../../../services';
 // Import components
 import UmweltDisplay from './UmweltDisplay';
 import StoryLossSparkline from '../StoryLossSparkline';
+import EA3Dashboard from './EA3Dashboard';
+import AgentStoryTimeline from './AgentStoryTimeline';
+import CoherenceMonitor from './CoherenceMonitor';
 
 // Styled components
 const IdentityCard = styled(Card)(({ theme }) => ({
@@ -449,9 +455,12 @@ const AgentIdentityPanel = ({
   return (
     <Box sx={{ width: '100%' }}>
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
-        <Tabs value={activeTab} onChange={handleTabChange} aria-label="agent identity tabs">
+        <Tabs value={activeTab} onChange={handleTabChange} aria-label="agent identity tabs" variant="scrollable" scrollButtons="auto">
           <Tab label="Overview" icon={<PsychologyIcon />} iconPosition="start" />
           <Tab label="Development" icon={<GrowthIcon />} iconPosition="start" />
+          <Tab label="eA³ Status" icon={<EA3Icon />} iconPosition="start" />
+          <Tab label="Story Timeline" icon={<StoryIcon />} iconPosition="start" />
+          <Tab label="Coherence" icon={<CoherenceIcon />} iconPosition="start" />
           <Tab label="Narrative" icon={<TimelineIcon />} iconPosition="start" />
           <Tab label="Responsibility" icon={<ResponsibilityIcon />} iconPosition="start" />
           <Tab label="Umwelt" icon={<UmweltIcon />} iconPosition="start" />
@@ -478,6 +487,18 @@ const AgentIdentityPanel = ({
       </IdentityTabPanel>
 
       <IdentityTabPanel value={activeTab} index={2}>
+        <EA3Dashboard agentId={agentId} />
+      </IdentityTabPanel>
+
+      <IdentityTabPanel value={activeTab} index={3}>
+        <AgentStoryTimeline agentId={agentId} />
+      </IdentityTabPanel>
+
+      <IdentityTabPanel value={activeTab} index={4}>
+        <CoherenceMonitor agentId={agentId} />
+      </IdentityTabPanel>
+
+      <IdentityTabPanel value={activeTab} index={5}>
         <Grid container spacing={3}>
           {showNarrativeArc && (
             <Grid item xs={12}>
@@ -487,7 +508,7 @@ const AgentIdentityPanel = ({
         </Grid>
       </IdentityTabPanel>
 
-      <IdentityTabPanel value={activeTab} index={3}>
+      <IdentityTabPanel value={activeTab} index={6}>
         <Grid container spacing={3}>
           {showResponsibility && (
             <Grid item xs={12}>
@@ -497,11 +518,11 @@ const AgentIdentityPanel = ({
         </Grid>
       </IdentityTabPanel>
 
-      <IdentityTabPanel value={activeTab} index={4}>
+      <IdentityTabPanel value={activeTab} index={7}>
         {renderUmweltPanel()}
       </IdentityTabPanel>
 
-      <IdentityTabPanel value={activeTab} index={5}>
+      <IdentityTabPanel value={activeTab} index={8}>
         {renderMetricsPanel()}
       </IdentityTabPanel>
     </Box>

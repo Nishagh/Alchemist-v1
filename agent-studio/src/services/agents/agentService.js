@@ -56,9 +56,14 @@ export const createAgent = async (agentData) => {
             }
           };
           
-          // Create GNF identity - this will start tracking the agent
-          await identityService.createAgentIdentity(agentId, identityData);
-          console.log('GNF identity created successfully for agent:', agentId);
+          // Create GNF identity - this will start tracking the agent (non-blocking)
+          identityService.createAgentIdentity(agentId, identityData)
+            .then(() => {
+              console.log('GNF identity created successfully for agent:', agentId);
+            })
+            .catch((gnfError) => {
+              console.warn('Failed to create GNF identity for agent:', gnfError.message);
+            });
         }
       } catch (gnfError) {
         // Log GNF error but don't fail agent creation
@@ -119,13 +124,23 @@ export const updateAgent = async (agentId, agentData) => {
           };
           
           if (existingIdentity && existingIdentity.is_default) {
-            // Update existing default identity
-            await identityService.updateAgentIdentity(agentId, identityData);
-            console.log('GNF identity updated successfully for agent:', agentId);
+            // Update existing default identity (non-blocking)
+            identityService.updateAgentIdentity(agentId, identityData)
+              .then(() => {
+                console.log('GNF identity updated successfully for agent:', agentId);
+              })
+              .catch((gnfError) => {
+                console.warn('Failed to update GNF identity for agent:', gnfError.message);
+              });
           } else {
-            // Create new identity
-            await identityService.createAgentIdentity(agentId, identityData);
-            console.log('GNF identity created successfully for agent:', agentId);
+            // Create new identity (non-blocking)
+            identityService.createAgentIdentity(agentId, identityData)
+              .then(() => {
+                console.log('GNF identity created successfully for agent:', agentId);
+              })
+              .catch((gnfError) => {
+                console.warn('Failed to create GNF identity for agent:', gnfError.message);
+              });
           }
         }
       } catch (gnfError) {

@@ -41,9 +41,11 @@ gcloud auth print-access-token &> /dev/null || (echo -e "${RED}Not logged in to 
 echo -e "${YELLOW}Setting Google Cloud project to ${PROJECT_ID}...${NC}"
 gcloud config set project ${PROJECT_ID}
 
-# Enable Cloud Build API if not already enabled
-echo -e "${YELLOW}Ensuring Cloud Build API is enabled...${NC}"
+# Enable required APIs
+echo -e "${YELLOW}Ensuring required APIs are enabled...${NC}"
 gcloud services enable cloudbuild.googleapis.com
+gcloud services enable pubsub.googleapis.com
+gcloud services enable spanner.googleapis.com
 
 # Copy shared module to local directory for Docker context
 echo -e "${YELLOW}📦 Preparing shared module...${NC}"
@@ -73,7 +75,7 @@ gcloud run deploy ${IMAGE_NAME} \
   --timeout 300 \
   --memory 1Gi \
   --cpu 1 \
-  --set-env-vars="FIREBASE_STORAGE_BUCKET=${FIREBASE_STORAGE_BUCKET},FIREBASE_PROJECT_ID=${PROJECT_ID},GOOGLE_CLOUD_PROJECT=${PROJECT_ID}" \
+  --set-env-vars="FIREBASE_STORAGE_BUCKET=${FIREBASE_STORAGE_BUCKET},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},SPANNER_INSTANCE_ID=alchemist-graph,SPANNER_DATABASE_ID=agent-stories,ENVIRONMENT=production" \
   --update-secrets=OPENAI_API_KEY=OPENAI_API_KEY:latest \
   --min-instances=0
 
@@ -83,4 +85,11 @@ SERVICE_URL=$(gcloud run services describe ${IMAGE_NAME} --platform managed --re
 echo -e "${GREEN}Deployment completed successfully!${NC}"
 echo -e "Service URL: ${SERVICE_URL}"
 echo -e "API Documentation: ${SERVICE_URL}/docs"
-echo -e "${GREEN}Knowledge Base Service v2.0.0 is now running with Firestore-only storage!${NC}"
+echo -e "${GREEN}Knowledge Base Service v2.0.0 is now running with EA3 integration!${NC}"
+
+echo ""
+echo -e "${YELLOW}⚠️  If you encounter Pub/Sub errors, ensure the Cloud Run service account has:${NC}"
+echo -e "${YELLOW}   - Pub/Sub Publisher${NC}"
+echo -e "${YELLOW}   - Pub/Sub Subscriber${NC}"
+echo -e "${YELLOW}   - Cloud Spanner Database User${NC}"
+echo -e "${YELLOW}   - Firebase Admin${NC}"

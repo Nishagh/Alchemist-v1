@@ -4,7 +4,7 @@ Story Event System for Alchemist Agent Narratives
 This module implements Cloud Pub/Sub based story event publishing and subscribing
 for maintaining coherent agent life-stories across microservices.
 """
-
+import os
 import json
 import logging
 import asyncio
@@ -13,6 +13,11 @@ from typing import Dict, List, Any, Optional, Callable, Union
 from dataclasses import dataclass, field, asdict
 from enum import Enum
 import uuid
+from dotenv import load_dotenv
+
+load_dotenv()
+
+PROJECT_ID=os.getenv('PROJECT_ID')
 
 # Google Cloud Pub/Sub
 try:
@@ -300,22 +305,44 @@ class StoryEventSubscriber:
         for event_type in StoryEventType:
             self.add_handler(event_type, handler)
     
+    def _test_pubsub_connectivity(self):
+        """Test Pub/Sub connectivity (synchronous method for thread execution)"""
+        try:
+            # Test subscription exists and is accessible
+            self.subscriber.get_subscription(request={"subscription": self.subscription_path})
+            return True
+        except Exception as e:
+            logger.error(f"Pub/Sub connectivity test failed: {e}")
+            raise
+    
     async def start_listening(self):
-        """Start listening for story events from Google Cloud Pub/Sub"""
+        """Start listening for story events from Google Cloud Pub/Sub using thread-based approach"""
         self.running = True
         logger.info(f"Starting story event subscriber: {self.subscription_name}")
         
+        # Add initialization timeout to prevent blocking startup
+        initialization_timeout = 10  # seconds
+        
         try:
-            # Use async pull
+            # Test Pub/Sub connectivity with timeout
+            logger.info("Testing Pub/Sub connectivity...")
+            await asyncio.wait_for(
+                asyncio.to_thread(self._test_pubsub_connectivity),
+                timeout=initialization_timeout
+            )
+            logger.info("Pub/Sub connectivity confirmed")
+            
+            # Start the event processing loop
             while self.running:
                 try:
-                    # Pull messages with timeout
-                    response = self.subscriber.pull(
+                    # Use asyncio.to_thread to make blocking pull operation non-blocking
+                    response = await asyncio.to_thread(
+                        self.subscriber.pull,
                         request={
                             "subscription": self.subscription_path,
                             "max_messages": 10,
                         },
-                        timeout=30.0
+                        timeout=5.0  # Shorter timeout to prevent long blocking
                     )
                     
                     ack_ids = []
@@ -329,18 +356,37 @@ class StoryEventSubscriber:
                             # Still acknowledge to avoid redelivery of bad messages
                             ack_ids.append(received_message.ack_id)
                     
-                    # Acknowledge processed messages
+                    # Acknowledge processed messages using thread
                     if ack_ids:
-                        self.subscriber.acknowledge(
+                        await asyncio.to_thread(
+                            self.subscriber.acknowledge,
                             request={
                                 "subscription": self.subscription_path,
                                 "ack_ids": ack_ids
                             }
                         )
                         
+                except asyncio.TimeoutError:
+                    # Normal timeout, continue loop
+                    logger.debug("Pub/Sub pull timeout (normal)")
+                    continue
                 except Exception as e:
-                    logger.error(f"Error in story event subscriber loop: {e}")
-                    await asyncio.sleep(5)  # Brief pause before retrying
+                    # 504 Deadline Exceeded is normal when no messages are available
+                    if "504" in str(e) and "Deadline Exceeded" in str(e):
+                        logger.debug(f"Pub/Sub deadline exceeded (normal - no messages): {e}")
+                        await asyncio.sleep(1)  # Short pause for empty queue
+                    else:
+                        logger.error(f"Error in story event subscriber loop: {e}")
+                        await asyncio.sleep(5)  # Brief pause before retrying
+                    
+        except asyncio.TimeoutError:
+            logger.error(f"Pub/Sub initialization timeout after {initialization_timeout}s - event processing disabled")
+            self.running = False
+            raise
+        except Exception as e:
+            logger.error(f"Failed to initialize Pub/Sub connection: {e}")
+            self.running = False
+            raise
                     
         except Exception as e:
             logger.error(f"Story event subscriber failed: {e}")

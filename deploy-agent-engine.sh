@@ -51,14 +51,12 @@ else
   echo -e "${YELLOW}⚠️  Warning: .env file not found. Will use default values.${NC}"
 fi
 
-# Check for eA³ Spanner setup
-if [ -f "shared/spanner-key.json" ]; then
-  echo -e "${GREEN}✅ Found eA³ Spanner service account key${NC}"
-  SPANNER_KEY_EXISTS=true
-else
-  echo -e "${YELLOW}⚠️  eA³ Spanner key not found. Run 'shared/setup-spanner-ea3.sh' for full functionality${NC}"
-  SPANNER_KEY_EXISTS=false
-fi
+# For Cloud Run deployment, we use the default service account
+echo -e "${GREEN}✅ Using Cloud Run default service account for production deployment${NC}"
+echo -e "${BLUE}ℹ️  Ensure your Cloud Run service account has proper permissions:${NC}"
+echo -e "${BLUE}   - Cloud Spanner Database User${NC}"
+echo -e "${BLUE}   - Pub/Sub Publisher/Subscriber${NC}"
+echo -e "${BLUE}   - Firebase Admin${NC}"
 
 # Authenticate with Google Cloud
 echo -e "${YELLOW}🔐 Checking authentication...${NC}"
@@ -207,13 +205,14 @@ Thumbs.db
 **/*.sqlite3
 **/*.db
 
-# Exclude credentials and config files that shouldn't be in container
+# Exclude all credentials - Cloud Run uses default service account
 firebase-credentials.json
 **/firebase-credentials.json
 gcloud-credentials.json
 **/gcloud-credentials.json
 service-account-key.json
 **/service-account-key.json
+shared/spanner-key.json
 **/secrets/
 **/credentials/
 **/keys/
@@ -259,7 +258,10 @@ steps:
   args: ['push', '${IMAGE_NAME}:${TIMESTAMP}']
 EOF
 
-gcloud builds submit --config=cloudbuild-temp.yaml .
+if ! gcloud builds submit --config=cloudbuild-temp.yaml .; then
+    echo -e "${RED}❌ Build failed! Check the build logs above.${NC}"
+    exit 1
+fi
 
 # Deploy to Cloud Run
 echo -e "${YELLOW}🚀 Deploying to Cloud Run...${NC}"
@@ -280,8 +282,8 @@ if [ -f "agent-engine/.env" ]; then
         # Extract key=value pairs
         key=$(echo "$line" | cut -d'=' -f1 | xargs)
         value=$(echo "$line" | cut -d'=' -f2- | xargs)
-        # Skip empty values and commented out variables
-        if [[ -n "$value" && ! "$line" =~ ^[[:space:]]*# ]]; then
+        # Skip empty values, commented out variables, and GOOGLE_APPLICATION_CREDENTIALS for Cloud Run
+        if [[ -n "$value" && ! "$line" =~ ^[[:space:]]*# && "$key" != "GOOGLE_APPLICATION_CREDENTIALS" ]]; then
             if [ -n "$ENV_VARS" ]; then
                 ENV_VARS="$ENV_VARS,$key=$value"
             else
@@ -292,11 +294,22 @@ if [ -f "agent-engine/.env" ]; then
 fi
 
 # Override with production-specific values
-ENV_VARS="$ENV_VARS,ENVIRONMENT=production,FIREBASE_PROJECT_ID=${PROJECT_ID}"
+ENV_VARS="$ENV_VARS,ENVIRONMENT=production,PROJECT_ID=${PROJECT_ID}"
+
+# Cloud Run will use default service account - no GOOGLE_APPLICATION_CREDENTIALS needed
+
+# Add eA³ configuration
+ENV_VARS="$ENV_VARS,SPANNER_INSTANCE_ID=alchemist-graph,SPANNER_DATABASE_ID=agent-stories"
+
+# Validate environment variables
+if [ -z "$ENV_VARS" ] || [ "$ENV_VARS" = "," ]; then
+    echo -e "${YELLOW}⚠️  No environment variables found. Using minimal configuration${NC}"
+    ENV_VARS="ENVIRONMENT=production,PROJECT_ID=${PROJECT_ID},SPANNER_INSTANCE_ID=alchemist-graph,SPANNER_DATABASE_ID=agent-stories"
+fi
 
 echo -e "${BLUE}🔧 Setting environment variables: $ENV_VARS${NC}"
 
-gcloud run deploy ${SERVICE_NAME} \
+if ! gcloud run deploy ${SERVICE_NAME} \
     --image ${IMAGE_NAME}:latest \
     --platform managed \
     --region ${REGION} \
@@ -306,7 +319,10 @@ gcloud run deploy ${SERVICE_NAME} \
     --timeout 3600 \
     --concurrency 80 \
     --max-instances 5 \
-    --set-env-vars "$ENV_VARS"
+    --set-env-vars "$ENV_VARS"; then
+    echo -e "${RED}❌ Deployment failed! Check the deployment logs above.${NC}"
+    exit 1
+fi
 
 # Get the service URL
 SERVICE_URL=$(gcloud run services describe ${SERVICE_NAME} --region=${REGION} --format="value(status.url)")
@@ -341,5 +357,16 @@ fi
 
 echo ""
 echo -e "${GREEN}🎉 Agent Engine deployment complete!${NC}"
-echo -e "${BLUE}💡 To view logs: gcloud logs read --project=${PROJECT_ID} --filter=\"resource.labels.service_name=${SERVICE_NAME}\"${NC}"
-echo -e "${BLUE}💡 To redeploy: ./deploy-agent-engine.sh${NC}"
+echo ""
+echo -e "${BLUE}📋 Cloud Run Configuration:${NC}"
+echo -e "${GREEN}✅ Using Cloud Run default service account${NC}"
+echo -e "${BLUE}ℹ️  Ensure your service account has these roles:${NC}"
+echo -e "${BLUE}   - Cloud Spanner Database User${NC}"
+echo -e "${BLUE}   - Pub/Sub Publisher/Subscriber${NC}"
+echo -e "${BLUE}   - Firebase Admin${NC}"
+echo ""
+echo -e "${BLUE}💡 Useful commands:${NC}"
+echo -e "${BLUE}💡 View logs: gcloud logs read --project=${PROJECT_ID} --filter=\"resource.labels.service_name=${SERVICE_NAME}\" --limit=50${NC}"
+echo -e "${BLUE}💡 Stream logs: gcloud logs tail --project=${PROJECT_ID} --filter=\"resource.labels.service_name=${SERVICE_NAME}\"${NC}"
+echo -e "${BLUE}💡 Redeploy: ./deploy-agent-engine.sh${NC}"
+echo -e "${BLUE}💡 Scale down: gcloud run services update ${SERVICE_NAME} --region=${REGION} --max-instances=0${NC}"

@@ -32,7 +32,9 @@ except ImportError:
     STORY_EVENTS_AVAILABLE = False
 
 from .spanner_graph_service import (
-    SpannerGraphService, StoryEventType, get_spanner_graph_service,
+    SpannerGraphService, 
+    StoryEventType as SpannerStoryEventType, 
+    get_spanner_graph_service,
     NarrativeCoherence
 )
 
@@ -236,7 +238,7 @@ class EA3Orchestrator:
             # Add self-reflection event to the story
             reflection_id, coherence_maintained = await self.graph_service.add_story_event(
                 agent_id=agent_id,
-                event_type=StoryEventType.REFLECTION_PERFORMED,
+                event_type=SpannerStoryEventType.REFLECTION_PERFORMED,
                 content=reflection_content,
                 context={
                     "trigger_reason": trigger_reason,
@@ -547,7 +549,7 @@ Respond in JSON format:
         
         # Fallback: Always create an interaction event
         interaction_event = {
-            "event_type": StoryEventType.ACTION_TAKEN,
+            "event_type": SpannerStoryEventType.ACTION_TAKEN,
             "content": f"Responded to user query: '{context.user_message[:100]}...' with: '{context.agent_response[:100]}...'",
             "context": {
                 "interaction_type": "conversation",
@@ -563,7 +565,7 @@ Respond in JSON format:
         # Check if the conversation contains new beliefs or goals
         if await self._contains_new_belief(context.agent_response):
             belief_event = {
-                "event_type": StoryEventType.BELIEF_FORMED,
+                "event_type": SpannerStoryEventType.BELIEF_FORMED,
                 "content": f"Formed new belief based on conversation: {await self._extract_belief_content(context.agent_response)}",
                 "context": {
                     "belief_source": "conversation_analysis",
@@ -577,7 +579,7 @@ Respond in JSON format:
         # Check if new evidence was received
         if await self._contains_evidence(context.user_message):
             evidence_event = {
-                "event_type": StoryEventType.EVIDENCE_RECEIVED,
+                "event_type": SpannerStoryEventType.EVIDENCE_RECEIVED,
                 "content": f"Received evidence from user: {context.user_message[:200]}",
                 "context": {
                     "evidence_type": "user_provided",
@@ -676,20 +678,19 @@ Respond in JSON format:
             result = json.loads(response.choices[0].message.content)
             events = result.get("events", [])
             
-            # Convert event types to StoryEventType enums
-            from .spanner_graph_service import StoryEventType
+            # Convert event types to SpannerStoryEventType enums
             type_mapping = {
-                "ACTION_TAKEN": StoryEventType.ACTION_TAKEN,
-                "BELIEF_FORMED": StoryEventType.BELIEF_FORMED,
-                "GOAL_SET": StoryEventType.GOAL_SET,
-                "EVIDENCE_GATHERED": StoryEventType.EVIDENCE_GATHERED,
-                "DECISION_MADE": StoryEventType.DECISION_MADE,
-                "REFLECTION": StoryEventType.REFLECTION
+                "ACTION_TAKEN": SpannerStoryEventType.ACTION_TAKEN,
+                "BELIEF_FORMED": SpannerStoryEventType.BELIEF_FORMED,
+                "GOAL_SET": SpannerStoryEventType.GOAL_SET,
+                "EVIDENCE_RECEIVED": SpannerStoryEventType.EVIDENCE_RECEIVED,
+                "DECISION_MADE": SpannerStoryEventType.ACTION_TAKEN,  # Map to ACTION_TAKEN since DECISION_MADE doesn't exist in Spanner enum
+                "REFLECTION": SpannerStoryEventType.REFLECTION_PERFORMED
             }
             
             for event in events:
                 event_type_str = event.get("event_type", "ACTION_TAKEN")
-                event["event_type"] = type_mapping.get(event_type_str, StoryEventType.ACTION_TAKEN)
+                event["event_type"] = type_mapping.get(event_type_str, SpannerStoryEventType.ACTION_TAKEN)
             
             logger.info(f"GPT-4.1 extracted {len(events)} narrative events from conversation for agent {context.agent_id}")
             
@@ -737,7 +738,7 @@ Respond in JSON format:
         if agent_config.get("type"):
             await self.graph_service.add_story_event(
                 agent_id=agent_id,
-                event_type=StoryEventType.BELIEF_FORMED,
+                event_type=SpannerStoryEventType.BELIEF_FORMED,
                 content=f"Specialized as {agent_config['type']} agent with specific capabilities",
                 context={
                     "specialization": agent_config["type"],
@@ -751,7 +752,7 @@ Respond in JSON format:
         if agent_config.get("description"):
             await self.graph_service.add_story_event(
                 agent_id=agent_id,
-                event_type=StoryEventType.GOAL_SET,
+                event_type=SpannerStoryEventType.GOAL_SET,
                 content=f"Secondary objectives defined: {agent_config['description']}",
                 context={
                     "goal_type": "secondary_objectives",
@@ -955,16 +956,102 @@ Respond in JSON format:
         logger.info("eA³ story event handlers configured")
 
     async def _start_event_processing(self):
-        """Start processing story events from Pub/Sub"""
+        """Start processing story events from Pub/Sub as background task with timeout and error handling"""
         if not self.story_subscriber or not self.event_processing_enabled:
             return
         
         try:
             logger.info("Starting eA³ story event processing")
-            await self.story_subscriber.start_listening()
+            
+            # Start event processing as background task with timeout protection
+            self._event_processing_task = asyncio.create_task(self._background_event_processing())
+            
+            # Add health check timer
+            self._health_check_task = asyncio.create_task(self._event_processing_health_check())
+            
+            logger.info("eA³ story event processing started as background task")
         except Exception as e:
-            logger.error(f"eA³ story event processing failed: {e}")
+            logger.error(f"eA³ story event processing startup failed: {e}")
             self.event_processing_enabled = False
+    
+    async def _background_event_processing(self):
+        """Background task for event processing that doesn't block startup"""
+        max_retries = 3
+        retry_count = 0
+        
+        while retry_count < max_retries and self.event_processing_enabled:
+            try:
+                logger.info(f"Starting eA³ event processing (attempt {retry_count + 1}/{max_retries})")
+                await self.story_subscriber.start_listening()
+                break  # Success, exit retry loop
+                
+            except asyncio.TimeoutError:
+                retry_count += 1
+                logger.warning(f"eA³ event processing timeout (attempt {retry_count}/{max_retries})")
+                if retry_count < max_retries:
+                    await asyncio.sleep(5 * retry_count)  # Exponential backoff
+                else:
+                    logger.error("eA³ event processing failed after all retries - disabling")
+                    self.event_processing_enabled = False
+                    
+            except Exception as e:
+                retry_count += 1
+                logger.error(f"eA³ event processing error (attempt {retry_count}/{max_retries}): {e}")
+                if retry_count < max_retries:
+                    await asyncio.sleep(5 * retry_count)  # Exponential backoff
+                else:
+                    logger.error("eA³ event processing failed after all retries - disabling")
+                    self.event_processing_enabled = False
+    
+    async def _event_processing_health_check(self):
+        """Monitor event processing health and restart if needed"""
+        check_interval = 60  # Check every minute
+        
+        while self.event_processing_enabled:
+            try:
+                await asyncio.sleep(check_interval)
+                
+                # Check if event processing task is still running
+                if hasattr(self, '_event_processing_task') and self._event_processing_task.done():
+                    exception = self._event_processing_task.exception()
+                    if exception:
+                        logger.warning(f"eA³ event processing died with exception: {exception} - attempting restart")
+                        # Restart event processing
+                        self._event_processing_task = asyncio.create_task(self._background_event_processing())
+                    
+            except Exception as e:
+                logger.error(f"eA³ event processing health check failed: {e}")
+                await asyncio.sleep(check_interval)
+    
+    async def shutdown(self):
+        """Shutdown the eA³ orchestrator and cleanup background tasks"""
+        try:
+            # Stop event processing
+            self.event_processing_enabled = False
+            
+            # Cancel event processing task if running
+            if hasattr(self, '_event_processing_task') and self._event_processing_task:
+                self._event_processing_task.cancel()
+                try:
+                    await self._event_processing_task
+                except asyncio.CancelledError:
+                    pass
+            
+            # Cancel health check task if running
+            if hasattr(self, '_health_check_task') and self._health_check_task:
+                self._health_check_task.cancel()
+                try:
+                    await self._health_check_task
+                except asyncio.CancelledError:
+                    pass
+            
+            # Stop story subscriber
+            if self.story_subscriber:
+                await self.story_subscriber.stop_listening()
+                
+            logger.info("eA³ orchestrator shutdown completed")
+        except Exception as e:
+            logger.error(f"Error during eA³ orchestrator shutdown: {e}")
 
     async def _handle_story_event(self, event: StoryEvent):
         """Handle incoming story events and update narrative spine"""
@@ -1094,13 +1181,13 @@ Respond in JSON format:
         
         mapping = {
             StoryEventType.CONVERSATION: SpannerEventType.ACTION_TAKEN,
-            StoryEventType.KNOWLEDGE_ACQUISITION: SpannerEventType.EVIDENCE_GATHERED,
-            StoryEventType.KNOWLEDGE_REMOVAL: SpannerEventType.EVIDENCE_GATHERED,
+            StoryEventType.KNOWLEDGE_ACQUISITION: SpannerEventType.EVIDENCE_RECEIVED,
+            StoryEventType.KNOWLEDGE_REMOVAL: SpannerEventType.EVIDENCE_RECEIVED,
             StoryEventType.PROMPT_UPDATE: SpannerEventType.GOAL_SET,
             StoryEventType.GOAL_CHANGE: SpannerEventType.GOAL_SET,
-            StoryEventType.DECISION_MADE: SpannerEventType.DECISION_MADE,
-            StoryEventType.BELIEF_REVISION: SpannerEventType.BELIEF_FORMED,
-            StoryEventType.REFLECTION: SpannerEventType.REFLECTION,
+            StoryEventType.DECISION_MADE: SpannerEventType.ACTION_TAKEN,  # Map to ACTION_TAKEN since DECISION_MADE doesn't exist
+            StoryEventType.BELIEF_REVISION: SpannerEventType.BELIEF_REVISED,
+            StoryEventType.REFLECTION: SpannerEventType.REFLECTION_PERFORMED,
             StoryEventType.ERROR_ENCOUNTERED: SpannerEventType.ACTION_TAKEN,
             StoryEventType.TOOL_USAGE: SpannerEventType.ACTION_TAKEN,
             StoryEventType.SYSTEM_UPDATE: SpannerEventType.ACTION_TAKEN
@@ -1139,6 +1226,66 @@ Respond in JSON format:
         """Invalidate cached story context for an agent"""
         if self.story_cache:
             await self.story_cache.invalidate_agent(agent_id)
+
+    async def get_coherence_trends(self, agent_id: str, hours: int = 24) -> List[Dict[str, Any]]:
+        """Get historical coherence trend data for the agent"""
+        try:
+            if not self.graph_service:
+                return []
+            
+            # Get coherence metrics from Spanner Graph
+            trends = await self.graph_service.get_coherence_trends(agent_id, hours)
+            
+            # Format for frontend visualization
+            formatted_trends = []
+            for trend in trends:
+                formatted_trends.append({
+                    "time": trend.get("timestamp", "").split("T")[1][:5] if "T" in trend.get("timestamp", "") else "",
+                    "coherence": trend.get("coherence_score", 0.0),
+                    "consistency": trend.get("consistency_score", 0.0)
+                })
+            
+            return formatted_trends
+            
+        except Exception as e:
+            logger.error(f"Failed to get coherence trends for agent {agent_id}: {e}")
+            return []
+
+    async def get_narrative_conflicts(self, agent_id: str) -> List[Dict[str, Any]]:
+        """Get active narrative conflicts for the agent"""
+        try:
+            if not self.graph_service:
+                return []
+            
+            # Get conflicts from Spanner Graph
+            conflicts = await self.graph_service.get_narrative_conflicts(agent_id)
+            
+            # Format for frontend display
+            formatted_conflicts = []
+            for conflict in conflicts:
+                formatted_conflicts.append({
+                    "id": conflict.get("conflict_id", ""),
+                    "type": conflict.get("conflict_type", "unknown"),
+                    "severity": self._determine_conflict_severity(conflict.get("impact_score", 0.0)),
+                    "description": conflict.get("description", ""),
+                    "timestamp": conflict.get("timestamp", ""),
+                    "status": conflict.get("status", "pending")
+                })
+            
+            return formatted_conflicts
+            
+        except Exception as e:
+            logger.error(f"Failed to get narrative conflicts for agent {agent_id}: {e}")
+            return []
+
+    def _determine_conflict_severity(self, impact_score: float) -> str:
+        """Determine conflict severity based on impact score"""
+        if impact_score >= 0.8:
+            return "high"
+        elif impact_score >= 0.5:
+            return "medium"
+        else:
+            return "low"
 
 
 # Service initialization and singleton access

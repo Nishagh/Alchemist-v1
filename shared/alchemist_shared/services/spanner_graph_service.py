@@ -115,6 +115,13 @@ class SpannerGraphService:
     async def initialize_database(self):
         """Initialize Spanner Graph database with agent life-story schema"""
         
+        # Check if tables already exist
+        if await self._tables_exist():
+            logger.info("Spanner Graph database tables already exist, skipping initialization")
+            return
+        
+        logger.info("Creating Spanner Graph database schema for agent life-stories...")
+        
         # Define the graph schema for agent life-stories
         create_tables_ddl = [
             # Nodes: Story Events
@@ -223,10 +230,32 @@ class SpannerGraphService:
         ]
         
         # Execute DDL
-        operation = self.database.update_ddl(create_tables_ddl + create_indexes_ddl)
-        operation.result(timeout=300)  # Wait up to 5 minutes
-        
-        logger.info("Spanner Graph database initialized for agent life-stories")
+        try:
+            operation = self.database.update_ddl(create_tables_ddl + create_indexes_ddl)
+            operation.result(timeout=300)  # Wait up to 5 minutes
+            logger.info("Spanner Graph database initialized for agent life-stories")
+        except Exception as e:
+            error_str = str(e)
+            if any(phrase in error_str for phrase in ["Duplicate name", "already exists", "FailedPrecondition"]):
+                logger.info("Spanner Graph database tables already exist, skipping initialization")
+            else:
+                logger.error(f"Failed to initialize Spanner database: {e}")
+                raise
+
+    async def _tables_exist(self) -> bool:
+        """Check if the required tables already exist in the database"""
+        try:
+            # Query the information schema to check for our main table
+            with self.database.snapshot() as snapshot:
+                results = snapshot.execute_sql(
+                    "SELECT table_name FROM information_schema.tables "
+                    "WHERE table_schema = '' AND table_name = 'StoryEvents'"
+                )
+                tables = list(results)
+                return len(tables) > 0
+        except Exception as e:
+            logger.warning(f"Error checking if tables exist: {e}")
+            return False
 
     async def create_agent_story(self, agent_id: str, core_objective: str, story_title: str = None) -> bool:
         """
@@ -1026,6 +1055,128 @@ class SpannerGraphService:
                 )
             
             self.database.run_in_transaction(add_to_thread_txn)
+
+    async def get_coherence_trends(self, agent_id: str, hours: int = 24) -> List[Dict[str, Any]]:
+        """Get historical coherence trend data for the agent"""
+        try:
+            # Calculate cutoff time
+            cutoff_time = datetime.utcnow() - timedelta(hours=hours)
+            
+            # Query to get coherence metrics over time
+            trends_query = """
+            WITH TimeSlots AS (
+                SELECT 
+                    TIMESTAMP_TRUNC(Timestamp, HOUR) as TimeSlot,
+                    AVG(Confidence * AlignmentScore) as CoherenceScore,
+                    AVG(AlignmentScore) as ConsistencyScore,
+                    COUNT(*) as EventCount
+                FROM StoryEvents 
+                WHERE AgentId = @agent_id 
+                    AND Timestamp >= @cutoff_time
+                GROUP BY TimeSlot
+                ORDER BY TimeSlot DESC
+            )
+            SELECT 
+                TimeSlot,
+                CoherenceScore,
+                ConsistencyScore,
+                EventCount
+            FROM TimeSlots
+            ORDER BY TimeSlot ASC
+            """
+            
+            with self.database.snapshot() as snapshot:
+                results = list(snapshot.execute_sql(
+                    trends_query,
+                    params={
+                        "agent_id": agent_id,
+                        "cutoff_time": cutoff_time
+                    },
+                    param_types={
+                        "agent_id": param_types.STRING,
+                        "cutoff_time": param_types.TIMESTAMP
+                    }
+                ))
+            
+            trends = []
+            for row in results:
+                trends.append({
+                    "timestamp": row[0].isoformat() if row[0] else "",
+                    "coherence_score": float(row[1]) if row[1] else 0.0,
+                    "consistency_score": float(row[2]) if row[2] else 0.0,
+                    "event_count": int(row[3]) if row[3] else 0
+                })
+            
+            return trends
+            
+        except Exception as e:
+            logger.error(f"Failed to get coherence trends for agent {agent_id}: {e}")
+            return []
+
+    async def get_narrative_conflicts(self, agent_id: str) -> List[Dict[str, Any]]:
+        """Get active narrative conflicts for the agent"""
+        try:
+            # Query to find contradictory events and beliefs
+            conflicts_query = """
+            WITH ConflictEvents AS (
+                SELECT DISTINCT
+                    e1.EventId as Event1Id,
+                    e2.EventId as Event2Id,
+                    e1.Content as Event1Content,
+                    e2.Content as Event2Content,
+                    e1.Timestamp as Event1Time,
+                    e2.Timestamp as Event2Time,
+                    e1.Confidence as Event1Confidence,
+                    e2.Confidence as Event2Confidence,
+                    ABS(e1.AlignmentScore - e2.AlignmentScore) as AlignmentDiff
+                FROM StoryEvents e1
+                JOIN StoryEvents e2 ON e1.AgentId = e2.AgentId
+                WHERE e1.AgentId = @agent_id
+                    AND e1.EventId != e2.EventId
+                    AND e1.EventType IN ('belief_formed', 'belief_revised')
+                    AND e2.EventType IN ('belief_formed', 'belief_revised')
+                    AND ABS(e1.AlignmentScore - e2.AlignmentScore) > 0.3
+                    AND e1.Timestamp > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY)
+            )
+            SELECT 
+                Event1Id,
+                Event2Id,
+                Event1Content,
+                Event2Content,
+                Event1Time,
+                Event2Time,
+                AlignmentDiff
+            FROM ConflictEvents
+            ORDER BY AlignmentDiff DESC
+            LIMIT 10
+            """
+            
+            with self.database.snapshot() as snapshot:
+                results = list(snapshot.execute_sql(
+                    conflicts_query,
+                    params={"agent_id": agent_id},
+                    param_types={"agent_id": param_types.STRING}
+                ))
+            
+            conflicts = []
+            for i, row in enumerate(results):
+                impact_score = float(row[6]) if row[6] else 0.0
+                conflicts.append({
+                    "conflict_id": f"conflict_{agent_id}_{i+1}",
+                    "conflict_type": "belief_contradiction",
+                    "description": f"Conflicting beliefs detected between events: '{row[2][:100]}...' and '{row[3][:100]}...'",
+                    "timestamp": row[4].isoformat() if row[4] else "",
+                    "impact_score": impact_score,
+                    "status": "pending" if impact_score > 0.5 else "resolved",
+                    "event1_id": row[0],
+                    "event2_id": row[1]
+                })
+            
+            return conflicts
+            
+        except Exception as e:
+            logger.error(f"Failed to get narrative conflicts for agent {agent_id}: {e}")
+            return []
 
 
 # Service initialization and singleton access

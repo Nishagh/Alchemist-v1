@@ -407,7 +407,7 @@ class FileService:
         when new knowledge is acquired through file uploads.
         """
         try:
-            import openai
+            from .openai_service import OpenAIService
             
             # Extract meaningful metadata for narrative context
             word_count = content_metadata.get("word_count", 0)
@@ -440,7 +440,9 @@ REQUIREMENTS:
 Generate a narrative response that the agent might give when reflecting on acquiring this knowledge:
 """
             
-            response = await openai.ChatCompletion.acreate(
+            # Use the centralized OpenAI service with new API
+            openai_service = OpenAIService()
+            response = openai_service.client.chat.completions.create(
                 model="gpt-4-1106-preview",  # GPT-4.1 for enhanced narrative intelligence
                 messages=[
                     {

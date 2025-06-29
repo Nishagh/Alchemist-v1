@@ -15,6 +15,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+PROJECT_ID = os.getenv('PROJECT_ID')
+
 
 class Environment(str, Enum):
     """Environment types."""
@@ -41,7 +43,7 @@ class BaseSettings(PydanticBaseSettings):
     port: int = Field(default=8080, description="Server port")
     
     # Firebase configuration
-    firebase_project_id: Optional[str] = Field(default=None, description="Firebase project ID", validation_alias="FIREBASE_PROJECT_ID")
+    PROJECT_ID: Optional[str] = Field(default=None, description="Firebase project ID", validation_alias="FIREBASE_PROJECT_ID")
     firebase_storage_bucket: Optional[str] = Field(default=None, description="Firebase storage bucket", validation_alias="FIREBASE_STORAGE_BUCKET")
     google_application_credentials: Optional[str] = Field(default=None, description="Path to Google credentials file", validation_alias="GOOGLE_APPLICATION_CREDENTIALS")
     
@@ -111,7 +113,7 @@ class BaseSettings(PydanticBaseSettings):
             pass
         return None
     
-    def get_effective_firebase_project_id(self) -> Optional[str]:
+    def get_project_id(self) -> Optional[str]:
         """
         Get the effective Firebase project ID using multiple sources in priority order:
         1. Explicitly set FIREBASE_PROJECT_ID environment variable
@@ -122,26 +124,8 @@ class BaseSettings(PydanticBaseSettings):
         Returns:
             str: Firebase project ID or None if not found
         """
-        # First try explicitly set Firebase project ID
-        if self.firebase_project_id:
-            return self.firebase_project_id
-        
-        # Try gcloud config
-        gcloud_project = self.get_gcloud_project()
-        if gcloud_project:
-            return gcloud_project
-        
-        # Try Cloud Run environment variable
-        cloud_project = os.environ.get("GOOGLE_CLOUD_PROJECT")
-        if cloud_project:
-            return cloud_project
-        
-        # Try legacy PROJECT_ID
-        legacy_project = os.environ.get("PROJECT_ID")
-        if legacy_project:
-            return legacy_project
-        
-        return None
+
+        return PROJECT_ID
     
     def get_service_url(self, service_name: str) -> Optional[str]:
         """Get URL for another service."""

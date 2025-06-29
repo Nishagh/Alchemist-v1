@@ -253,7 +253,6 @@ gcloud run deploy ${SERVICE_NAME} \
     --concurrency 80 \
     --max-instances 10 \
     --set-env-vars "AGENT_ENGINE_ENVIRONMENT=production" \
-    --set-env-vars "FIREBASE_PROJECT_ID=${PROJECT_ID}" \
     --set-env-vars "PORT=8080"
 
 # Get the service URL

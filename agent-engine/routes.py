@@ -7,6 +7,7 @@ following the conversation-centric architecture.
 import os
 import json
 import logging
+import asyncio
 from typing import Dict, Any, Optional
 from uuid import uuid4
 from datetime import datetime
@@ -31,10 +32,15 @@ from firebase_admin import auth
 logger = logging.getLogger(__name__)
 
 # Import eA³ (Epistemic Autonomy) services (required)
-from alchemist_shared.services import (
-    get_ea3_orchestrator, ConversationContext
-)
-from alchemist_shared.events import get_story_event_publisher
+try:
+    from alchemist_shared.services import (
+        get_ea3_orchestrator, ConversationContext
+    )
+    from alchemist_shared.events import get_story_event_publisher
+    EA3_SERVICES_AVAILABLE = True
+except ImportError:
+    logger.warning("eA³ services not available")
+    EA3_SERVICES_AVAILABLE = False
 
 # Import metrics routes
 try:
@@ -113,6 +119,17 @@ async def get_current_user(
             status_code=401,
             detail="Invalid authorization header format. Use 'Bearer <token>'"
         )
+    
+    # LOCAL DEVELOPMENT ONLY: Allow test tokens for local development
+    # This bypass is ONLY for localhost and should NEVER be used in production
+    is_local_development = os.getenv("ENVIRONMENT") != "production"
+    
+    if is_local_development and token.startswith("dev-test-"):
+        # Extract user ID from test token format: dev-test-{user_id}
+        test_user_id = token.replace("dev-test-", "")
+        if test_user_id:
+            logger.info(f"[DEV MODE] Using test authentication for user: {test_user_id}")
+            return test_user_id
     
     # Verify the Firebase ID token
     try:
@@ -247,11 +264,18 @@ def register_routes(app: FastAPI):
             agent_ref.set(agent_config)
             
             logger.info(f"Created agent {agent_id} for user {user_id}")
+            
+            # Create response data without SERVER_TIMESTAMP (not JSON serializable)
+            response_data = {k: v for k, v in agent_config.items() 
+                           if k not in ['created_at', 'updated_at']}
+            response_data['created_at'] = datetime.now().isoformat()
+            response_data['updated_at'] = datetime.now().isoformat()
+            
             return {
                 "status": "success", 
                 "id": agent_id,
                 "agent_id": agent_id,
-                "data": agent_config
+                "data": response_data
             }
         except Exception as e:
             logger.error(f"Error creating agent: {str(e)}")
@@ -444,24 +468,26 @@ def register_routes(app: FastAPI):
                 logger.info(f"Agent config {agent_id} not found, creating new")
                 agent_config = await default_storage.create_agent_config(agent_id, message, user_id)
                 
-                # Initialize agent's life-story for eA³ (Epistemic Autonomy, Accountability, Alignment) - required
-                ea3_orchestrator = get_ea3_orchestrator()
-                core_objective = f"Assist users as a helpful AI agent specializing in: {message}"
-                
-                life_story_created = await ea3_orchestrator.create_agent_life_story(
-                    agent_id=agent_id,
-                    core_objective=core_objective,
-                    agent_config=agent_config
-                )
-                
-                if life_story_created:
-                    logger.info(f"Initialized life-story for new agent {agent_id}")
+                # Initialize agent's life-story for eA³ (Epistemic Autonomy, Accountability, Alignment) - optional
+                if EA3_SERVICES_AVAILABLE:
+                    try:
+                        ea3_orchestrator = await get_ea3_orchestrator()
+                        core_objective = f"Assist users as a helpful AI agent specializing in: {message}"
+                        
+                        life_story_created = await ea3_orchestrator.create_agent_life_story(
+                            agent_id=agent_id,
+                            core_objective=core_objective,
+                            agent_config=agent_config
+                        )
+                        
+                        if life_story_created:
+                            logger.info(f"Initialized life-story for new agent {agent_id}")
+                        else:
+                            logger.warning(f"Failed to initialize life-story for agent {agent_id} - continuing without eA³ features")
+                    except Exception as e:
+                        logger.warning(f"eA³ life-story initialization failed for agent {agent_id}: {e}")
                 else:
-                    logger.error(f"Failed to initialize life-story for agent {agent_id}")
-                    return JSONResponse(
-                        status_code=500,
-                        content={"status": "error", "message": "Failed to initialize agent life-story"}
-                    )
+                    logger.debug(f"eA³ services not available - skipping life-story initialization for agent {agent_id}")
             else:
                 logger.info(f"Agent config {agent_id} found")
                 # Verify the user owns this agent
@@ -489,73 +515,79 @@ def register_routes(app: FastAPI):
             
             result = await orchestrator.process(input_data)
             
-            # eA³ (Epistemic Autonomy, Accountability, Alignment) processing with async story events - required
-            ea3_orchestrator = get_ea3_orchestrator()
-            
-            # Create conversation context for life-story integration
-            conversation_context = ConversationContext(
-                agent_id=agent_id,
-                user_message=message,
-                agent_response=result.get("response", ""),
-                conversation_id=agent_id,  # Using agent_id as conversation_id for now
-                user_id=user_id,
-                timestamp=datetime.now(),
-                confidence=0.8,
-                metadata={
-                    "platform": "alchemist",
-                    "interaction_type": "chat",
-                    "orchestrator_steps": len(result.get("thought_process", []))
-                }
-            )
-            
-            # Process conversation into agent's life-story (CNE + RbR)
-            coherence_maintained, ea3_assessment = await ea3_orchestrator.process_conversation(conversation_context)
-            
-            # Publish story event asynchronously for microservices coordination - required
-            story_publisher = get_story_event_publisher()
-            
-            # Publish conversation event for other services to process
-            asyncio.create_task(
-                story_publisher.publish_conversation_event(
-                    agent_id=agent_id,
-                    user_message=message,
-                    agent_response=result.get("response", ""),
-                    conversation_id=agent_id,
-                    source_service="agent-engine",
-                    metadata={
-                        "coherence_maintained": coherence_maintained,
-                        "ea3_assessment": {
-                            "autonomy_score": ea3_assessment.epistemic_autonomy_score if ea3_assessment else 0.5,
-                            "alignment_score": ea3_assessment.alignment_score if ea3_assessment else 0.5,
-                            "coherence_score": ea3_assessment.overall_coherence if ea3_assessment else 0.5
-                        } if ea3_assessment else None,
-                        "platform": "alchemist",
-                        "interaction_type": "chat",
-                        "orchestrator_steps": len(result.get("thought_process", []))
-                    }
-                )
-            )
-            logger.debug(f"Published story event for conversation with agent {agent_id}")
-            
-            if not coherence_maintained:
-                logger.warning(f"Agent {agent_id}: Narrative coherence compromised - RbR triggered")
-                
-                # Trigger autonomous reflection for major coherence issues
-                if ea3_assessment and ea3_assessment.overall_coherence < 0.7:
-                    await ea3_orchestrator.trigger_autonomous_reflection(
+            # eA³ (Epistemic Autonomy, Accountability, Alignment) processing with async story events - optional
+            if EA3_SERVICES_AVAILABLE:
+                try:
+                    ea3_orchestrator = await get_ea3_orchestrator()
+                    
+                    # Create conversation context for life-story integration
+                    conversation_context = ConversationContext(
                         agent_id=agent_id,
-                        trigger_reason="major_coherence_loss_during_conversation"
+                        user_message=message,
+                        agent_response=result.get("response", ""),
+                        conversation_id=agent_id,  # Using agent_id as conversation_id for now
+                        user_id=user_id,
+                        timestamp=datetime.now(),
+                        confidence=0.8,
+                        metadata={
+                            "platform": "alchemist",
+                            "interaction_type": "chat",
+                            "orchestrator_steps": len(result.get("thought_process", []))
+                        }
                     )
-            
-            # Log eA³ status for monitoring
-            if ea3_assessment:
-                logger.info(
-                    f"Agent {agent_id} eA³ Status - "
-                    f"Autonomy: {ea3_assessment.epistemic_autonomy_score:.3f}, "
-                    f"Accountability: {ea3_assessment.accountability_score:.3f}, "
-                    f"Alignment: {ea3_assessment.alignment_score:.3f}, "
-                    f"Coherence: {ea3_assessment.overall_coherence:.3f}"
-                )
+                    
+                    # Process conversation into agent's life-story (CNE + RbR)
+                    coherence_maintained, ea3_assessment = await ea3_orchestrator.process_conversation(conversation_context)
+                    
+                    # Publish story event asynchronously for microservices coordination
+                    story_publisher = get_story_event_publisher()
+                    
+                    # Publish conversation event for other services to process
+                    asyncio.create_task(
+                        story_publisher.publish_conversation_event(
+                            agent_id=agent_id,
+                            user_message=message,
+                            agent_response=result.get("response", ""),
+                            conversation_id=agent_id,
+                            source_service="agent-engine",
+                            metadata={
+                                "coherence_maintained": coherence_maintained,
+                                "ea3_assessment": {
+                                    "autonomy_score": ea3_assessment.epistemic_autonomy_score if ea3_assessment else 0.5,
+                                    "alignment_score": ea3_assessment.alignment_score if ea3_assessment else 0.5,
+                                    "coherence_score": ea3_assessment.overall_coherence if ea3_assessment else 0.5
+                                } if ea3_assessment else None,
+                                "platform": "alchemist",
+                                "interaction_type": "chat",
+                                "orchestrator_steps": len(result.get("thought_process", []))
+                            }
+                        )
+                    )
+                    logger.debug(f"Published story event for conversation with agent {agent_id}")
+                    
+                    if not coherence_maintained:
+                        logger.warning(f"Agent {agent_id}: Narrative coherence compromised - RbR triggered")
+                        
+                        # Trigger autonomous reflection for major coherence issues
+                        if ea3_assessment and ea3_assessment.overall_coherence < 0.7:
+                            await ea3_orchestrator.trigger_autonomous_reflection(
+                                agent_id=agent_id,
+                                trigger_reason="major_coherence_loss_during_conversation"
+                            )
+                    
+                    # Log eA³ status for monitoring
+                    if ea3_assessment:
+                        logger.info(
+                            f"Agent {agent_id} eA³ Status - "
+                            f"Autonomy: {ea3_assessment.epistemic_autonomy_score:.3f}, "
+                            f"Accountability: {ea3_assessment.accountability_score:.3f}, "
+                            f"Alignment: {ea3_assessment.alignment_score:.3f}, "
+                            f"Coherence: {ea3_assessment.overall_coherence:.3f}"
+                        )
+                except Exception as e:
+                    logger.warning(f"eA³ processing failed for agent {agent_id}: {e}")
+            else:
+                logger.debug(f"eA³ services not available - skipping advanced processing for agent {agent_id}")
             
             # Add assistant message to conversation
             if result.get("message_to_add"):
@@ -614,7 +646,7 @@ def register_routes(app: FastAPI):
                 )
             
             # Get accountability trace from eA³ orchestrator
-            ea3_orchestrator = get_ea3_orchestrator()
+            ea3_orchestrator = await get_ea3_orchestrator()
             accountability_trace = await ea3_orchestrator.get_accountability_trace(agent_id)
             
             if "error" in accountability_trace:
@@ -663,7 +695,10 @@ def register_routes(app: FastAPI):
                 )
             
             # Get eA³ status from orchestrator
-            ea3_orchestrator = get_ea3_orchestrator()
+            ea3_orchestrator = await get_ea3_orchestrator()
+            
+            # Get comprehensive eA³ assessment
+            ea3_assessment = await ea3_orchestrator._assess_agent_ea3(agent_id)
             
             # Check alignment drift
             alignment_check = await ea3_orchestrator.check_alignment_drift(agent_id)
@@ -675,8 +710,21 @@ def register_routes(app: FastAPI):
                 "status": "success",
                 "agent_id": agent_id,
                 "ea3_status": {
-                    "alignment": alignment_check,
-                    "coherence": coherence_check,
+                    "alignment": {
+                        "alignment_score": ea3_assessment.alignment_score,
+                        "drift_detected": alignment_check.get("drift_detected", False),
+                        "last_check": datetime.now().isoformat(),
+                        "core_objectives_maintained": alignment_check.get("core_objectives_maintained", True)
+                    },
+                    "coherence": {
+                        "narrative_coherence": ea3_assessment.overall_coherence,
+                        "consistency_score": coherence_check.get("consistency_score", ea3_assessment.overall_coherence),
+                        "contradiction_count": coherence_check.get("contradiction_count", 0),
+                        "last_revision": coherence_check.get("last_revision", datetime.now().isoformat())
+                    },
+                    "autonomy_score": ea3_assessment.epistemic_autonomy_score,
+                    "accountability_score": ea3_assessment.accountability_score,
+                    "overall_ea3_health": (ea3_assessment.epistemic_autonomy_score + ea3_assessment.accountability_score + ea3_assessment.alignment_score) / 3.0,
                     "timestamp": datetime.now().isoformat()
                 }
             }
@@ -717,7 +765,7 @@ def register_routes(app: FastAPI):
                 )
             
             # Trigger autonomous reflection
-            ea3_orchestrator = get_ea3_orchestrator()
+            ea3_orchestrator = await get_ea3_orchestrator()
             success = await ea3_orchestrator.trigger_autonomous_reflection(
                 agent_id=agent_id,
                 trigger_reason="manual_user_request"
@@ -737,6 +785,92 @@ def register_routes(app: FastAPI):
             
         except Exception as e:
             logger.error(f"Error triggering reflection for agent {agent_id}: {str(e)}")
+            return JSONResponse(
+                status_code=500,
+                content={"status": "error", "message": f"Error: {str(e)}"}
+            )
+
+    @app.get("/api/agents/{agent_id}/coherence-trends")
+    async def get_agent_coherence_trends(agent_id: str, user_id: str = Depends(get_current_user)):
+        """
+        Get historical coherence trend data for the agent
+        """
+        try:
+            # Check if agent exists and user owns it
+            agent_config = await default_storage.get_agent_config(agent_id)
+            if not agent_config:
+                return JSONResponse(
+                    status_code=404,
+                    content={"status": "error", "message": f"Agent {agent_id} not found"}
+                )
+            
+            if agent_config.get("userId") != user_id:
+                return JSONResponse(
+                    status_code=403,
+                    content={"status": "error", "message": "You do not have permission to access this agent's coherence trends"}
+                )
+            
+            if not EA3_SERVICES_AVAILABLE:
+                return JSONResponse(
+                    status_code=503,
+                    content={"status": "error", "message": "eA³ services not available"}
+                )
+            
+            # Get coherence trends from eA³ orchestrator
+            ea3_orchestrator = await get_ea3_orchestrator()
+            trends = await ea3_orchestrator.get_coherence_trends(agent_id)
+            
+            return {
+                "status": "success",
+                "agent_id": agent_id,
+                "trends": trends
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting coherence trends for agent {agent_id}: {str(e)}")
+            return JSONResponse(
+                status_code=500,
+                content={"status": "error", "message": f"Error: {str(e)}"}
+            )
+
+    @app.get("/api/agents/{agent_id}/conflicts")
+    async def get_agent_conflicts(agent_id: str, user_id: str = Depends(get_current_user)):
+        """
+        Get active narrative conflicts for the agent
+        """
+        try:
+            # Check if agent exists and user owns it
+            agent_config = await default_storage.get_agent_config(agent_id)
+            if not agent_config:
+                return JSONResponse(
+                    status_code=404,
+                    content={"status": "error", "message": f"Agent {agent_id} not found"}
+                )
+            
+            if agent_config.get("userId") != user_id:
+                return JSONResponse(
+                    status_code=403,
+                    content={"status": "error", "message": "You do not have permission to access this agent's conflicts"}
+                )
+            
+            if not EA3_SERVICES_AVAILABLE:
+                return JSONResponse(
+                    status_code=503,
+                    content={"status": "error", "message": "eA³ services not available"}
+                )
+            
+            # Get conflicts from eA³ orchestrator
+            ea3_orchestrator = await get_ea3_orchestrator()
+            conflicts = await ea3_orchestrator.get_narrative_conflicts(agent_id)
+            
+            return {
+                "status": "success",
+                "agent_id": agent_id,
+                "conflicts": conflicts
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting conflicts for agent {agent_id}: {str(e)}")
             return JSONResponse(
                 status_code=500,
                 content={"status": "error", "message": f"Error: {str(e)}"}
