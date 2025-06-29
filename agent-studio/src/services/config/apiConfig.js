@@ -10,8 +10,9 @@ export const AGENT_ENGINE_URL = process.env.REACT_APP_AGENT_ENGINE_URL;
 export const KNOWLEDGE_VAULT_URL = process.env.REACT_APP_KNOWLEDGE_VAULT_URL;
 export const TOOL_FORGE_URL = process.env.REACT_APP_TOOL_FORGE_URL;
 export const TUNING_SERVICE_URL = process.env.REACT_APP_TUNING_SERVICE_URL;
-export const BILLING_SERVICE_URL = process.env.REACT_APP_BILLING_SERVICE_URL || 'https://billing-service-851487020021.us-central1.run.app';
+export const BILLING_SERVICE_URL = process.env.REACT_APP_BILLING_SERVICE_URL || 'https://alchemist-billing-service-b3hpe34qdq-uc.a.run.app';
 export const GNF_SERVICE_URL = process.env.REACT_APP_GNF_SERVICE_URL || 'https://global-narrative-framework-851487020021.us-central1.run.app';
+export const PROMPT_ENGINE_URL = process.env.REACT_APP_PROMPT_ENGINE_URL;
 
 // Create axios instances with default config
 export const api = axios.create({
@@ -55,6 +56,14 @@ export const billingApi = axios.create({
 // Global Narrative Framework service axios instance
 export const gnfApi = axios.create({
   baseURL: GNF_SERVICE_URL,
+  headers: {
+    'Content-Type': 'application/json'
+  }
+});
+
+// Prompt Engine service axios instance
+export const promptApi = axios.create({
+  baseURL: PROMPT_ENGINE_URL,
   headers: {
     'Content-Type': 'application/json'
   }
@@ -145,6 +154,10 @@ export const getApiConfig = () => {
     },
     globalNarrative: {
       url: GNF_SERVICE_URL || 'https://global-narrative-framework-851487020021.us-central1.run.app',
+      timeout: 30000
+    },
+    promptEngine: {
+      url: PROMPT_ENGINE_URL,
       timeout: 30000
     }
   };

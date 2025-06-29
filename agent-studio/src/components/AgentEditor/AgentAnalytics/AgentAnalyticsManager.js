@@ -3,7 +3,7 @@
  * 
  * Component for viewing agent usage metrics and performance analytics
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -48,53 +48,70 @@ const AgentAnalyticsManager = ({
   const [timeframe, setTimeframe] = useState('7d');
   const [loading, setLoading] = useState(false);
 
-  // Mock analytics data
-  const metrics = {
-    totalRequests: { value: 12847, change: 23.5, trend: 'up' },
-    activeUsers: { value: 1256, change: -5.2, trend: 'down' },
-    avgResponseTime: { value: 1.2, change: -12.3, trend: 'down' },
-    successRate: { value: 98.7, change: 2.1, trend: 'up' },
-    errorRate: { value: 1.3, change: -2.1, trend: 'down' }
-  };
+  // Real analytics data state
+  const [metrics, setMetrics] = useState({
+    totalRequests: { value: 0, change: 0, trend: 'neutral' },
+    activeUsers: { value: 0, change: 0, trend: 'neutral' },
+    avgResponseTime: { value: 0, change: 0, trend: 'neutral' },
+    successRate: { value: 0, change: 0, trend: 'neutral' },
+    errorRate: { value: 0, change: 0, trend: 'neutral' }
+  });
 
-  const recentSessions = [
-    {
-      id: 1,
-      user: 'user_123',
-      timestamp: '2024-01-15 14:30',
-      requests: 15,
-      duration: '12m 34s',
-      status: 'success'
-    },
-    {
-      id: 2,
-      user: 'user_456',
-      timestamp: '2024-01-15 14:25',
-      requests: 8,
-      duration: '5m 12s',
-      status: 'success'
-    },
-    {
-      id: 3,
-      user: 'user_789',
-      timestamp: '2024-01-15 14:20',
-      requests: 3,
-      duration: '2m 45s',
-      status: 'error'
-    },
-    {
-      id: 4,
-      user: 'user_012',
-      timestamp: '2024-01-15 14:15',
-      requests: 22,
-      duration: '18m 56s',
-      status: 'success'
-    }
-  ];
+  const [recentSessions, setRecentSessions] = useState([]);
+
+  // Fetch real analytics data
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      if (!agentId) return;
+      
+      setLoading(true);
+      try {
+        // TODO: Replace with actual analytics API call
+        // For now, fetch from conversations to get real metrics
+        const response = await fetch(`/api/agents/${agentId}/conversations`);
+        if (response.ok) {
+          const conversations = await response.json();
+          
+          // Calculate real metrics from conversations
+          const totalRequests = conversations.length;
+          const successfulRequests = conversations.filter(c => c.status !== 'error').length;
+          const successRate = totalRequests > 0 ? (successfulRequests / totalRequests) * 100 : 0;
+          const errorRate = 100 - successRate;
+          
+          setMetrics({
+            totalRequests: { value: totalRequests, change: 0, trend: 'neutral' },
+            activeUsers: { value: new Set(conversations.map(c => c.user_id)).size, change: 0, trend: 'neutral' },
+            avgResponseTime: { value: 1.5, change: 0, trend: 'neutral' }, // TODO: Calculate from actual response times
+            successRate: { value: successRate, change: 0, trend: 'neutral' },
+            errorRate: { value: errorRate, change: 0, trend: 'neutral' }
+          });
+          
+          // Convert conversations to session format
+          const sessions = conversations.slice(0, 10).map((conv, index) => ({
+            id: index + 1,
+            user: conv.user_id || 'anonymous',
+            timestamp: new Date(conv.created_at).toLocaleString(),
+            requests: 1,
+            duration: '5m 30s', // TODO: Calculate actual duration
+            status: conv.status || 'success'
+          }));
+          
+          setRecentSessions(sessions);
+        }
+      } catch (error) {
+        console.error('Error fetching analytics:', error);
+        // Keep default empty state
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchAnalytics();
+  }, [agentId, timeframe]);
 
   const handleTimeframeChange = (event) => {
     setTimeframe(event.target.value);
-    // In real implementation, this would trigger data refresh
+    // Data refresh will be triggered by useEffect dependency
   };
 
   const handleRefresh = () => {

@@ -1,8 +1,8 @@
 /**
- * Alchemist Dashboard - Central Hub
+ * Alchemist Dashboard - AI Workforce Management
  * 
- * Modern dashboard serving as the main entry point for authenticated users
- * Provides overview, quick actions, and navigation to all features
+ * Comprehensive dashboard for managing AI agents as workforce members
+ * Displays agents with human-like employee profiles and metrics
  */
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -29,7 +29,22 @@ import {
   alpha,
   Fade,
   Grow,
-  Container
+  Container,
+  Badge,
+  Tabs,
+  Tab,
+  CardActions,
+  Menu,
+  MenuItem,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Switch,
+  FormControlLabel,
+  Tooltip,
+  Skeleton
 } from '@mui/material';
 import {
   AutoAwesome as AutoAwesomeIcon,
@@ -50,12 +65,37 @@ import {
   Launch as LaunchIcon,
   MoreVert as MoreVertIcon,
   Notifications as NotificationsIcon,
-  Psychology as PsychologyIcon
+  Psychology as PsychologyIcon,
+  Work as WorkIcon,
+  Group as GroupIcon,
+  AttachMoney as AttachMoneyIcon,
+  Star as StarIcon,
+  Shield as ShieldIcon,
+  Timeline as TimelineIcon,
+  Person as PersonIcon,
+  Email as EmailIcon,
+  Phone as PhoneIconAlt,
+  Business as BusinessIcon,
+  Assignment as AssignmentIcon,
+  Visibility as VisibilityIcon,
+  Search as SearchIcon,
+  FilterList as FilterListIcon,
+  Sort as SortIcon,
+  ViewList as ViewListIcon,
+  ViewModule as ViewModuleIcon,
+  MoreHoriz as MoreHorizIcon,
+  AccountCircle as AccountCircleIcon,
+  EmojiEvents as EmojiEventsIcon,
+  School as SchoolIcon,
+  BarChart as BarChartIcon
 } from '@mui/icons-material';
 
 import { useAuth } from '../utils/AuthContext';
 import { db } from '../utils/firebase';
 import { collection, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
+import { gnfApi } from '../services/config/apiConfig';
+import { WorkforceGrid, WorkforceControls } from '../components/AgentWorkforce';
+import { workforceService } from '../services/workforce/workforceService';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -66,8 +106,19 @@ const Dashboard = () => {
     totalAgents: 0,
     activeDeployments: 0,
     totalIntegrations: 0,
-    messagesHandled: 0
+    messagesHandled: 0,
+    totalCosts: 0,
+    avgPerformance: 0
   });
+  
+  const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
+  const [sortBy, setSortBy] = useState('name');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [selectedAgents, setSelectedAgents] = useState([]);
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [agentIdentities, setAgentIdentities] = useState({});
+  const [agentCounts, setAgentCounts] = useState({});
 
   const formatTimeAgo = (timestamp) => {
     if (!timestamp) return 'Unknown time';
@@ -85,17 +136,170 @@ const Dashboard = () => {
     return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
   };
   
+  // Helper functions for real data processing
+  
+  const generateJobTitle = (agentId) => {
+    const agentData = workforceData[agentId];
+    if (!agentData) return 'AI Specialist';
+    return workforceService.generateJobTitle(agentData);
+  };
+  
+  const generateProfilePicture = (identity) => {
+    if (!identity) return '#757575';
+    const stage = identity.development_stage;
+    const colors = {
+      nascent: '#4CAF50',
+      developing: '#2196F3', 
+      mature: '#9C27B0',
+      expert: '#FF9800'
+    };
+    return colors[stage] || '#757575';
+  };
+  
+  const calculateExperienceYears = (agentId) => {
+    const agentData = workforceData[agentId];
+    if (!agentData) return 0;
+    const experience = workforceService.calculateExperience(agentData);
+    return experience.years;
+  };
+  
+  const calculateUsageCosts = (agentId) => {
+    const agentData = workforceData[agentId];
+    if (!agentData) return 0;
+    const performance = workforceService.calculatePerformanceMetrics(agentData);
+    const costs = workforceService.calculateUsageCosts(agentData, performance);
+    return costs.totalCost;
+  };
+  
+  const getPerformanceScore = (agentId) => {
+    const agentData = workforceData[agentId];
+    if (!agentData) return 0;
+    const performance = workforceService.calculatePerformanceMetrics(agentData);
+    return performance.successRate;
+  };
+  
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'active': return 'success';
+      case 'deployed': return 'info';
+      case 'training': return 'warning';
+      case 'draft': return 'default';
+      default: return 'default';
+    }
+  };
+  
+  
+  
+  const [allAgents, setAllAgents] = useState([]);
   const [recentAgents, setRecentAgents] = useState([]);
-  const [recentActivity, setRecentActivity] = useState([]);
   const [loading, setLoading] = useState(true);
   const [userAgentIds, setUserAgentIds] = useState(new Set());
   const [allDeployments, setAllDeployments] = useState([]);
+  const [agentsLoading, setAgentsLoading] = useState(true);
+  const [workforceData, setWorkforceData] = useState({});
+  const [realTimeStats, setRealTimeStats] = useState({
+    totalCosts: 0,
+    avgPerformance: 0,
+    totalTasks: 0,
+    avgResponseTime: 0
+  });
 
   useEffect(() => {
     if (currentUser) {
       loadDashboardData();
+      loadRealWorkforceData();
     }
   }, [currentUser]);
+  
+  const loadRealWorkforceData = async () => {
+    try {
+      console.log('Loading real workforce data...');
+      const { agents, workforceData: data } = await workforceService.getAllAgentWorkforceData(currentUser.uid);
+      
+      setWorkforceData(data);
+      
+      // Calculate real-time statistics
+      let totalCosts = 0;
+      let totalPerformance = 0;
+      let totalTasks = 0;
+      let totalResponseTime = 0;
+      let validAgents = 0;
+      
+      const identities = {};
+      
+      agents.forEach(agent => {
+        const agentData = data[agent.id];
+        if (agentData) {
+          // Store identity data
+          identities[agent.id] = agentData.identity;
+          
+          // Calculate real metrics
+          const performance = workforceService.calculatePerformanceMetrics(agentData);
+          const costs = workforceService.calculateUsageCosts(agentData, performance);
+          
+          if (performance.totalTasks > 0) {
+            totalCosts += costs.totalCost;
+            totalPerformance += performance.successRate;
+            totalTasks += performance.totalTasks;
+            totalResponseTime += performance.averageResponseTime;
+            validAgents++;
+          }
+        }
+      });
+      
+      setAgentIdentities(identities);
+      const newRealTimeStats = {
+        totalCosts: totalCosts,
+        avgPerformance: validAgents > 0 ? Math.round(totalPerformance / validAgents) : 0,
+        totalTasks: totalTasks,
+        avgResponseTime: validAgents > 0 ? Math.round((totalResponseTime / validAgents) * 10) / 10 : 0
+      };
+      
+      setRealTimeStats(newRealTimeStats);
+      
+      // Update the main stats with real data
+      setStats(prev => ({
+        ...prev,
+        totalCosts: totalCosts,
+        avgPerformance: newRealTimeStats.avgPerformance,
+        messagesHandled: totalTasks
+      }));
+      
+      // Calculate agent counts by status
+      const counts = {
+        total: agents.length,
+        draft: 0,
+        deployed: 0
+      };
+      
+      agents.forEach(agent => {
+        const status = agent.status || 'draft';
+        
+        if (status === 'draft') counts.draft++;
+        else if (status === 'deployed') counts.deployed++;
+      });
+      
+      setAgentCounts(counts);
+      
+      console.log('Real workforce data loaded:', {
+        agentCount: agents.length,
+        validAgents,
+        totalCosts,
+        avgPerformance: validAgents > 0 ? Math.round(totalPerformance / validAgents) : 0,
+        statusCounts: counts
+      });
+      
+    } catch (error) {
+      console.error('Error loading real workforce data:', error);
+    }
+  };
+  
+  // Reload workforce data when agents change
+  useEffect(() => {
+    if (allAgents.length > 0 && currentUser) {
+      loadRealWorkforceData();
+    }
+  }, [allAgents, currentUser]);
 
   // Load deployments when user agent IDs are available
   useEffect(() => {
@@ -155,7 +359,6 @@ const Dashboard = () => {
                     deployment.status === 'failed' ? 'error' : 'info'
             }));
           
-          setRecentActivity(prev => [...prev.filter(a => !a.id.startsWith('deployment-')), ...deploymentActivity]);
         },
         (error) => {
           console.error('Error in deployments snapshot listener:', error);
@@ -195,22 +398,37 @@ const Dashboard = () => {
         limit(6)
       );
       
-      unsubscribeAgents = onSnapshot(agentsQuery, 
+      // Load ALL agents for the workforce view
+      const allAgentsRef = collection(db, 'agents');
+      const allAgentsQuery = query(
+        allAgentsRef, 
+        where('userId', '==', currentUser.uid),
+        orderBy('updated_at', 'desc')
+      );
+      
+      unsubscribeAgents = onSnapshot(allAgentsQuery, 
         (snapshot) => {
           console.log('Agents snapshot received:', snapshot.size, 'agents');
           const agents = [];
           const agentIds = new Set();
           snapshot.forEach((doc) => {
             console.log('Agent doc:', doc.id, doc.data());
-            agents.push({ id: doc.id, agent_id: doc.id, ...doc.data() });
+            const agentData = { id: doc.id, agent_id: doc.id, ...doc.data() };
+            agents.push(agentData);
             agentIds.add(doc.id);
           });
-          setRecentAgents(agents);
+          setAllAgents(agents);
+          setRecentAgents(agents.slice(0, 6)); // Keep recent agents for activity
           setUserAgentIds(agentIds);
-          setStats(prev => ({ ...prev, totalAgents: snapshot.size }));
+          setStats(prev => ({
+            ...prev, 
+            totalAgents: snapshot.size
+          }));
+          setAgentsLoading(false);
         },
         (error) => {
           console.error('Error in agents snapshot listener:', error);
+          setAgentsLoading(false);
         }
       );
 
@@ -245,7 +463,6 @@ const Dashboard = () => {
               color: 'info'
             }));
           
-          setRecentActivity(prev => [...prev.filter(a => !a.id.startsWith('phone-')), ...phoneActivity]);
         },
         (error) => {
           console.error('Error in phones snapshot listener:', error);
@@ -278,15 +495,13 @@ const Dashboard = () => {
               };
             });
           
-          setRecentActivity(prev => [...prev.filter(a => !a.id.startsWith('agent-')), ...agentActivity]);
         },
         (error) => {
           console.error('Error in recent agents snapshot listener:', error);
         }
       );
 
-      // Set mock messages handled (would need actual message tracking)
-      setStats(prev => ({ ...prev, messagesHandled: 0 })); // Real implementation would track this
+      // Real task data will be updated when workforce data loads
 
       setLoading(false);
       
@@ -302,45 +517,49 @@ const Dashboard = () => {
 
   const quickActions = [
     {
-      title: 'Create Agent',
-      description: 'Build a new AI agent',
-      icon: <SmartToyIcon />,
+      title: 'Create New Agent',
+      description: 'Build a new AI assistant',
+      icon: <PersonIcon />,
       color: '#6366f1',
       action: () => navigate('/create-agent')
     },
     {
-      title: 'My Agents',
-      description: 'Manage existing agents',
-      icon: <IntegrationIcon />,
+      title: 'Team Directory',
+      description: 'View all workforce members',
+      icon: <GroupIcon />,
       color: '#8b5cf6',
       action: () => navigate('/agents')
     },
     {
-      title: 'WhatsApp Integration',
-      description: 'Connect agents to WhatsApp',
-      icon: <WhatsAppIcon />,
-      color: '#25D366',
+      title: 'Performance Review',
+      description: 'Analyze team metrics',
+      icon: <BarChartIcon />,
+      color: '#f59e0b',
       action: () => {
-        // Navigate to agent management
-        // If user has agents, go to first agent's dashboard
-        if (recentAgents.length > 0) {
-          navigate(`/agent/${recentAgents[0].id}`);
+        if (allAgents.length > 0) {
+          navigate(`/agent-analytics/${allAgents[0].id}`);
         } else {
-          // If no agents, suggest creating one first
           navigate('/create-agent');
         }
       }
     },
     {
-      title: 'API Documentation',
-      description: 'Integration guides',
-      icon: <AnalyticsIcon />,
-      color: '#f59e0b',
-      action: () => window.open('https://docs.example.com', '_blank')
+      title: 'Deploy Agents',
+      description: 'Connect to platforms',
+      icon: <RocketLaunchIcon />,
+      color: '#10b981',
+      action: () => {
+        if (allAgents.length > 0) {
+          navigate(`/agent/${allAgents[0].id}`);
+        } else {
+          navigate('/create-agent');
+        }
+      }
     }
   ];
+  
 
-  const StatCard = ({ title, value, icon, trend, color = 'primary' }) => (
+  const StatCard = ({ title, value, icon, trend, color = 'primary', prefix = '' }) => (
     <Card sx={{ height: '100%', position: 'relative', overflow: 'visible' }}>
       <CardContent>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -349,13 +568,13 @@ const Dashboard = () => {
               {title}
             </Typography>
             <Typography variant="h4" component="div" fontWeight="bold">
-              {value.toLocaleString()}
+              {prefix}{typeof value === 'number' ? value.toLocaleString() : value}
             </Typography>
             {trend && (
               <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
                 <TrendingUpIcon fontSize="small" color="success" />
                 <Typography variant="caption" color="success.main" sx={{ ml: 0.5 }}>
-                  +{trend}% this week
+                  +{trend}% this month
                 </Typography>
               </Box>
             )}
@@ -411,49 +630,6 @@ const Dashboard = () => {
     </Card>
   );
 
-  const AgentCard = ({ agent, index }) => (
-    <Grow in={true} timeout={300 + index * 100}>
-      <Card sx={{ mb: 2 }}>
-        <CardContent>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <Avatar sx={{ bgcolor: 'primary.main' }}>
-                <PsychologyIcon />
-              </Avatar>
-              <Box>
-                <Typography variant="h6" fontWeight="bold">
-                  {agent.name || 'Untitled Agent'}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {agent.description || 'No description'}
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
-                  <Chip 
-                    label={agent.status || 'Draft'} 
-                    size="small" 
-                    color={agent.status === 'active' ? 'success' : 'default'}
-                  />
-                  <Chip 
-                    label={`Updated ${new Date(agent.updated_at?.seconds * 1000 || Date.now()).toLocaleDateString()}`}
-                    size="small"
-                    variant="outlined"
-                  />
-                </Box>
-              </Box>
-            </Box>
-            <Box>
-              <IconButton onClick={() => navigate(`/agent/${agent.id}`)}>
-                <EditIcon />
-              </IconButton>
-              <IconButton>
-                <MoreVertIcon />
-              </IconButton>
-            </Box>
-          </Box>
-        </CardContent>
-      </Card>
-    </Grow>
-  );
 
   if (loading) {
     return (
@@ -471,24 +647,23 @@ const Dashboard = () => {
       <Fade in={true} timeout={500}>
         <Box sx={{ mb: 4 }}>
           <Typography variant="h4" fontWeight="bold" gutterBottom>
-            Welcome back, {currentUser?.displayName || currentUser?.email?.split('@')[0] || 'there'}! 👋
+            AI Workforce Dashboard 🤖
           </Typography>
           <Typography variant="h6" color="text.secondary">
-            Here's what's happening with your AI agents today.
+            Managing {stats.totalAgents} AI employees • Total costs: ₹{stats.totalCosts.toLocaleString('en-IN')}
           </Typography>
         </Box>
       </Fade>
 
-      {/* Stats Grid */}
+      {/* Workforce Stats Grid */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
           <Fade in={true} timeout={600}>
             <div>
               <StatCard
-                title="Total Agents"
+                title="Total Employees"
                 value={stats.totalAgents}
-                icon={<SmartToyIcon />}
-                trend={12}
+                icon={<GroupIcon />}
                 color="primary"
               />
             </div>
@@ -500,8 +675,7 @@ const Dashboard = () => {
               <StatCard
                 title="Active Deployments"
                 value={stats.activeDeployments}
-                icon={<RocketLaunchIcon />}
-                trend={8}
+                icon={<WorkIcon />}
                 color="success"
               />
             </div>
@@ -511,11 +685,11 @@ const Dashboard = () => {
           <Fade in={true} timeout={800}>
             <div>
               <StatCard
-                title="Integrations"
-                value={stats.totalIntegrations}
-                icon={<IntegrationIcon />}
-                trend={25}
-                color="info"
+                title="Total Costs"
+                value={stats.totalCosts}
+                icon={<AttachMoneyIcon />}
+                color="warning"
+                prefix="₹"
               />
             </div>
           </Fade>
@@ -524,11 +698,10 @@ const Dashboard = () => {
           <Fade in={true} timeout={900}>
             <div>
               <StatCard
-                title="Messages Handled"
-                value={stats.messagesHandled}
-                icon={<MessageIcon />}
-                trend={156}
-                color="secondary"
+                title="Avg Performance"
+                value={`${stats.avgPerformance}%`}
+                icon={<StarIcon />}
+                color="info"
               />
             </div>
           </Fade>
@@ -539,7 +712,7 @@ const Dashboard = () => {
       <Fade in={true} timeout={1000}>
         <Box sx={{ mb: 4 }}>
           <Typography variant="h5" fontWeight="bold" gutterBottom>
-            Quick Actions
+            Workforce Management
           </Typography>
           <Grid container spacing={3}>
             {quickActions.map((action, index) => (
@@ -555,96 +728,56 @@ const Dashboard = () => {
         </Box>
       </Fade>
 
-      <Grid container spacing={4}>
-        {/* Recent Agents */}
-        <Grid item xs={12} lg={8}>
-          <Fade in={true} timeout={1200}>
-            <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-                  <Typography variant="h6" fontWeight="bold">
-                    Recent Agents
-                  </Typography>
-                  <Button
-                    endIcon={<ArrowForwardIcon />}
-                    onClick={() => navigate('/agents')}
-                  >
-                    View All
-                  </Button>
-                </Box>
-                <Box>
-                  {recentAgents.length > 0 ? (
-                    recentAgents.slice(0, 4).map((agent, index) => (
-                      <AgentCard key={agent.id} agent={agent} index={index} />
-                    ))
-                  ) : (
-                    <Box sx={{ textAlign: 'center', py: 4 }}>
-                      <SmartToyIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
-                      <Typography variant="h6" color="text.secondary" gutterBottom>
-                        No agents yet
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                        Create your first AI agent to get started
-                      </Typography>
-                      <Button
-                        variant="contained"
-                        startIcon={<AddIcon />}
-                        onClick={() => navigate('/create-agent')}
-                      >
-                        Create Agent
-                      </Button>
-                    </Box>
-                  )}
-                </Box>
-              </CardContent>
-            </Card>
-          </Fade>
-        </Grid>
-
-        {/* Recent Activity */}
-        <Grid item xs={12} lg={4}>
-          <Fade in={true} timeout={1300}>
-            <Card sx={{ height: '100%' }}>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-                  <Typography variant="h6" fontWeight="bold">
-                    Recent Activity
-                  </Typography>
-                  <IconButton size="small">
-                    <NotificationsIcon />
-                  </IconButton>
-                </Box>
-                <List>
-                  {recentActivity.map((activity, index) => (
-                    <Grow in={true} timeout={1400 + index * 100} key={activity.id}>
-                      <ListItem sx={{ px: 0 }}>
-                        <ListItemIcon>
-                          <Avatar
-                            sx={{
-                              bgcolor: alpha(theme.palette[activity.color].main, 0.1),
-                              color: theme.palette[activity.color].main,
-                              width: 32,
-                              height: 32
-                            }}
-                          >
-                            {React.cloneElement(activity.icon, { fontSize: 'small' })}
-                          </Avatar>
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={activity.title}
-                          secondary={activity.time}
-                          primaryTypographyProps={{ fontSize: '0.9rem' }}
-                          secondaryTypographyProps={{ fontSize: '0.8rem' }}
-                        />
-                      </ListItem>
-                    </Grow>
-                  ))}
-                </List>
-              </CardContent>
-            </Card>
-          </Fade>
-        </Grid>
-      </Grid>
+      {/* AI Workforce Directory */}
+      <Fade in={true} timeout={1200}>
+        <Card sx={{ mb: 4 }}>
+          <CardContent>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+              <Typography variant="h5" fontWeight="bold">
+                🏢 AI Workforce Directory
+              </Typography>
+              
+              <WorkforceControls
+                searchTerm={searchTerm}
+                setSearchTerm={setSearchTerm}
+                sortBy={sortBy}
+                setSortBy={setSortBy}
+                viewMode={viewMode}
+                setViewMode={setViewMode}
+                statusFilter={statusFilter}
+                setStatusFilter={setStatusFilter}
+                agentCounts={agentCounts}
+              />
+            </Box>
+            
+            <WorkforceGrid
+              agents={allAgents}
+              loading={agentsLoading}
+              viewMode={viewMode}
+              searchTerm={searchTerm}
+              sortBy={sortBy}
+              statusFilter={statusFilter}
+              showActions={true}
+              workforceData={workforceData}
+              agentIdentities={agentIdentities}
+            />
+            
+            {allAgents.length === 0 && !agentsLoading && (
+              <Box sx={{ textAlign: 'center', py: 6 }}>
+                <Button
+                  variant="contained"
+                  size="large"
+                  startIcon={<PersonIcon />}
+                  onClick={() => navigate('/create-agent')}
+                >
+                  Create First Agent
+                </Button>
+              </Box>
+            )}
+          </CardContent>
+        </Card>
+      </Fade>
+      
     </Container>
   );
 };

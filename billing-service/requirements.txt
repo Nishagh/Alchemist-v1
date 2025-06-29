@@ -1,6 +1,7 @@
 # FastAPI and ASGI server
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
+setuptools>=65.0.0
 
 # Authentication and security
 firebase-admin==6.2.0

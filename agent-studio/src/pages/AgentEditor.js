@@ -301,10 +301,7 @@ const AgentEditor = () => {
         onSectionChange={handleSectionChange}
         disabled={saving}
         workflow={workflow}
-        agent={agent}
-        onAgentUpdate={handleAgentUpdate}
-        onAgentSave={handleAgentSave}
-        saving={saving}
+        onBackClick={handleBackClick}
       >
         {renderSectionContent()}
       </AgentSidebarNavigation>

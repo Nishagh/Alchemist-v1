@@ -29,6 +29,7 @@ import AgentCreationRedirect from './pages/AgentCreationRedirect';
 import CreateAgent from './pages/CreateAgent';
 import Credits from './pages/Credits';
 import Account from './pages/Account';
+import AgentProfile from './pages/AgentProfile';
 
 // Theme Context
 const ThemeContext = createContext();
@@ -572,6 +573,10 @@ function App() {
     {
       path: '/account',
       element: <ProtectedRoute><Account /></ProtectedRoute>
+    },
+    {
+      path: '/agent-profile/:agentId',
+      element: <ProtectedRoute><AgentProfile /></ProtectedRoute>
     },
   ]);
 

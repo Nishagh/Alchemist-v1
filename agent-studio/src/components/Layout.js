@@ -27,10 +27,14 @@ import {
   DarkMode as DarkModeIcon,
   LightMode as LightModeIcon,
   CreditCard as CreditCardIcon,
-  Person as PersonIcon
+  Person as PersonIcon,
+  Group as GroupIcon,
+  Work as WorkIcon,
+  BarChart as BarChartIcon
 } from '@mui/icons-material';
 import { useAuth } from '../utils/AuthContext';
 import { useThemeMode } from '../App';
+import NotificationDropdown from './NotificationDropdown';
 
 const Layout = ({ children }) => {
   const location = useLocation();
@@ -118,14 +122,14 @@ const Layout = ({ children }) => {
                 <Button
                   component={Link}
                   to="/dashboard"
-                  startIcon={<DashboardIcon />}
+                  startIcon={<WorkIcon />}
                   color="inherit"
-                  variant={location.pathname === '/dashboard' ? 'contained' : 'text'}
+                  variant={location.pathname === '/dashboard' || location.pathname === '/' ? 'contained' : 'text'}
                   sx={{
                     borderRadius: 2,
                     fontWeight: 'bold',
-                    bgcolor: location.pathname === '/dashboard' ? (theme.palette.mode === 'dark' ? '#ffffff' : '#000000') : 'transparent',
-                    color: location.pathname === '/dashboard' ? (theme.palette.mode === 'dark' ? '#000000' : '#ffffff') : theme.palette.text.primary,
+                    bgcolor: location.pathname === '/dashboard' || location.pathname === '/' ? (theme.palette.mode === 'dark' ? '#000000' : '#ffffff') : 'transparent',
+                    color: location.pathname === '/dashboard' || location.pathname === '/' ? (theme.palette.mode === 'dark' ? '#ffffff' : '#000000') : theme.palette.text.primary,
                     '&:hover': {
                       bgcolor: theme.palette.mode === 'dark' ? '#1a1a1a' : '#f9fafb'
                     }
@@ -133,45 +137,9 @@ const Layout = ({ children }) => {
                 >
                   Dashboard
                 </Button>
-                
-                <Button
-                  component={Link}
-                  to="/agents"
-                  startIcon={<ListIcon />}
-                  color="inherit"
-                  variant={location.pathname === '/agents' ? 'contained' : 'text'}
-                  sx={{
-                    borderRadius: 2,
-                    fontWeight: 'bold',
-                    bgcolor: location.pathname === '/agents' ? (theme.palette.mode === 'dark' ? '#ffffff' : '#000000') : 'transparent',
-                    color: location.pathname === '/agents' ? (theme.palette.mode === 'dark' ? '#000000' : '#ffffff') : theme.palette.text.primary,
-                    '&:hover': {
-                      bgcolor: theme.palette.mode === 'dark' ? '#1a1a1a' : '#f9fafb'
-                    }
-                  }}
-                >
-                  My Agents
-                </Button>
-                
-                <Button
-                  component={Link}
-                  to="/create-agent"
-                  startIcon={<RocketLaunchIcon />}
-                  color="inherit"
-                  variant={location.pathname === '/create-agent' || location.pathname === '/agent-editor' || location.pathname.startsWith('/agent-editor/') ? 'contained' : 'text'}
-                  sx={{
-                    borderRadius: 2,
-                    fontWeight: 'bold',
-                    bgcolor: (location.pathname === '/create-agent' || location.pathname === '/agent-editor' || location.pathname.startsWith('/agent-editor/')) ? (theme.palette.mode === 'dark' ? '#ffffff' : '#000000') : 'transparent',
-                    color: (location.pathname === '/create-agent' || location.pathname === '/agent-editor' || location.pathname.startsWith('/agent-editor/')) ? (theme.palette.mode === 'dark' ? '#000000' : '#ffffff') : theme.palette.text.primary,
-                    '&:hover': {
-                      bgcolor: theme.palette.mode === 'dark' ? '#1a1a1a' : '#f9fafb'
-                    }
-                  }}
-                >
-                  Create Agent
-                </Button>
               </Stack>
+              
+              <NotificationDropdown />
               
               <IconButton
                 size="large"

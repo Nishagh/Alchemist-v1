@@ -63,6 +63,11 @@ const AgentsList = () => {
   const navigate = useNavigate();
   const theme = useTheme();
   const { currentUser } = useAuth();
+  
+  // Redirect to the main dashboard since it now includes the workforce directory
+  useEffect(() => {
+    navigate('/dashboard');
+  }, [navigate]);
 
   // Function to format file size
   const formatFileSize = (bytes) => {

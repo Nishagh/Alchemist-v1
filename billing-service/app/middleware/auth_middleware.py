@@ -200,3 +200,18 @@ def verify_firebase_token(credentials: HTTPAuthorizationCredentials = Depends(se
                 "error_code": "TOKEN_VERIFICATION_FAILED"
             }
         )
+
+
+async def get_firebase_service(request: Request) -> FirebaseService:
+    """Dependency to get Firebase service instance"""
+    firebase_service = getattr(request.app.state, 'firebase', None)
+    if not firebase_service:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "error": "Firebase service not available",
+                "error_code": "FIREBASE_SERVICE_UNAVAILABLE"
+            }
+        )
+    return firebase_service

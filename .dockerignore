@@ -1,8 +1,9 @@
-# Exclude all other services except agent-engine and shared
+# Exclude all other services except billing-service and shared
 admin-dashboard/
 agent-bridge/
 agent-studio/
 agent-tuning-service/
+agent-engine/
 alchemist-monitor-service/
 banking-api-service/
 knowledge-vault/
@@ -12,7 +13,6 @@ sandbox-console/
 tool-forge/
 user-deployment-monitor/
 agent-launcher/
-billing-service/
 global-narative-framework/
 
 # Exclude documentation and scripts
@@ -97,8 +97,8 @@ service-account-key.json
 shared/build/
 shared/dist/
 
-# Include what we need for agent-engine
-!agent-engine/
+# Include what we need for billing-service
+!billing-service/
 !shared/
 
 # Exclude deployment configs at root

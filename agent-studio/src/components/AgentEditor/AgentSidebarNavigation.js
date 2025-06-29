@@ -29,12 +29,11 @@ import {
   Tune as TuneIcon,
   Menu as MenuIcon,
   ChevronLeft as ChevronLeftIcon,
+  ArrowBack as ArrowBackIcon,
   ExpandLess,
   ExpandMore
 } from '@mui/icons-material';
 
-// Import AgentConfigurationForm component
-import AgentConfigurationForm from './AgentConfiguration/AgentConfigurationForm';
 
 const SIDEBAR_WIDTH = 420;
 const SIDEBAR_COLLAPSED_WIDTH = 64;
@@ -78,10 +77,7 @@ const AgentSidebarNavigation = ({
   children,
   disabled = false,
   workflow = null,
-  agent = null,
-  onAgentUpdate = null,
-  onAgentSave = null,
-  saving = false
+  onBackClick = null
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -134,15 +130,45 @@ const AgentSidebarNavigation = ({
         }}
       >
         {!isCollapsed && (
-          <Typography 
-            variant="h6" 
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {onBackClick && (
+              <IconButton 
+                onClick={onBackClick}
+                size="small"
+                sx={{ 
+                  color: 'text.secondary',
+                  '&:hover': {
+                    bgcolor: alpha(theme.palette.primary.main, 0.1)
+                  }
+                }}
+              >
+                <ArrowBackIcon />
+              </IconButton>
+            )}
+            <Typography 
+              variant="h6" 
+              sx={{ 
+                fontWeight: 600,
+                color: 'text.primary'
+              }}
+            >
+              Agent Editor
+            </Typography>
+          </Box>
+        )}
+        {isCollapsed && onBackClick && (
+          <IconButton 
+            onClick={onBackClick}
+            size="small"
             sx={{ 
-              fontWeight: 600,
-              color: 'text.primary'
+              color: 'text.secondary',
+              '&:hover': {
+                bgcolor: alpha(theme.palette.primary.main, 0.1)
+              }
             }}
           >
-            Agent Editor
-          </Typography>
+            <ArrowBackIcon />
+          </IconButton>
         )}
         {!isMobile && (
           <IconButton 
@@ -350,34 +376,6 @@ const AgentSidebarNavigation = ({
         })}
       </List>
 
-      {/* Agent Configuration Form - only show on definition section and when not collapsed */}
-      {!isCollapsed && activeSection === 'definition' && agent && onAgentUpdate && onAgentSave && (
-        <Box sx={{ 
-          borderTop: `1px solid ${theme.palette.divider}`,
-          p: 2,
-          maxHeight: '50vh',
-          overflow: 'auto'
-        }}>
-          <Typography 
-            variant="h6" 
-            sx={{ 
-              fontWeight: 600,
-              mb: 2,
-              color: 'text.primary'
-            }}
-          >
-            Agent Configuration
-          </Typography>
-          <AgentConfigurationForm
-            agent={agent}
-            onAgentUpdate={onAgentUpdate}
-            onSave={onAgentSave}
-            saving={saving}
-            disabled={disabled}
-            compact={true}
-          />
-        </Box>
-      )}
 
       {/* Footer */}
       {!isCollapsed && (
