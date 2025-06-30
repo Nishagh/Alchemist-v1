@@ -36,6 +36,7 @@ import {
   Analytics as AnalyticsIcon,
   Close as CloseIcon
 } from '@mui/icons-material';
+import { getFileChunkAnalysis } from '../../../services/knowledgeBase/knowledgeBaseService';
 
 const ContentPreview = ({ 
   file,
@@ -48,16 +49,74 @@ const ContentPreview = ({
   const [activeTab, setActiveTab] = useState(0);
   const [showFullContent, setShowFullContent] = useState(false);
   const [selectedChunk, setSelectedChunk] = useState(null);
+  const [chunkAnalysis, setChunkAnalysis] = useState(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
 
   // Reset state when file changes
   useEffect(() => {
     setActiveTab(0);
     setShowFullContent(false);
     setSelectedChunk(null);
+    setChunkAnalysis(null);
   }, [file]);
+
+  const loadChunkAnalysis = async () => {
+    const fileId = file?.file_id || file?.id;
+    console.log('ContentPreview loadChunkAnalysis called, fileId:', fileId, 'chunkAnalysis:', chunkAnalysis);
+    
+    if (chunkAnalysis || !fileId) {
+      console.log('ContentPreview chunk analysis already loaded or no file, skipping');
+      return; // Already loaded or no file
+    }
+    
+    try {
+      console.log('ContentPreview starting chunk analysis for file:', fileId);
+      setAnalysisLoading(true);
+      const analysis = await getFileChunkAnalysis(fileId);
+      console.log('ContentPreview chunk analysis result:', analysis);
+      setChunkAnalysis(analysis);
+    } catch (error) {
+      console.error('ContentPreview error loading chunk analysis:', error);
+      setChunkAnalysis({ error: 'Failed to load chunk analysis' });
+    } finally {
+      setAnalysisLoading(false);
+    }
+  };
+
+  // Simple frontend quality calculation as fallback
+  const calculateSimpleQuality = (text) => {
+    if (!text || text.length < 10) return 0;
+    
+    let score = 100;
+    
+    // Length check
+    if (text.length < 100) score -= 20;
+    
+    // Sentence structure
+    const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
+    if (sentences.length > 0) {
+      const avgSentenceLength = text.length / sentences.length;
+      if (avgSentenceLength >= 10 && avgSentenceLength <= 100) score += 10;
+      else score -= 5;
+    }
+    
+    // Vocabulary diversity
+    const words = text.toLowerCase().split(/\s+/).filter(w => w.length > 0);
+    if (words.length > 0) {
+      const uniqueWords = new Set(words);
+      const diversity = uniqueWords.size / words.length;
+      if (diversity > 0.3) score += 10;
+      else score -= 10;
+    }
+    
+    return Math.max(0, Math.min(100, score));
+  };
 
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
+    if (newValue === 2) { // Chunk Analysis tab
+      loadChunkAnalysis();
+    }
   };
 
   const handleCopyContent = (content) => {
@@ -115,7 +174,7 @@ const ContentPreview = ({
           <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
             {qualityScore > 0 && (
               <Chip
-                label={`Quality: ${Math.round(qualityScore)}%`}
+                label={`File Quality: ${Math.round(qualityScore)}%`}
                 size="small"
                 color={getQualityColor(qualityScore)}
                 variant="outlined"
@@ -310,6 +369,66 @@ const ContentPreview = ({
                         {showFullContent ? 'Show Preview' : 'Show Full Content'}
                       </Button>
                     </Box>
+
+                    {/* Quality Comparison */}
+                    {(() => {
+                      // Calculate quality scores if not provided by backend
+                      const originalQuality = processingStats.original_quality_score ?? calculateSimpleQuality(processingStats.original_text);
+                      const cleanedQuality = processingStats.cleaned_quality_score ?? calculateSimpleQuality(processingStats.processed_text);
+                      const qualityImprovement = cleanedQuality - originalQuality;
+                      const qualityImprovementPercentage = originalQuality > 0 ? (qualityImprovement / originalQuality) * 100 : 0;
+                      
+                      return (
+                        <Grid container spacing={2} sx={{ mb: 3 }}>
+                          <Grid item xs={12} sm={3}>
+                            <Card variant="outlined" sx={{ textAlign: 'center', p: 2 }}>
+                              <Typography variant="body2" color="text.secondary" gutterBottom>
+                                Original Quality
+                              </Typography>
+                              <Typography variant="h5" color="error.main">
+                                {Math.round(originalQuality)}%
+                              </Typography>
+                            </Card>
+                          </Grid>
+                          <Grid item xs={12} sm={3}>
+                            <Card variant="outlined" sx={{ textAlign: 'center', p: 2 }}>
+                              <Typography variant="body2" color="text.secondary" gutterBottom>
+                                Cleaned Quality
+                              </Typography>
+                              <Typography variant="h5" color="success.main">
+                                {Math.round(cleanedQuality)}%
+                              </Typography>
+                            </Card>
+                          </Grid>
+                          <Grid item xs={12} sm={3}>
+                            <Card variant="outlined" sx={{ textAlign: 'center', p: 2 }}>
+                              <Typography variant="body2" color="text.secondary" gutterBottom>
+                                Improvement
+                              </Typography>
+                              <Typography 
+                                variant="h5" 
+                                color={qualityImprovement >= 0 ? "success.main" : "error.main"}
+                              >
+                                {qualityImprovement >= 0 ? '+' : ''}{Math.round(qualityImprovement)}
+                              </Typography>
+                            </Card>
+                          </Grid>
+                          <Grid item xs={12} sm={3}>
+                            <Card variant="outlined" sx={{ textAlign: 'center', p: 2 }}>
+                              <Typography variant="body2" color="text.secondary" gutterBottom>
+                                % Change
+                              </Typography>
+                              <Typography 
+                                variant="h5" 
+                                color={qualityImprovementPercentage >= 0 ? "success.main" : "error.main"}
+                              >
+                                {qualityImprovementPercentage >= 0 ? '+' : ''}{Math.round(qualityImprovementPercentage)}%
+                              </Typography>
+                            </Card>
+                          </Grid>
+                        </Grid>
+                      );
+                    })()}
                     
                     <Grid container spacing={2}>
                       <Grid item xs={12} md={6}>
@@ -408,15 +527,117 @@ const ContentPreview = ({
                   This view shows how the content was split into chunks for processing
                 </Alert>
                 
-                <Box sx={{ textAlign: 'center', py: 4 }}>
-                  <AnalyticsIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
-                  <Typography variant="h6" color="text.secondary">
-                    Chunk Details
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Detailed chunk analysis will be available in a future update
-                  </Typography>
-                </Box>
+                {analysisLoading && (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '200px' }}>
+                    <CircularProgress />
+                    <Typography sx={{ ml: 2 }}>Analyzing chunks...</Typography>
+                  </Box>
+                )}
+
+                {!analysisLoading && !chunkAnalysis && (
+                  <Box sx={{ textAlign: 'center', py: 4 }}>
+                    <AnalyticsIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
+                    <Typography variant="h6" color="text.secondary" gutterBottom>
+                      Chunk Analysis
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                      Get detailed insights into how this file was chunked
+                    </Typography>
+                    <Button 
+                      variant="contained" 
+                      startIcon={<AnalyticsIcon />}
+                      onClick={() => {
+                        console.log('ContentPreview Analyze Chunks button clicked');
+                        loadChunkAnalysis();
+                      }}
+                    >
+                      Analyze Chunks
+                    </Button>
+                  </Box>
+                )}
+
+                {chunkAnalysis && chunkAnalysis.error && (
+                  <Alert severity="error">
+                    {chunkAnalysis.error}
+                  </Alert>
+                )}
+
+                {chunkAnalysis && !chunkAnalysis.error && (
+                  <Box>
+                    <Grid container spacing={2} sx={{ mb: 3 }}>
+                      <Grid item xs={12} sm={4}>
+                        <Card variant="outlined">
+                          <CardContent>
+                            <Typography variant="body2" color="text.secondary">
+                              Total Chunks
+                            </Typography>
+                            <Typography variant="h6">
+                              {chunkAnalysis.total_chunks}
+                            </Typography>
+                          </CardContent>
+                        </Card>
+                      </Grid>
+                      <Grid item xs={12} sm={4}>
+                        <Card variant="outlined">
+                          <CardContent>
+                            <Typography variant="body2" color="text.secondary">
+                              Avg Words/Chunk
+                            </Typography>
+                            <Typography variant="h6">
+                              {Math.round(chunkAnalysis.content_distribution?.word_distribution?.avg_words || 0)}
+                            </Typography>
+                          </CardContent>
+                        </Card>
+                      </Grid>
+                      <Grid item xs={12} sm={4}>
+                        <Card variant="outlined">
+                          <CardContent>
+                            <Typography variant="body2" color="text.secondary">
+                              Avg Chunk Quality
+                            </Typography>
+                            <Typography variant="h6">
+                              {Math.round(chunkAnalysis.quality_metrics?.content_quality?.avg_score || 0)}%
+                            </Typography>
+                          </CardContent>
+                        </Card>
+                      </Grid>
+                    </Grid>
+
+                    {chunkAnalysis.optimization_recommendations && chunkAnalysis.optimization_recommendations.length > 0 && (
+                      <Alert severity="info" sx={{ mb: 2 }}>
+                        <Typography variant="subtitle2" gutterBottom>
+                          Optimization Recommendations:
+                        </Typography>
+                        {chunkAnalysis.optimization_recommendations.map((rec, index) => (
+                          <Typography key={index} variant="body2">
+                            • {rec.title}: {rec.suggestion}
+                          </Typography>
+                        ))}
+                      </Alert>
+                    )}
+
+                    <Typography variant="subtitle1" sx={{ mb: 2 }}>
+                      Chunk Details
+                    </Typography>
+                    <Stack spacing={1}>
+                      {chunkAnalysis.chunk_details?.slice(0, 5).map((chunk, index) => (
+                        <Card key={index} variant="outlined" sx={{ p: 2 }}>
+                          <Typography variant="body2" color="text.secondary">
+                            Chunk {chunk.chunk_index + 1} • {chunk.word_count} words • Quality: {Math.round(chunk.quality_score)}%
+                          </Typography>
+                          <Typography variant="body2" sx={{ mt: 1 }}>
+                            {chunk.content_preview}
+                          </Typography>
+                        </Card>
+                      ))}
+                      {chunkAnalysis.chunk_details?.length > 5 && (
+                        <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>
+                          ... and {chunkAnalysis.chunk_details.length - 5} more chunks
+                        </Typography>
+                      )}
+                    </Stack>
+                  </Box>
+                )}
               </Box>
             )}
 
@@ -435,7 +656,7 @@ const ContentPreview = ({
                           {Math.round(qualityScore)}%
                         </Typography>
                         <Typography variant="h6" color="text.secondary">
-                          Overall Quality Score
+                          File Quality Score
                         </Typography>
                       </Box>
                     </Grid>

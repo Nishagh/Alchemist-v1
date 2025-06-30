@@ -49,7 +49,7 @@ class BaseSettings(PydanticBaseSettings):
     
     # OpenAI configuration
     openai_api_key: Optional[str] = Field(default=None, description="OpenAI API key", validation_alias="OPENAI_API_KEY")
-    openai_model: str = Field(default="gpt-4", description="Default OpenAI model")
+    openai_model: str = Field(default="gpt-4.1", description="Default OpenAI model")
     openai_organization: Optional[str] = Field(default=None, description="OpenAI organization ID", validation_alias="OPENAI_ORGANIZATION")
     
     # Logging configuration

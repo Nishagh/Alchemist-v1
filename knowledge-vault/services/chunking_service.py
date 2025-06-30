@@ -1,7 +1,7 @@
 import re
 import math
 from typing import List, Dict, Any, Tuple
-from app.utils.logging_config import get_logger, log_with_data
+from utils.logging_config import get_logger, log_with_data
 
 class ChunkingService:
     def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 200):

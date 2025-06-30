@@ -374,6 +374,75 @@ class StorageService:
         except Exception as e:
             logger.error(f"Error updating agent config {agent_id}: {str(e)}")
             return False
+    
+    async def get_agent_name(self, agent_id: str) -> Optional[str]:
+        """
+        Get the name of an agent from Firestore.
+        
+        Args:
+            agent_id: ID of the agent
+            
+        Returns:
+            Agent name string or None if not found
+        """
+        try:
+            agent_ref = self.db.collection(Collections.AGENTS).document(agent_id)
+            doc = agent_ref.get()
+            
+            if doc.exists:
+                agent_data = doc.to_dict()
+                name = agent_data.get('name')
+                logger.debug(f"Retrieved agent name for {agent_id}: {name}")
+                return name
+            else:
+                logger.warning(f"Agent {agent_id} not found")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error retrieving agent name for {agent_id}: {str(e)}")
+            return None
+    
+    async def update_agent_name(self, agent_id: str, new_name: str) -> bool:
+        """
+        Update the name of an agent in Firestore.
+        
+        Args:
+            agent_id: ID of the agent
+            new_name: New name for the agent
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            if not agent_id or not new_name:
+                logger.error("Agent ID and new name are required")
+                return False
+            
+            if not isinstance(new_name, str):
+                logger.error("Agent name must be a string")
+                return False
+            
+            # Check if agent exists first
+            agent_ref = self.db.collection(Collections.AGENTS).document(agent_id)
+            doc = agent_ref.get()
+            
+            if not doc.exists:
+                logger.error(f"Agent {agent_id} not found")
+                return False
+            
+            # Update the name field
+            update_data = {
+                'name': new_name.strip(),
+                'updated_at': firestore.SERVER_TIMESTAMP
+            }
+            
+            agent_ref.update(update_data)
+            logger.info(f"Successfully updated agent {agent_id} name to: {new_name}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error updating agent name for {agent_id}: {str(e)}")
+            return False
                         
 # Create default storage service with *local* persistence by default. To use
 # StorageService.

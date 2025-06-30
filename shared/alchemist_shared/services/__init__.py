@@ -86,6 +86,11 @@ from .ea3_orchestrator import (
     get_ea3_orchestrator,
     init_ea3_orchestrator
 )
+from .agent_lifecycle_service import (
+    AgentLifecycleService,
+    get_agent_lifecycle_service,
+    init_agent_lifecycle_service
+)
 
 __all__ = [
     # Core Services
@@ -152,5 +157,10 @@ __all__ = [
     "ConversationContext",
     "EA3Assessment",
     "get_ea3_orchestrator",
-    "init_ea3_orchestrator"
+    "init_ea3_orchestrator",
+    
+    # Agent Lifecycle Service
+    "AgentLifecycleService",
+    "get_agent_lifecycle_service", 
+    "init_agent_lifecycle_service"
 ]

@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Box,
-  Container,
   Grid,
   Card,
   CardContent,
@@ -21,20 +20,13 @@ import {
   Divider,
   Stack,
   Paper,
-  CircularProgress,
-  FormControl,
-  Select,
-  MenuItem,
-  Switch,
-  FormControlLabel
+  CircularProgress
 } from '@mui/material';
 import {
   Send as SendIcon,
   SmartToy as BotIcon,
   Person as PersonIcon,
   Analytics as AnalyticsIcon,
-  Download as DownloadIcon,
-  Settings as SettingsIcon,
   Stop as StopIcon,
   PlayArrow as PlayIcon,
   Warning as WarningIcon,
@@ -53,8 +45,9 @@ import {
 } from '../services/conversations/conversationService';
 import deploymentService from '../services/deployment/deploymentService';
 
-const AgentTesting = () => {
-  const { agentId } = useParams();
+const AgentTesting = ({ agentId: propAgentId, embedded = false }) => {
+  const { agentId: routeAgentId } = useParams();
+  const agentId = propAgentId || routeAgentId;
   const navigate = useNavigate();
   const { currentUser } = useAuth();
   
@@ -70,7 +63,6 @@ const AgentTesting = () => {
   const [currentMessage, setCurrentMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
-  // Streaming is always enabled for deployed agents - remove toggle
   const streamingEnabled = true;
   const [conversationId, setConversationId] = useState(null);
 
@@ -86,14 +78,16 @@ const AgentTesting = () => {
   // Testing controls
   const [testingActive, setTestingActive] = useState(false);
   const [showBillingAlert, setShowBillingAlert] = useState(false);
-  const [testMode, setTestMode] = useState('development'); // 'development' or 'production'
   const [agentHealth, setAgentHealth] = useState(null);
   const [templateTests, setTemplateTests] = useState([]);
 
   // Load agent and deployment status
   useEffect(() => {
     const loadAgentData = async () => {
-      if (!agentId || !currentUser) return;
+      if (!agentId || !currentUser) {
+        setLoading(false);
+        return;
+      }
 
       try {
         setLoading(true);
@@ -113,7 +107,7 @@ const AgentTesting = () => {
 
         setAgent(agentData);
 
-        // Check deployment status - get the latest deployment for this agent
+        // Check deployment status
         const deploymentsResult = await deploymentService.listDeployments({ 
           agentId: agentId,
           limit: 1 
@@ -145,7 +139,7 @@ const AgentTesting = () => {
           }
         }
 
-        // Create conversation ID for testing (will be created on first message)
+        // Create conversation ID for testing
         const newConversationId = `test-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         setConversationId(newConversationId);
 
@@ -169,38 +163,31 @@ const AgentTesting = () => {
 
     try {
       setTestingActive(true);
-      
-      // Show billing warning for production mode
-      if (testMode === 'production') {
-        setShowBillingAlert(true);
-      }
+      setShowBillingAlert(true);
 
       // Create a new conversation with the deployed agent
       const newConversationId = await createDeployedAgentConversation(agentId);
       setConversationId(newConversationId);
 
       // Initialize conversation with welcome message
-      const modeText = testMode === 'production' ? 'production test session - billing will apply' : 'development test session - free';
       const welcomeMessage = {
         id: `msg-${Date.now()}`,
         type: 'ai',
-        content: `🤖 Hello! I'm ${agent?.name || 'your AI agent'}. I'm ready to help you. This is a ${modeText} for all interactions.`,
+        content: `🤖 Hello! I'm ${agent?.name || 'your AI agent'}. I'm ready to help you.`,
         timestamp: new Date().toISOString(),
         tokens: { prompt: 0, completion: 25, total: 25 },
-        cost: testMode === 'production' ? 0.001 : 0
+        cost: 0.001
       };
 
       setMessages([welcomeMessage]);
       
-      // Track billing only in production mode
-      if (testMode === 'production') {
-        setBillingInfo(prev => ({
-          ...prev,
-          sessionCost: prev.sessionCost + 0.001,
-          totalTokens: prev.totalTokens + 25,
-          lastBillableAction: new Date().toISOString()
-        }));
-      }
+      // Track billing for all interactions
+      setBillingInfo(prev => ({
+        ...prev,
+        sessionCost: prev.sessionCost + 0.001,
+        totalTokens: prev.totalTokens + 25,
+        lastBillableAction: new Date().toISOString()
+      }));
 
     } catch (err) {
       console.error('Error starting testing session:', err);
@@ -208,7 +195,7 @@ const AgentTesting = () => {
       setTestingActive(false);
     }
 
-  }, [isDeployed, testMode, agent, agentId]);
+  }, [isDeployed, agent, agentId]);
 
   // Stop testing session
   const stopTesting = useCallback(async () => {
@@ -224,7 +211,6 @@ const AgentTesting = () => {
           messages: messages.length,
           totalTokens: billingInfo.totalTokens,
           totalCost: billingInfo.sessionCost,
-          testMode,
           endedAt: new Date().toISOString()
         });
       } catch (err) {
@@ -236,7 +222,7 @@ const AgentTesting = () => {
     setBillingInfo(prev => ({ ...prev, sessionCost: 0 }));
     setMessages([]);
     setCurrentMessage('');
-  }, [agentId, conversationId, billingInfo, messages, testMode]);
+  }, [agentId, conversationId, billingInfo, messages]);
 
   // Send message to agent
   const sendMessage = useCallback(async () => {
@@ -274,7 +260,6 @@ const AgentTesting = () => {
         agentId,
         conversationId,
         message: currentMessage.trim(),
-        testMode,
         onChunk: (chunk) => {
           setMessages(prev => prev.map(msg => 
             msg.id === streamingMessage.id 
@@ -307,7 +292,6 @@ const AgentTesting = () => {
     } catch (err) {
       console.error('Error sending message:', err);
       
-      // Extract detailed error message for better debugging
       let errorContent = 'Unknown error occurred';
       
       if (err.message) {
@@ -325,14 +309,14 @@ const AgentTesting = () => {
         type: 'error',
         content: `❌ Error: ${errorContent}`,
         timestamp: new Date().toISOString(),
-        isDebugError: true // flag to identify debug errors
+        isDebugError: true
       };
       setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsSending(false);
       setIsStreaming(false);
     }
-  }, [currentMessage, isSending, testingActive, streamingEnabled, agentId, conversationId, testMode]);
+  }, [currentMessage, isSending, testingActive, streamingEnabled, agentId, conversationId]);
 
   // Handle key press
   const handleKeyPress = (e) => {
@@ -345,58 +329,89 @@ const AgentTesting = () => {
   // Loading state
   if (loading) {
     return (
-      <Container maxWidth="xl" sx={{ py: 4 }}>
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
-          <CircularProgress size={60} />
-        </Box>
-      </Container>
+      <Box sx={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <CircularProgress size={60} />
+      </Box>
     );
   }
 
   // Error state
   if (error) {
     return (
-      <Container maxWidth="xl" sx={{ py: 4 }}>
+      <Box sx={{ p: 4 }}>
         <Alert severity="error" sx={{ mb: 2 }}>
           {error}
         </Alert>
         <Button 
           variant="outlined" 
           onClick={() => navigate('/agents')}
-          sx={{
-            color: '#6366f1',
-            borderColor: '#6366f1',
-            '&:hover': {
-              bgcolor: '#6366f115',
-              borderColor: '#4f46e5'
-            }
-          }}
+          color="primary"
         >
           Back to Agents
         </Button>
-      </Container>
+      </Box>
+    );
+  }
+
+  // Check for authentication
+  if (!loading && !currentUser) {
+    return (
+      <Box sx={{ p: 4 }}>
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Please log in to view agent testing
+        </Alert>
+        <Button 
+          variant="outlined" 
+          onClick={() => navigate('/login')}
+          color="primary"
+        >
+          Go to Login
+        </Button>
+      </Box>
+    );
+  }
+
+  // Check for agent after loading is complete
+  if (!loading && !agent) {
+    return (
+      <Box sx={{ p: 4 }}>
+        <Alert severity="error" sx={{ mb: 2 }}>
+          Agent not found
+        </Alert>
+        <Button 
+          variant="outlined" 
+          onClick={() => navigate('/agents')}
+          color="primary"
+        >
+          Back to Agents
+        </Button>
+      </Box>
     );
   }
 
   return (
-    <Container maxWidth="xl" sx={{ py: 4 }}>
-      {/* Header */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" fontWeight="bold" gutterBottom>
-          Test Agent: {agent?.name}
-        </Typography>
-        <Typography variant="body1" color="text.secondary" gutterBottom>
-          {isDeployed 
-            ? "Test your deployed agent and monitor usage costs in real-time"
-            : "Deploy your agent first to test with billing tracking. For free pre-deployment testing, use the Agent Editor interface."
-          }
-        </Typography>
-        
-        {/* Status Cards */}
-        <Grid container spacing={2} sx={{ mt: 2 }}>
+    <Box sx={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      {/* Header Section */}
+      {!embedded && (
+        <Box sx={{ p: 3, borderBottom: 1, borderColor: 'divider' }}>
+          <Typography variant="h4" fontWeight="bold" gutterBottom>
+            Test Agent: {agent?.name}
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            {isDeployed 
+              ? "Test your deployed agent. All interactions will be tracked and billed."
+              : "Deploy your agent first to begin testing."
+            }
+          </Typography>
+        </Box>
+      )}
+
+      {/* Status Bar */}
+      <Box sx={{ p: 3, borderBottom: 1, borderColor: 'divider', bgcolor: 'grey.50' }}>
+        <Grid container spacing={3}>
           {/* Deployment Status */}
-          <Grid item xs={12} md={3}>
-            <Card sx={{ height: '100%' }}>
+          <Grid item xs={12} md={4}>
+            <Card elevation={0} sx={{ border: 1, borderColor: 'divider' }}>
               <CardContent>
                 <Box display="flex" alignItems="center" mb={1}>
                   {isDeployed ? (
@@ -411,11 +426,6 @@ const AgentTesting = () => {
                   color={isDeployed ? 'success' : 'error'}
                   size="small"
                 />
-                {deploymentStatus?.service_url && (
-                  <Typography variant="caption" display="block" sx={{ mt: 1 }} noWrap>
-                    {deploymentStatus.service_url}
-                  </Typography>
-                )}
                 {agentHealth && (
                   <Typography variant="caption" display="block" sx={{ mt: 1, color: agentHealth.available ? 'success.main' : 'error.main' }}>
                     {agentHealth.available ? '✓ Health check passed' : `⚠ ${agentHealth.error}`}
@@ -425,69 +435,41 @@ const AgentTesting = () => {
             </Card>
           </Grid>
 
-          {/* Test Mode */}
-          <Grid item xs={12} md={3}>
-            <Card sx={{ height: '100%' }}>
+          {/* Billing Summary */}
+          <Grid item xs={12} md={8}>
+            <Card elevation={0} sx={{ border: 1, borderColor: 'divider' }}>
               <CardContent>
-                <Typography variant="h6" gutterBottom>Test Mode</Typography>
-                <FormControl fullWidth size="small">
-                  <Select
-                    value={testMode}
-                    onChange={(e) => setTestMode(e.target.value)}
-                    disabled={testingActive}
-                  >
-                    <MenuItem value="development">Development (Free)</MenuItem>
-                    <MenuItem value="production">Production (Billable)</MenuItem>
-                  </Select>
-                </FormControl>
-                {testMode === 'production' && (
-                  <Typography variant="caption" display="block" sx={{ mt: 1, color: 'warning.main' }}>
-                    ⚠️ Billing applies
-                  </Typography>
-                )}
-              </CardContent>
-            </Card>
-          </Grid>
-
-          {/* Session Stats */}
-          <Grid item xs={12} md={3}>
-            <Card sx={{ height: '100%' }}>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>Session Stats</Typography>
-                <Typography variant="body2">
-                  Messages: {messages.filter(m => m.type !== 'error').length}
-                </Typography>
-                <Typography variant="body2">
-                  Tokens: {billingInfo.totalTokens.toLocaleString()}
-                </Typography>
-                <Typography variant="body2" color="primary">
-                  Cost: ${billingInfo.sessionCost.toFixed(4)}
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-
-          {/* Total Billing */}
-          <Grid item xs={12} md={3}>
-            <Card sx={{ height: '100%' }}>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>Total Billing</Typography>
-                <Typography variant="body2">
-                  Total Messages: {billingInfo.totalMessages}
-                </Typography>
-                <Typography variant="body2">
-                  Total Cost: ${billingInfo.estimatedCost.toFixed(4)}
-                </Typography>
+                <Typography variant="h6" gutterBottom>Billing Summary</Typography>
+                <Grid container spacing={3}>
+                  <Grid item xs={3}>
+                    <Typography variant="body2" color="text.secondary">Session Cost</Typography>
+                    <Typography variant="h6" color="primary">
+                      ₹{billingInfo.sessionCost.toFixed(4)}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={3}>
+                    <Typography variant="body2" color="text.secondary">Total Cost</Typography>
+                    <Typography variant="h6" color="warning.main">
+                      ₹{billingInfo.estimatedCost.toFixed(4)}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={3}>
+                    <Typography variant="body2" color="text.secondary">Messages</Typography>
+                    <Typography variant="h6">
+                      {messages.filter(m => m.type !== 'error').length}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={3}>
+                    <Typography variant="body2" color="text.secondary">Tokens</Typography>
+                    <Typography variant="h6">
+                      {billingInfo.totalTokens.toLocaleString()}
+                    </Typography>
+                  </Grid>
+                </Grid>
                 <Button
                   size="small"
                   startIcon={<AnalyticsIcon />}
-                  sx={{ 
-                    mt: 1,
-                    color: '#0ea5e9',
-                    '&:hover': {
-                      bgcolor: '#0ea5e915'
-                    }
-                  }}
+                  sx={{ mt: 2 }}
                   onClick={() => navigate(`/agent-analytics/${agentId}`)}
                 >
                   View Analytics
@@ -496,494 +478,235 @@ const AgentTesting = () => {
             </Card>
           </Grid>
         </Grid>
-
-        {/* Pre-deployment Notice */}
-        {!isDeployed && (
-          <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
-            <Typography variant="body2" gutterBottom>
-              <strong>Pre-deployment Testing Available:</strong> 
-              You can test your agent for free during development using the Agent Editor interface.
-            </Typography>
-            <Button 
-              size="small" 
-              variant="outlined" 
-              onClick={() => navigate(`/agent-editor/${agentId}`)}
-              sx={{ 
-                mt: 1,
-                color: '#10b981',
-                borderColor: '#10b981',
-                '&:hover': {
-                  bgcolor: '#10b98115',
-                  borderColor: '#059669'
-                }
-              }}
-            >
-              Go to Agent Editor for Free Testing
-            </Button>
-          </Alert>
-        )}
       </Box>
 
-      {/* Main Testing Interface */}
-      <Grid container spacing={3}>
-        {/* Chat Interface */}
-        <Grid item xs={12} lg={8}>
-          <Card sx={{ height: '70vh', display: 'flex', flexDirection: 'column' }}>
-            <CardContent sx={{ pb: 1 }}>
-              <Box display="flex" justifyContent="between" alignItems="center" mb={2}>
-                <Typography variant="h6">Test Conversation</Typography>
-                <Box display="flex" gap={1}>
-                  <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', mr: 2 }}>
-                    🚀 Streaming Response Mode
-                  </Typography>
-                  {testingActive ? (
-                    <Button
-                      variant="contained"
-                      startIcon={<StopIcon />}
-                      onClick={stopTesting}
-                      sx={{
-                        bgcolor: '#ef4444',
-                        '&:hover': {
-                          bgcolor: '#dc2626'
-                        }
-                      }}
-                    >
-                      Stop Testing
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="contained"
-                      startIcon={<PlayIcon />}
-                      onClick={startTesting}
-                      disabled={!isDeployed}
-                      sx={{
-                        bgcolor: '#10b981',
-                        '&:hover': {
-                          bgcolor: '#059669'
-                        },
-                        '&:disabled': {
-                          bgcolor: '#d1d5db'
-                        }
-                      }}
-                    >
-                      Start Testing
-                    </Button>
-                  )}
-                </Box>
+      {/* Quick Tests */}
+      {isDeployed && templateTests.length > 0 && (
+        <Box sx={{ p: 3, borderBottom: 1, borderColor: 'divider' }}>
+          <Typography variant="h6" gutterBottom>Quick Tests</Typography>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            {templateTests.map((template) => (
+              <Button
+                key={template.id}
+                variant="outlined"
+                size="small"
+                onClick={() => {
+                  if (!testingActive) {
+                    startTesting();
+                  }
+                  setCurrentMessage(template.messages[0]);
+                }}
+                disabled={!isDeployed}
+              >
+                {template.name}
+              </Button>
+            ))}
+          </Box>
+        </Box>
+      )}
+
+      {/* Chat Interface */}
+      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', p: 3 }}>
+        <Card sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+          {/* Chat Header */}
+          <CardContent sx={{ pb: 1, borderBottom: 1, borderColor: 'divider' }}>
+            <Box display="flex" justifyContent="space-between" alignItems="center">
+              <Typography variant="h6">Test Conversation</Typography>
+              <Box display="flex" gap={2} alignItems="center">
+                <Typography variant="body2" color="text.secondary">
+                  🚀 Streaming Response Mode
+                </Typography>
+                {testingActive ? (
+                  <Button
+                    variant="contained"
+                    startIcon={<StopIcon />}
+                    onClick={stopTesting}
+                    color="error"
+                  >
+                    Stop Testing
+                  </Button>
+                ) : (
+                  <Button
+                    variant="contained"
+                    startIcon={<PlayIcon />}
+                    onClick={startTesting}
+                    disabled={!isDeployed}
+                    color="success"
+                  >
+                    Start Testing
+                  </Button>
+                )}
               </Box>
-            </CardContent>
-
-            {/* Messages Container */}
-            <Box sx={{ flexGrow: 1, overflow: 'auto', px: 2, pb: 2 }}>
-              {!testingActive ? (
-                <Box 
-                  display="flex" 
-                  justifyContent="center" 
-                  alignItems="center" 
-                  height="100%"
-                  flexDirection="column"
-                >
-                  <BotIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-                  <Typography variant="h6" color="text.secondary" gutterBottom>
-                    Ready to Test Your Agent
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" textAlign="center">
-                    Click "Start Testing" to begin a conversation session.
-                    {testMode === 'production' && (
-                      <Box component="span" sx={{ color: 'warning.main', display: 'block', mt: 1 }}>
-                        ⚠️ Production mode: All interactions will be billed
-                      </Box>
-                    )}
-                  </Typography>
-                </Box>
-              ) : (
-                <Stack spacing={2}>
-                  {messages.map((message) => (
-                    <Box
-                      key={message.id}
-                      sx={{
-                        display: 'flex',
-                        justifyContent: message.type === 'user' ? 'flex-end' : 'flex-start',
-                        mb: 1
-                      }}
-                    >
-                      <Paper
-                        elevation={1}
-                        sx={{
-                          maxWidth: '70%',
-                          p: 2,
-                          backgroundColor: 
-                            message.type === 'user' ? 'primary.main' : 
-                            message.type === 'error' ? (message.isDebugError ? 'error.main' : 'error.light') : 'grey.100',
-                          color: 
-                            message.type === 'user' ? 'white' : 
-                            message.type === 'error' ? 'white' : 'text.primary',
-                          borderRadius: 2,
-                          position: 'relative'
-                        }}
-                      >
-                        <Box display="flex" alignItems="center" mb={1}>
-                          <Avatar
-                            sx={{
-                              width: 24,
-                              height: 24,
-                              mr: 1,
-                              backgroundColor: message.type === 'user' ? 'white' : 'primary.main'
-                            }}
-                          >
-                            {message.type === 'user' ? (
-                              <PersonIcon sx={{ fontSize: 16, color: 'primary.main' }} />
-                            ) : (
-                              <BotIcon sx={{ fontSize: 16, color: 'white' }} />
-                            )}
-                          </Avatar>
-                          <Typography variant="caption">
-                            {message.type === 'user' ? 'You' : agent?.name}
-                          </Typography>
-                          {message.streaming && (
-                            <CircularProgress size={12} sx={{ ml: 1 }} />
-                          )}
-                        </Box>
-                        
-                        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                          {message.content}
-                        </Typography>
-                        
-                        {message.isDebugError && (
-                          <Typography variant="caption" sx={{ display: 'block', mt: 1, opacity: 0.8, fontStyle: 'italic' }}>
-                            💡 Debug Error - Check console for more details
-                          </Typography>
-                        )}
-                        
-                        {message.tokens && testMode === 'production' && (
-                          <Box sx={{ mt: 1, pt: 1, borderTop: '1px solid rgba(0,0,0,0.1)' }}>
-                            <Typography variant="caption" sx={{ opacity: 0.7 }}>
-                              Tokens: {message.tokens.total} • Cost: ${message.cost?.toFixed(4) || '0.0000'}
-                            </Typography>
-                          </Box>
-                        )}
-                        
-                        <Typography variant="caption" sx={{ display: 'block', mt: 1, opacity: 0.7 }}>
-                          {new Date(message.timestamp).toLocaleTimeString()}
-                        </Typography>
-                      </Paper>
-                    </Box>
-                  ))}
-                  
-                  {isStreaming && (
-                    <Box display="flex" justifyContent="flex-start">
-                      <Box display="flex" alignItems="center" sx={{ ml: 2 }}>
-                        <CircularProgress size={16} sx={{ mr: 1 }} />
-                        <Typography variant="caption" color="text.secondary">
-                          {agent?.name} is typing...
-                        </Typography>
-                      </Box>
-                    </Box>
-                  )}
-                </Stack>
-              )}
             </Box>
+          </CardContent>
 
-            {/* Input Area */}
-            {testingActive && (
-              <Box sx={{ p: 2, borderTop: '1px solid rgba(0,0,0,0.12)' }}>
-                <Box display="flex" gap={1}>
-                  <TextField
-                    fullWidth
-                    multiline
-                    maxRows={3}
-                    placeholder="Type your message..."
-                    value={currentMessage}
-                    onChange={(e) => setCurrentMessage(e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    disabled={isSending || isStreaming}
-                    size="small"
-                  />
-                  <IconButton
-                    onClick={sendMessage}
-                    disabled={!currentMessage.trim() || isSending || isStreaming}
-                    sx={{ 
-                      alignSelf: 'flex-end',
-                      color: '#6366f1',
-                      '&:hover': {
-                        bgcolor: '#6366f115',
-                        color: '#4f46e5'
-                      },
-                      '&:disabled': {
-                        color: '#9ca3af'
-                      }
+          {/* Messages Container */}
+          <Box sx={{ flex: 1, overflow: 'auto', p: 3 }}>
+            {!testingActive ? (
+              <Box 
+                display="flex" 
+                justifyContent="center" 
+                alignItems="center" 
+                height="100%"
+                flexDirection="column"
+              >
+                <BotIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
+                <Typography variant="h6" color="text.secondary" gutterBottom>
+                  Ready to Test Your Agent
+                </Typography>
+                <Typography variant="body2" color="text.secondary" textAlign="center">
+                  Click "Start Testing" to begin a conversation session.
+                </Typography>
+              </Box>
+            ) : (
+              <Stack spacing={2}>
+                {messages.map((message) => (
+                  <Box
+                    key={message.id}
+                    sx={{
+                      display: 'flex',
+                      justifyContent: message.type === 'user' ? 'flex-end' : 'flex-start',
+                      mb: 1
                     }}
                   >
-                    {isSending || isStreaming ? (
-                      <CircularProgress size={24} />
-                    ) : (
-                      <SendIcon />
-                    )}
-                  </IconButton>
-                </Box>
-              </Box>
-            )}
-          </Card>
-        </Grid>
-
-        {/* Side Panel */}
-        <Grid item xs={12} lg={4}>
-          <Stack spacing={3}>
-            {/* Real-time Billing */}
-            <Card>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Real-time Billing
-                </Typography>
-                <Divider sx={{ mb: 2 }} />
+                    <Paper
+                      elevation={1}
+                      sx={{
+                        maxWidth: '70%',
+                        p: 2,
+                        backgroundColor: 
+                          message.type === 'user' ? 'primary.main' : 
+                          message.type === 'error' ? (message.isDebugError ? 'error.main' : 'error.light') : 'grey.100',
+                        color: 
+                          message.type === 'user' ? 'white' : 
+                          message.type === 'error' ? 'white' : 'text.primary',
+                        borderRadius: 2
+                      }}
+                    >
+                      <Box display="flex" alignItems="center" mb={1}>
+                        <Avatar
+                          sx={{
+                            width: 24,
+                            height: 24,
+                            mr: 1,
+                            backgroundColor: message.type === 'user' ? 'white' : 'primary.main'
+                          }}
+                        >
+                          {message.type === 'user' ? (
+                            <PersonIcon sx={{ fontSize: 16, color: 'primary.main' }} />
+                          ) : (
+                            <BotIcon sx={{ fontSize: 16, color: 'white' }} />
+                          )}
+                        </Avatar>
+                        <Typography variant="caption">
+                          {message.type === 'user' ? 'You' : agent?.name}
+                        </Typography>
+                        {message.streaming && (
+                          <CircularProgress size={12} sx={{ ml: 1 }} />
+                        )}
+                      </Box>
+                      
+                      <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                        {message.content}
+                      </Typography>
+                      
+                      {message.isDebugError && (
+                        <Typography variant="caption" sx={{ display: 'block', mt: 1, opacity: 0.8, fontStyle: 'italic' }}>
+                          💡 Debug Error - Check console for more details
+                        </Typography>
+                      )}
+                      
+                      {message.tokens && (
+                        <Box sx={{ mt: 1, pt: 1, borderTop: '1px solid rgba(0,0,0,0.1)' }}>
+                          <Typography variant="caption" sx={{ opacity: 0.7 }}>
+                            Tokens: {message.tokens.total} • Cost: ₹{message.cost?.toFixed(4) || '0.0000'}
+                          </Typography>
+                        </Box>
+                      )}
+                      
+                      <Typography variant="caption" sx={{ display: 'block', mt: 1, opacity: 0.7 }}>
+                        {new Date(message.timestamp).toLocaleTimeString()}
+                      </Typography>
+                    </Paper>
+                  </Box>
+                ))}
                 
-                <Stack spacing={2}>
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">Session Cost</Typography>
-                    <Typography variant="h5" color="primary">
-                      ${billingInfo.sessionCost.toFixed(4)}
-                    </Typography>
-                  </Box>
-                  
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">Session Tokens</Typography>
-                    <Typography variant="h6">
-                      {billingInfo.totalTokens.toLocaleString()}
-                    </Typography>
-                  </Box>
-                  
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">Messages Sent</Typography>
-                    <Typography variant="h6">
-                      {messages.filter(m => m.type !== 'error').length}
-                    </Typography>
-                  </Box>
-                  
-                  {billingInfo.lastBillableAction && (
-                    <Box>
-                      <Typography variant="body2" color="text.secondary">Last Activity</Typography>
-                      <Typography variant="body2">
-                        {new Date(billingInfo.lastBillableAction).toLocaleTimeString()}
+                {isStreaming && (
+                  <Box display="flex" justifyContent="flex-start">
+                    <Box display="flex" alignItems="center" sx={{ ml: 2 }}>
+                      <CircularProgress size={16} sx={{ mr: 1 }} />
+                      <Typography variant="caption" color="text.secondary">
+                        {agent?.name} is typing...
                       </Typography>
                     </Box>
-                  )}
-                </Stack>
-              </CardContent>
-            </Card>
-
-            {/* Agent Info */}
-            <Card>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>Agent Information</Typography>
-                <Divider sx={{ mb: 2 }} />
-                
-                <Stack spacing={1}>
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">Model</Typography>
-                    <Typography variant="body2">{agent?.model || 'gpt-4'}</Typography>
                   </Box>
-                  
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">Version</Typography>
-                    <Typography variant="body2">{deploymentStatus?.version || '1.0.0'}</Typography>
-                  </Box>
-                  
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">Last Deployed</Typography>
-                    <Typography variant="body2">
-                      {deploymentStatus?.created_at 
-                        ? new Date(deploymentStatus.created_at).toLocaleDateString()
-                        : 'Not deployed'
-                      }
-                    </Typography>
-                  </Box>
-                  
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">Status</Typography>
-                    <Chip 
-                      label={deploymentStatus?.status || 'unknown'}
-                      color={deploymentStatus?.status === 'completed' || deploymentStatus?.status === 'deployed' ? 'success' : 'default'}
-                      size="small"
-                    />
-                  </Box>
-                </Stack>
-              </CardContent>
-            </Card>
-
-            {/* Template Tests */}
-            {isDeployed && (
-              <Card>
-                <CardContent>
-                  <Typography variant="h6" gutterBottom>Quick Tests</Typography>
-                  <Divider sx={{ mb: 2 }} />
-                  
-                  <Stack spacing={1}>
-                    {templateTests.map((template) => (
-                      <Button
-                        key={template.id}
-                        fullWidth
-                        variant="outlined"
-                        size="small"
-                        onClick={() => {
-                          if (!testingActive) {
-                            startTesting();
-                          }
-                          // Send first message from template
-                          setCurrentMessage(template.messages[0]);
-                        }}
-                        disabled={!isDeployed}
-                        sx={{
-                          color: '#8b5cf6',
-                          borderColor: '#8b5cf6',
-                          '&:hover': {
-                            bgcolor: '#8b5cf615',
-                            borderColor: '#7c3aed'
-                          },
-                          '&:disabled': {
-                            color: '#9ca3af',
-                            borderColor: '#d1d5db'
-                          }
-                        }}
-                      >
-                        {template.name}
-                      </Button>
-                    ))}
-                  </Stack>
-                </CardContent>
-              </Card>
+                )}
+              </Stack>
             )}
+          </Box>
 
-            {/* Quick Actions */}
-            <Card>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>Quick Actions</Typography>
-                <Divider sx={{ mb: 2 }} />
-                
-                <Stack spacing={2}>
-                  <Button
-                    fullWidth
-                    variant="outlined"
-                    startIcon={<AnalyticsIcon />}
-                    onClick={() => navigate(`/agent-analytics/${agentId}`)}
-                    sx={{
-                      color: '#0ea5e9',
-                      borderColor: '#0ea5e9',
-                      '&:hover': {
-                        bgcolor: '#0ea5e915',
-                        borderColor: '#0284c7'
-                      }
-                    }}
-                  >
-                    View Analytics
-                  </Button>
-                  
-                  <Button
-                    fullWidth
-                    variant="outlined"
-                    startIcon={<DownloadIcon />}
-                    onClick={() => {
-                      // Download conversation log
-                      const data = messages.map(m => ({
-                        timestamp: m.timestamp,
-                        type: m.type,
-                        content: m.content,
-                        tokens: m.tokens,
-                        cost: m.cost
-                      }));
-                      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement('a');
-                      a.href = url;
-                      a.download = `agent-test-${agentId}-${Date.now()}.json`;
-                      a.click();
-                    }}
-                    disabled={messages.length === 0}
-                    sx={{
-                      color: '#f59e0b',
-                      borderColor: '#f59e0b',
-                      '&:hover': {
-                        bgcolor: '#f59e0b15',
-                        borderColor: '#d97706'
-                      },
-                      '&:disabled': {
-                        color: '#9ca3af',
-                        borderColor: '#d1d5db'
-                      }
-                    }}
-                  >
-                    Export Conversation
-                  </Button>
-                  
-                  <Button
-                    fullWidth
-                    variant="outlined"
-                    startIcon={<SettingsIcon />}
-                    onClick={() => navigate(`/agent-editor/${agentId}`)}
-                    sx={{
-                      color: '#6b7280',
-                      borderColor: '#6b7280',
-                      '&:hover': {
-                        bgcolor: '#6b728015',
-                        borderColor: '#4b5563'
-                      }
-                    }}
-                  >
-                    Edit Agent
-                  </Button>
-                </Stack>
-              </CardContent>
-            </Card>
-          </Stack>
-        </Grid>
-      </Grid>
+          {/* Input Area */}
+          {testingActive && (
+            <Box sx={{ p: 3, borderTop: 1, borderColor: 'divider' }}>
+              <Box display="flex" gap={1}>
+                <TextField
+                  fullWidth
+                  multiline
+                  maxRows={3}
+                  placeholder="Type your message..."
+                  value={currentMessage}
+                  onChange={(e) => setCurrentMessage(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  disabled={isSending || isStreaming}
+                  size="small"
+                />
+                <IconButton
+                  onClick={sendMessage}
+                  disabled={!currentMessage.trim() || isSending || isStreaming}
+                  color="primary"
+                  sx={{ alignSelf: 'flex-end' }}
+                >
+                  {isSending || isStreaming ? (
+                    <CircularProgress size={24} />
+                  ) : (
+                    <SendIcon />
+                  )}
+                </IconButton>
+              </Box>
+            </Box>
+          )}
+        </Card>
+      </Box>
 
       {/* Billing Warning Dialog */}
       <Dialog open={showBillingAlert} onClose={() => setShowBillingAlert(false)}>
         <DialogTitle>
           <Box display="flex" alignItems="center">
             <WarningIcon color="warning" sx={{ mr: 1 }} />
-            Production Testing - Billing Active
+            Start Testing Session
           </Box>
         </DialogTitle>
         <DialogContent>
           <Typography gutterBottom>
-            You are about to start a production test session. All interactions with your agent will be billed according to your current pricing plan.
+            You are about to start a testing session. All interactions with your deployed agent will be charged according to your current pricing plan.
           </Typography>
           <Typography gutterBottom color="text.secondary">
             • Each message will incur token usage charges
             • Costs are calculated in real-time
             • All conversations are logged for billing purposes
           </Typography>
-          <Typography variant="body2" color="warning.main">
-            Switch to Development mode for free testing without billing.
-          </Typography>
         </DialogContent>
         <DialogActions>
-          <Button 
-            onClick={() => setShowBillingAlert(false)}
-            sx={{
-              color: '#6b7280',
-              '&:hover': {
-                bgcolor: '#6b728015'
-              }
-            }}
-          >
+          <Button onClick={() => setShowBillingAlert(false)}>
             Cancel
           </Button>
           <Button 
             variant="contained" 
             onClick={() => {
               setShowBillingAlert(false);
-              // Continue with testing
-            }}
-            sx={{
-              bgcolor: '#f59e0b',
-              '&:hover': {
-                bgcolor: '#d97706'
-              }
             }}
           >
-            Continue with Billing
+            Start Testing
           </Button>
         </DialogActions>
       </Dialog>
@@ -998,7 +721,7 @@ const AgentTesting = () => {
           {error}
         </Alert>
       </Snackbar>
-    </Container>
+    </Box>
   );
 };
 

@@ -203,7 +203,7 @@ const AgentsList = () => {
 
   const handleCardClick = (agentId) => {
     if (agentId) {
-      navigate(`/agent/${agentId}`);
+      navigate(`/agent-profile/${agentId}`);
     }
   };
 
@@ -743,7 +743,7 @@ const AgentsList = () => {
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     if (agent?.agent_id) {
-                                      navigate(`/agent/${agent.agent_id}`);
+                                      navigate(`/agent-profile/${agent.agent_id}`);
                                     }
                                   }}
                                   sx={{

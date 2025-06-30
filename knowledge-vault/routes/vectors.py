@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import Dict, Any, List
-from app.services.firebase_service import FirebaseService
+from services.firebase_service import FirebaseService
 import logging
 
 # Configure logging

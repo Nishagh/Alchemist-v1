@@ -1,14 +1,23 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, BackgroundTasks
 from typing import List, Dict, Any
 from pydantic import BaseModel
-from app.services.file_service import FileService
-from app.models.file import FileResponse, FileList
+from services.file_service import FileService
+from services.chunk_analysis_service import ChunkAnalysisService
+from services.content_processor import ContentProcessor
+from services.agent_relevance_service import AgentRelevanceService
+from models.file import FileResponse, FileList, ContentPreviewResponse
 
 router = APIRouter()
 file_service = FileService()
+chunk_analysis_service = ChunkAnalysisService()
+content_processor = ContentProcessor()
+agent_relevance_service = AgentRelevanceService()
 
 class BatchReprocessRequest(BaseModel):
     file_ids: List[str]
+
+class ContentUpdateRequest(BaseModel):
+    content: str
 
 @router.post("/upload-knowledge-base", response_model=FileResponse, tags=["knowledge-base"])
 async def upload_file(
@@ -48,7 +57,8 @@ async def upload_file(
             indexing_phase=result.get("indexing_phase", None),
             progress_percent=result.get("progress_percent", 0),
             indexing_error=result.get("indexing_error", None),
-            last_updated=result.get("last_updated", result["upload_date"])
+            last_updated=result.get("last_updated", result["upload_date"]),
+            chunk_analysis_available=bool(result.get("chunk_analysis") and not result.get("chunk_analysis", {}).get("error"))
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -77,7 +87,8 @@ async def list_files(agent_id: str):
                 indexing_phase=file.get("indexing_phase", None),
                 progress_percent=file.get("progress_percent", 0),
                 indexing_error=file.get("indexing_error", None),
-                last_updated=file.get("last_updated", file["upload_date"])
+                last_updated=file.get("last_updated", file["upload_date"]),
+                chunk_analysis_available=bool(file.get("chunk_analysis") and not file.get("chunk_analysis", {}).get("error"))
             )
             for file in files
         ]
@@ -134,7 +145,8 @@ async def get_file(file_id: str):
             indexing_phase=file.get("indexing_phase", None),
             progress_percent=file.get("progress_percent", 0),
             indexing_error=file.get("indexing_error", None),
-            last_updated=file.get("last_updated", file["upload_date"])
+            last_updated=file.get("last_updated", file["upload_date"]),
+            chunk_analysis_available=bool(file.get("chunk_analysis") and not file.get("chunk_analysis", {}).get("error"))
         )
     except HTTPException:
         raise
@@ -224,7 +236,7 @@ async def get_agent_processing_stats(agent_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/knowledge-base/files/{file_id}/preview", tags=["knowledge-base"])
+@router.get("/knowledge-base/files/{file_id}/preview", response_model=ContentPreviewResponse, tags=["knowledge-base"])
 async def get_file_content_preview(file_id: str):
     """
     Get file content preview showing original vs processed content.
@@ -260,24 +272,41 @@ async def get_file_content_preview(file_id: str):
                 original_text = original_text or reconstructed_original.strip()
                 processed_text = processed_text or reconstructed_processed.strip()
         
+        # Calculate quality scores for both original and cleaned content
+        original_quality = content_processor._calculate_quality_score(original_text) if original_text else 0
+        cleaned_quality = content_processor._calculate_quality_score(processed_text) if processed_text else 0
+        quality_improvement = cleaned_quality - original_quality
+        
         # Enhance processing stats with content comparison data
         processing_stats = file_data.get("processing_stats", {})
         processing_stats.update({
             "original_text": original_text,
             "processed_text": processed_text,
             "original_length": len(original_text),
-            "final_length": len(processed_text)
+            "final_length": len(processed_text),
+            "original_quality_score": round(original_quality, 2),
+            "cleaned_quality_score": round(cleaned_quality, 2),
+            "quality_improvement": round(quality_improvement, 2),
+            "quality_improvement_percentage": round((quality_improvement / max(original_quality, 1)) * 100, 2)
         })
         
-        return {
-            "file_id": file_id,
-            "filename": file_data.get("filename"),
-            "processing_version": file_data.get("processing_version", "v2_enhanced"),
-            "quality_score": file_data.get("quality_score", 0),
-            "processing_stats": processing_stats,
-            "content_metadata": file_data.get("content_metadata", {}),
-            "chunk_count": len(embeddings)
-        }
+        return ContentPreviewResponse(
+            file_id=file_id,
+            filename=file_data.get("filename", ""),
+            content_type=file_data.get("content_type"),
+            size=file_data.get("size"),
+            processing_version=file_data.get("processing_version", "v2_enhanced"),
+            quality_score=file_data.get("quality_score", 0),
+            processing_stats=processing_stats,
+            content_metadata=file_data.get("content_metadata", {}),
+            chunk_count=len(embeddings),
+            original_content=original_text,
+            cleaned_content=processed_text,
+            relevance_score=file_data.get("relevance_score"),
+            relevance_assessment=file_data.get("relevance_assessment"),
+            agent_specific_quality=file_data.get("agent_specific_quality"),
+            agent_id=file_data.get("agent_id")
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -307,6 +336,128 @@ async def batch_reprocess_files(request: BatchReprocessRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/knowledge-base/files/{file_id}/content", tags=["knowledge-base"])
+async def update_file_content(file_id: str, request: ContentUpdateRequest):
+    """
+    Update the content of a file and reindex it.
+    This will update the original content and reprocess the file with the new content.
+    """
+    try:
+        result = await file_service.update_file_content(file_id, request.content)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/knowledge-base/files/{file_id}/chunk-analysis", tags=["knowledge-base"])
+def get_file_chunk_analysis(file_id: str):
+    """
+    Get detailed chunk analysis for a specific file.
+    
+    Returns pre-computed analysis if available (computed during upload),
+    otherwise computes analysis on-demand.
+    
+    Provides comprehensive analysis including:
+    - Content distribution metrics (size, word count, sentence count)
+    - Quality assessment for each chunk
+    - Readability analysis (Flesch-Kincaid grade, reading ease)
+    - Overlap analysis between consecutive chunks
+    - Semantic similarity analysis using embeddings
+    - Content type distribution (code, tables, lists, plain text)
+    - Agent relevance analysis
+    - Optimization recommendations
+    - Detailed chunk-by-chunk information
+    
+    Response includes 'cached' field indicating if analysis was pre-computed.
+    """
+    try:
+        analysis_result = chunk_analysis_service.analyze_file_chunks(file_id)
+        
+        if "error" in analysis_result:
+            raise HTTPException(status_code=404, detail=analysis_result["error"])
+        
+        return analysis_result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to analyze chunks: {str(e)}")
+
+@router.get("/knowledge-base/files/{file_id}/relevance-analysis", tags=["knowledge-base"])
+def get_file_relevance_analysis(file_id: str):
+    """
+    Get agent-specific relevance analysis for a file.
+    
+    Provides comprehensive relevance assessment including:
+    - Overall relevance score (0-100) for the agent
+    - Domain alignment assessment
+    - Purpose relevance evaluation
+    - Knowledge value analysis
+    - Quality and usefulness metrics
+    - Scope appropriateness rating
+    - Key topics extraction
+    - Detailed relevance explanation
+    - Recommendations for improvement
+    - Content categorization (high/medium/low relevance)
+    
+    This analysis helps understand how well the file content aligns with
+    the specific agent's purpose, domain, and capabilities.
+    """
+    try:
+        # Get file data
+        file_data = file_service.firebase_service.get_file(file_id)
+        
+        if not file_data:
+            raise HTTPException(status_code=404, detail=f"File with ID {file_id} not found")
+        
+        agent_id = file_data.get("agent_id")
+        if not agent_id:
+            raise HTTPException(status_code=400, detail="File does not have an associated agent")
+        
+        # Get processed content (prefer processed over original for analysis)
+        content = file_data.get("processed_text") or file_data.get("original_text", "")
+        
+        if not content.strip():
+            # Fallback: reconstruct from embeddings if no full text available
+            embeddings_data = file_service.get_file_embeddings(file_id)
+            embeddings = embeddings_data.get("embeddings", [])
+            
+            if embeddings:
+                sorted_embeddings = sorted(embeddings, key=lambda x: x.get("chunk_index", 0))
+                content = "\n\n".join([emb.get("content", "") for emb in sorted_embeddings])
+        
+        if not content.strip():
+            raise HTTPException(status_code=400, detail="No content available for relevance analysis")
+        
+        # Perform relevance analysis
+        relevance_analysis = agent_relevance_service.assess_content_relevance(
+            content=content,
+            agent_id=agent_id,
+            content_type=file_data.get("content_type"),
+            filename=file_data.get("filename")
+        )
+        
+        # Add file context to the result
+        analysis_result = {
+            "file_id": file_id,
+            "filename": file_data.get("filename", ""),
+            "agent_id": agent_id,
+            "content_type": file_data.get("content_type"),
+            "content_length": len(content),
+            "analysis": relevance_analysis,
+            "file_metadata": {
+                "size": file_data.get("size"),
+                "upload_date": file_data.get("upload_date"),
+                "chunk_count": file_data.get("chunk_count", 0),
+                "quality_score": file_data.get("quality_score", 0)
+            }
+        }
+        
+        return analysis_result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to analyze relevance: {str(e)}")
 
 # eA³ (Epistemic Autonomy) Agent Story Tracking Endpoints
 

@@ -47,6 +47,7 @@ import {
   Skeleton
 } from '@mui/material';
 import {
+  Archive as ArchiveIcon,
   AutoAwesome as AutoAwesomeIcon,
   SmartToy as SmartToyIcon,
   RocketLaunch as RocketLaunchIcon,
@@ -389,20 +390,24 @@ const Dashboard = () => {
       let unsubscribeAgents;
       let unsubscribePhones;
       
-      // Load agents from correct collection
+      // Load recent agents from correct collection (exclude deleted)
       const agentsRef = collection(db, 'agents');
       const agentsQuery = query(
         agentsRef, 
         where('userId', '==', currentUser.uid),
+        where('status', '!=', 'deleted'),
+        orderBy('status'),
         orderBy('updated_at', 'desc'),
         limit(6)
       );
       
-      // Load ALL agents for the workforce view
+      // Load ALL active agents for the workforce view (exclude deleted)
       const allAgentsRef = collection(db, 'agents');
       const allAgentsQuery = query(
         allAgentsRef, 
         where('userId', '==', currentUser.uid),
+        where('status', '!=', 'deleted'),
+        orderBy('status'),
         orderBy('updated_at', 'desc')
       );
       
@@ -469,11 +474,13 @@ const Dashboard = () => {
         }
       );
 
-      // Load recent agent creation activity
+      // Load recent agent creation activity (exclude deleted)
       const recentAgentsRef = collection(db, 'agents');
       const recentAgentsQuery = query(
         recentAgentsRef,
         where('userId', '==', currentUser.uid),
+        where('status', '!=', 'deleted'),
+        orderBy('status'),
         orderBy('created_at', 'desc'),
         limit(3)
       );
@@ -537,7 +544,7 @@ const Dashboard = () => {
       color: '#f59e0b',
       action: () => {
         if (allAgents.length > 0) {
-          navigate(`/agent-analytics/${allAgents[0].id}`);
+          navigate(`/agent-profile/${allAgents[0].id}`);
         } else {
           navigate('/create-agent');
         }
@@ -550,7 +557,7 @@ const Dashboard = () => {
       color: '#10b981',
       action: () => {
         if (allAgents.length > 0) {
-          navigate(`/agent/${allAgents[0].id}`);
+          navigate(`/agent-profile/${allAgents[0].id}`);
         } else {
           navigate('/create-agent');
         }
@@ -645,13 +652,32 @@ const Dashboard = () => {
     <Container maxWidth="xl" sx={{ py: 4 }}>
       {/* Welcome Section */}
       <Fade in={true} timeout={500}>
-        <Box sx={{ mb: 4 }}>
-          <Typography variant="h4" fontWeight="bold" gutterBottom>
-            AI Workforce Dashboard 🤖
-          </Typography>
-          <Typography variant="h6" color="text.secondary">
-            Managing {stats.totalAgents} AI employees • Total costs: ₹{stats.totalCosts.toLocaleString('en-IN')}
-          </Typography>
+        <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <Box>
+            <Typography variant="h4" fontWeight="bold" gutterBottom>
+              AI Workforce Dashboard 🤖
+            </Typography>
+            <Typography variant="h6" color="text.secondary">
+              Managing {stats.totalAgents} AI employees • Total costs: ₹{stats.totalCosts.toLocaleString('en-IN')}
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <Button
+              variant="outlined"
+              startIcon={<ArchiveIcon />}
+              onClick={() => navigate('/archives')}
+              sx={{
+                color: 'text.secondary',
+                borderColor: 'divider',
+                '&:hover': {
+                  borderColor: 'text.secondary',
+                  bgcolor: alpha(theme.palette.grey[500], 0.05)
+                }
+              }}
+            >
+              Archives
+            </Button>
+          </Box>
         </Box>
       </Fade>
 

@@ -18,8 +18,8 @@ import AgentTesting from './pages/AgentTesting';
 import AgentAnalytics from './pages/AgentAnalytics';
 import AgentDeployment from './pages/AgentDeployment';
 import AgentIntegration from './pages/AgentIntegration';
-import AgentDashboard from './pages/AgentDashboard';
 import KnowledgeBase from './pages/KnowledgeBase';
+import KnowledgeBaseContentViewer from './pages/KnowledgeBaseContentViewer';
 import ApiIntegration from './pages/ApiIntegration';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
@@ -30,6 +30,7 @@ import CreateAgent from './pages/CreateAgent';
 import Credits from './pages/Credits';
 import Account from './pages/Account';
 import AgentProfile from './pages/AgentProfile';
+import AgentArchives from './pages/AgentArchives';
 
 // Theme Context
 const ThemeContext = createContext();
@@ -519,10 +520,6 @@ function App() {
       element: <ProtectedRoute><AgentsList /></ProtectedRoute>
     },
     {
-      path: '/agent/:agentId',
-      element: <ProtectedRoute><AgentDashboard /></ProtectedRoute>
-    },
-    {
       path: '/create-agent',
       element: <ProtectedRoute><CreateAgent /></ProtectedRoute>
     },
@@ -537,6 +534,10 @@ function App() {
     {
       path: '/knowledge-base/:agentId',
       element: <ProtectedRoute><KnowledgeBase /></ProtectedRoute>
+    },
+    {
+      path: '/knowledge-base/:agentId/file/:fileId',
+      element: <ProtectedRoute><KnowledgeBaseContentViewer /></ProtectedRoute>
     },
     {
       path: '/api-integration/:agentId',
@@ -577,6 +578,10 @@ function App() {
     {
       path: '/agent-profile/:agentId',
       element: <ProtectedRoute><AgentProfile /></ProtectedRoute>
+    },
+    {
+      path: '/archives',
+      element: <ProtectedRoute><AgentArchives /></ProtectedRoute>
     },
   ]);
 

@@ -109,19 +109,42 @@ export const deleteKnowledgeBaseFile = async (agentId, fileId) => {
 };
 
 /**
- * Search knowledge base content
+ * Search knowledge base content using semantic search
  */
 export const searchKnowledgeBase = async (agentId, query) => {
   try {
-    // Get files from knowledge base (already parsed from JSON strings in getAgentKnowledgeBase)
+    console.log(`Searching knowledge base for agent ${agentId} with query: "${query}"`);
+    
+    // Try semantic search first
+    try {
+      const searchResults = await getKnowledgeBaseSearchResults(agentId, query, {
+        top_k: 10 // Limit results
+      });
+      
+      if (searchResults && searchResults.length > 0) {
+        console.log('Using semantic search results:', searchResults.length, 'results');
+        return searchResults.map(result => ({
+          file_name: result.filename || result.file_name || 'Unnamed File',
+          file_id: result.file_id,
+          score: result.score || result.similarity_score || 0,
+          text: result.content || result.text || `File: ${result.filename || result.file_name || 'Unnamed File'}`,
+          indexed: true, // Results from semantic search are indexed
+          service: 'alchemist-knowledge-vault'
+        }));
+      }
+    } catch (searchError) {
+      console.warn('Semantic search failed, falling back to filename search:', searchError);
+    }
+    
+    // Fallback to filename search if semantic search fails
     const files = await getAgentKnowledgeBase(agentId);
-    console.log('Files for search:', files);
+    console.log('Files for fallback search:', files);
     
     if (!files || !Array.isArray(files) || files.length === 0) {
       return [];
     }
     
-    // Simple filename search
+    // Simple filename search as fallback
     const normalizedQuery = query.toLowerCase();
     const results = files
       .filter(file => {
@@ -132,13 +155,13 @@ export const searchKnowledgeBase = async (agentId, query) => {
       .map(file => ({
         file_name: file.filename || file.name || 'Unnamed File',
         file_id: file.id,
-        score: 1.0, // Mock score
-        text: `File: ${file.filename || file.name || 'Unnamed File'}`, // No content access yet
+        score: 0.5, // Lower score for filename-only matches
+        text: `File: ${file.filename || file.name || 'Unnamed File'}`,
         indexed: file.indexed,
-        service: file.service || 'Unknown'
+        service: file.service || 'alchemist-knowledge-vault'
       }));
     
-    console.log('Search results:', results);
+    console.log('Fallback search results:', results);
     return results;
   } catch (error) {
     console.error(`Error searching knowledge base for agent ${agentId}:`, error);
@@ -252,6 +275,48 @@ export const getEnhancedEmbeddingStats = async (agentId) => {
     return response.data;
   } catch (error) {
     console.error(`Error getting enhanced embedding stats for agent ${agentId}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Update file content
+ */
+export const updateFileContent = async (fileId, content) => {
+  try {
+    const response = await kbApi.put(`${ENDPOINTS.KB_FILES}/${fileId}/content`, {
+      content
+    });
+    
+    console.log('File content update response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error(`Error updating content for file ${fileId}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Get detailed chunk analysis for a file
+ */
+export const getFileChunkAnalysis = async (fileId) => {
+  try {
+    console.log('Requesting chunk analysis for file:', fileId);
+    console.log('Using endpoint:', `${ENDPOINTS.KB_FILES}/${fileId}/chunk-analysis`);
+    console.log('Base URL:', kbApi.defaults.baseURL);
+    
+    const response = await kbApi.get(`${ENDPOINTS.KB_FILES}/${fileId}/chunk-analysis`);
+    
+    console.log('File chunk analysis response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error(`Error getting chunk analysis for file ${fileId}:`, error);
+    console.error('Error details:', {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      url: error.config?.url
+    });
     throw error;
   }
 };

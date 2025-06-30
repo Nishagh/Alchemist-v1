@@ -22,7 +22,8 @@ class Settings(BaseSettings):
         default=[
             "http://localhost:3000",
             "https://alchemist-e69bb.web.app",
-            "https://alchemist-e69bb.firebaseapp.com"
+            "https://alchemist-e69bb.firebaseapp.com",
+            "https://alchemist.olbrain.com"
         ],
         env="ALLOWED_ORIGINS"
     )
@@ -102,7 +103,8 @@ except Exception as e:
         ALLOWED_ORIGINS = [
             "http://localhost:3000",
             "https://alchemist-e69bb.web.app",
-            "https://alchemist-e69bb.firebaseapp.com"
+            "https://alchemist-e69bb.firebaseapp.com",
+            "https://alchemist.olbrain.com"
         ]
         
         FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "alchemist-e69bb")

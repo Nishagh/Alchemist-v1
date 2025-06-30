@@ -38,7 +38,11 @@ export {
   uploadKnowledgeBaseFile,
   deleteKnowledgeBaseFile,
   searchKnowledgeBase,
-  getKnowledgeBaseSearchResults
+  getKnowledgeBaseSearchResults,
+  getFileContentPreview,
+  reprocessKnowledgeBaseFile,
+  updateFileContent,
+  getFileChunkAnalysis
 } from './knowledgeBase/knowledgeBaseService';
 
 // Artifact services

@@ -8,11 +8,11 @@ import pypdf
 import docx2txt
 from bs4 import BeautifulSoup
 from firebase_admin import firestore
-from app.services.openai_service import OpenAIService
-from app.services.firebase_service import FirebaseService
-from app.services.content_processor import ContentProcessor
-from app.services.chunking_service import ChunkingService
-from app.utils.logging_config import get_logger, log_with_data
+from services.openai_service import OpenAIService
+from services.firebase_service import FirebaseService
+from services.content_processor import ContentProcessor
+from services.chunking_service import ChunkingService
+from utils.logging_config import get_logger, log_with_data
 
 SERVER_TIMESTAMP = firestore.SERVER_TIMESTAMP
 
@@ -46,11 +46,12 @@ class IndexingService:
         # Step 1: Extract text based on file type
         raw_text = self._extract_text(file_path, content_type)
         
-        # Step 2: Process and clean content
+        # Step 2: Process and clean content with agent-specific relevance assessment
         processing_result = self.content_processor.process_content(
             text=raw_text,
             content_type=content_type,
-            filename=filename
+            filename=filename,
+            agent_id=agent_id
         )
         
         processed_text = processing_result["processed_text"]
@@ -129,7 +130,10 @@ class IndexingService:
             "processed_text": processed_text,
             "processing_stats": processing_stats,
             "content_metadata": content_metadata,
-            "quality_score": processing_result["quality_score"]
+            "quality_score": processing_result["quality_score"],
+            "relevance_assessment": processing_result.get("relevance_assessment"),
+            "relevance_score": processing_result.get("relevance_score"),
+            "agent_specific_quality": processing_result.get("agent_specific_quality")
         }
     
     def _extract_text(self, file_path: str, content_type: str) -> str:

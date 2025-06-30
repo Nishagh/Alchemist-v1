@@ -609,7 +609,18 @@ const KnowledgeBase = () => {
                             <Box sx={{ display: 'flex', alignItems: 'center' }}>
                               {getFileIcon(file.filename, file.content_type)}
                               <Box sx={{ ml: 1 }}>
-                                <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                <Typography 
+                                  variant="body2" 
+                                  sx={{ 
+                                    fontWeight: 500,
+                                    cursor: 'pointer',
+                                    color: 'primary.main',
+                                    '&:hover': {
+                                      textDecoration: 'underline'
+                                    }
+                                  }}
+                                  onClick={() => navigate(`/knowledge-base/${agentId}/file/${file.id}`)}
+                                >
                                   {file.filename || file.name || 'Unnamed File'}
                                 </Typography>
                                 {file.id && (
@@ -723,7 +734,20 @@ const KnowledgeBase = () => {
                             {getStatusBadge(file)}
                           </Box>
                           
-                          <Typography variant="subtitle1" component="div" noWrap sx={{ fontWeight: 500 }}>
+                          <Typography 
+                            variant="subtitle1" 
+                            component="div" 
+                            noWrap 
+                            sx={{ 
+                              fontWeight: 500,
+                              cursor: 'pointer',
+                              color: 'primary.main',
+                              '&:hover': {
+                                textDecoration: 'underline'
+                              }
+                            }}
+                            onClick={() => navigate(`/knowledge-base/${agentId}/file/${file.id}`)}
+                          >
                             {file.filename || file.name || 'Unnamed File'}
                           </Typography>
                           

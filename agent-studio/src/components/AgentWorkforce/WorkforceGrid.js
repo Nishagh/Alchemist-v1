@@ -27,9 +27,6 @@ import {
   DialogActions,
   TextField,
   MenuItem,
-  Menu,
-  ListItemIcon,
-  ListItemText,
   Grow,
   alpha,
   useTheme
@@ -46,11 +43,7 @@ import {
   Work as WorkIcon,
   Group as GroupIcon,
   BarChart as BarChartIcon,
-  AutoAwesome as AutoAwesomeIcon,
-  Delete as DeleteIcon,
-  Assignment as AssignmentIcon,
-  Launch as LaunchIcon,
-  Settings as SettingsIcon
+  AutoAwesome as AutoAwesomeIcon
 } from '@mui/icons-material';
 import { gnfApi } from '../../services/config/apiConfig';
 import { workforceService } from '../../services/workforce/workforceService';
@@ -72,8 +65,12 @@ const WorkforceGrid = ({
   const [agentIdentities, setAgentIdentities] = useState({});
   const [workforceData, setWorkforceData] = useState({});
   const [identitiesLoading, setIdentitiesLoading] = useState(true);
-  const [actionMenuAnchor, setActionMenuAnchor] = useState(null);
-  const [selectedAgent, setSelectedAgent] = useState(null);
+  
+  // Add totalTasks to component scope
+  const getTotalTasks = (agentId) => {
+    const agentData = workforceData[agentId];
+    return agentData?.conversations?.length || 0;
+  };
 
   // Helper functions for real data processing
   const generateJobTitle = (agentId) => {
@@ -93,6 +90,11 @@ const WorkforceGrid = ({
       expert: '#FF9800'
     };
     return colors[stage] || '#757575';
+  };
+
+  const getAgentProfilePicture = (agent) => {
+    // Return the agent's profile picture URL if available
+    return agent.profilePictureUrl || agent.profile_picture_url || null;
   };
   
   const calculateExperienceYears = (agentId) => {
@@ -214,21 +216,12 @@ const WorkforceGrid = ({
     return filtered;
   };
 
-  const handleActionMenu = (event, agent) => {
-    event.stopPropagation();
-    setActionMenuAnchor(event.currentTarget);
-    setSelectedAgent(agent);
-  };
-
-  const closeActionMenu = () => {
-    setActionMenuAnchor(null);
-    setSelectedAgent(null);
-  };
 
   const EmployeeCard = ({ agent, index }) => {
     const identity = agentIdentities[agent.id];
     const jobTitle = generateJobTitle(agent.id);
     const profileColor = generateProfilePicture(identity);
+    const profilePictureUrl = getAgentProfilePicture(agent);
     
     // Check if agent is deployed/active to show meaningful metrics
     const isDeployed = agent.status === 'deployed' || agent.status === 'active';
@@ -239,101 +232,111 @@ const WorkforceGrid = ({
     const experience = isDeployed && hasConversations ? calculateExperienceYears(agent.id) : 0;
     const costs = isDeployed && hasConversations ? calculateUsageCosts(agent.id) : 0;
     const performance = isDeployed && hasConversations ? getPerformanceScore(agent.id) : 0;
+    const totalTasks = isDeployed && hasConversations ? getTotalTasks(agent.id) : 0;
     
     if (viewMode === 'list') {
       return (
-        <Card sx={{ mb: 1 }}>
-          <CardContent sx={{ py: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Card 
+          sx={{ 
+            mb: 1.5,
+            border: 1,
+            borderColor: isDeployed ? 'primary.light' : 'grey.200',
+            borderRadius: 2,
+            transition: 'all 0.2s ease-in-out',
+            '&:hover': {
+              borderColor: 'primary.main',
+              boxShadow: 2,
+              transform: 'translateY(-1px)'
+            },
+            cursor: 'pointer'
+          }}
+          onClick={() => navigate(`/agent-profile/${agent.id}`)}
+        >
+          <CardContent sx={{ py: 2.5, px: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              {/* Agent Avatar & Basic Info */}
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flex: 1 }}>
-                <Badge
-                  badgeContent={identity?.development_stage?.charAt(0)?.toUpperCase()}
-                  color={isDeployed ? "primary" : "default"}
-                  overlap="circular"
-                  sx={{
-                    '& .MuiBadge-badge': {
-                      opacity: isDeployed ? 1 : 0.6
-                    }
+                <Avatar 
+                  src={profilePictureUrl}
+                  sx={{ 
+                    width: 48, 
+                    height: 48,
+                    bgcolor: profilePictureUrl ? 'transparent' : (isDeployed ? profileColor : 'grey.300'),
+                    border: 2,
+                    borderColor: isDeployed ? 'primary.main' : 'grey.400',
+                    opacity: isDeployed ? 1 : 0.7
                   }}
                 >
-                  <Avatar sx={{ 
-                    bgcolor: isDeployed ? profileColor : '#9e9e9e', 
-                    width: 50, 
-                    height: 50,
-                    opacity: isDeployed ? 1 : 0.6
-                  }}>
-                    <SmartToyIcon sx={{ color: isDeployed ? 'inherit' : '#666666' }} />
-                  </Avatar>
-                </Badge>
+                  {!profilePictureUrl && <SmartToyIcon sx={{ fontSize: '1.5rem' }} />}
+                </Avatar>
                 
                 <Box sx={{ flex: 1 }}>
+                  <Typography 
+                    variant="h6" 
+                    fontWeight="600"
+                    sx={{ 
+                      mb: 0.5,
+                      color: isDeployed ? 'text.primary' : 'text.secondary'
+                    }}
+                  >
+                    {agent.name || 'Unnamed Agent'}
+                  </Typography>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Typography 
-                      variant="h6" 
-                      fontWeight="bold"
-                      sx={{ opacity: isDeployed ? 1 : 0.7 }}
-                    >
-                      {agent.name || 'Unnamed Agent'}
-                    </Typography>
                     <Chip 
                       label={agent.status || 'Draft'} 
                       size="small" 
+                      variant={isDeployed ? 'filled' : 'outlined'}
                       color={getStatusColor(agent.status)}
+                      sx={{ fontSize: '0.75rem', height: 24 }}
                     />
+                    <Typography variant="body2" color="text.secondary">
+                      {jobTitle}
+                    </Typography>
                   </Box>
-                  <Typography variant="body2" color="text.secondary">
-                    {jobTitle}
-                  </Typography>
-                </Box>
-                
-                <Box sx={{ textAlign: 'center', minWidth: 80 }}>
-                  <Typography variant="body2" color="text.secondary">Experience</Typography>
-                  <Typography variant="h6">
-                    {isDeployed && hasConversations ? `${experience} yrs` : '-'}
-                  </Typography>
-                </Box>
-                
-                <Box sx={{ textAlign: 'center', minWidth: 100 }}>
-                  <Typography variant="body2" color="text.secondary">Usage Cost</Typography>
-                  <Typography variant="h6" color={isDeployed && hasConversations ? "warning.main" : "text.disabled"}>
-                    {isDeployed && hasConversations ? `₹${costs.toLocaleString('en-IN')}` : '-'}
-                  </Typography>
-                </Box>
-                
-                <Box sx={{ textAlign: 'center', minWidth: 80 }}>
-                  <Typography variant="body2" color="text.secondary">Performance</Typography>
-                  <Typography variant="h6" color={isDeployed && hasConversations ? (performance >= 90 ? 'success.main' : performance >= 75 ? 'warning.main' : 'error.main') : 'text.disabled'}>
-                    {isDeployed && hasConversations ? `${performance}%` : '-'}
-                  </Typography>
                 </Box>
               </Box>
               
-              {showActions && (
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                  <Tooltip title="View Profile">
-                    <IconButton onClick={() => navigate(`/agent-profile/${agent.id}`)}>
-                      <VisibilityIcon />
-                    </IconButton>
-                  </Tooltip>
-                  <Tooltip title="Manage Agent">
-                    <IconButton onClick={() => navigate(`/agent/${agent.id}`)}>
-                      <EditIcon />
-                    </IconButton>
-                  </Tooltip>
-                  <IconButton onClick={(e) => handleActionMenu(e, agent)}>
-                    <MoreVertIcon />
-                  </IconButton>
+              {/* Metrics - Only show for deployed agents */}
+              {isDeployed && hasConversations && (
+                <Box sx={{ display: 'flex', gap: 4 }}>
+                  <Box sx={{ textAlign: 'center', minWidth: 70 }}>
+                    <Typography variant="h6" fontWeight="600" color="primary.main">
+                      {performance}%
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Success
+                    </Typography>
+                  </Box>
+                  
+                  <Box sx={{ textAlign: 'center', minWidth: 80 }}>
+                    <Typography variant="h6" fontWeight="600" color="warning.main">
+                      ₹{costs.toLocaleString('en-IN')}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Usage Cost
+                    </Typography>
+                  </Box>
+                  
+                  <Box sx={{ textAlign: 'center', minWidth: 60 }}>
+                    <Typography variant="h6" fontWeight="600">
+                      {totalTasks}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Tasks
+                    </Typography>
+                  </Box>
+                </Box>
+              )}
+              
+              {/* Draft/Not Deployed State */}
+              {!isDeployed && (
+                <Box sx={{ textAlign: 'center', px: 2 }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                    Ready to deploy
+                  </Typography>
                 </Box>
               )}
             </Box>
-            
-            {!isDeployed && (
-              <Box sx={{ mt: 2, p: 1, bgcolor: 'background.default', borderRadius: 1, textAlign: 'center' }}>
-                <Typography variant="caption" color="text.secondary">
-                  Deploy this agent to see usage metrics
-                </Typography>
-              </Box>
-            )}
           </CardContent>
         </Card>
       );
@@ -341,132 +344,130 @@ const WorkforceGrid = ({
     
     return (
       <Grow in={true} timeout={300 + index * 50}>
-        <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-          <CardContent sx={{ flexGrow: 1 }}>
-            <Box sx={{ textAlign: 'center', mb: 2 }}>
-              <Badge
-                badgeContent={identity?.development_stage}
-                color={isDeployed ? "primary" : "default"}
-                overlap="circular"
+        <Card 
+          sx={{ 
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            border: 1,
+            borderColor: isDeployed ? 'primary.light' : 'grey.200',
+            borderRadius: 3,
+            transition: 'all 0.3s ease-in-out',
+            cursor: 'pointer',
+            '&:hover': {
+              borderColor: 'primary.main',
+              boxShadow: 4,
+              transform: 'translateY(-4px)'
+            },
+            overflow: 'hidden'
+          }}
+          onClick={() => navigate(`/agent-profile/${agent.id}`)}
+        >
+          {/* Status Bar */}
+          <Box 
+            sx={{ 
+              height: 4,
+              bgcolor: isDeployed ? 'primary.main' : 'grey.300',
+              width: '100%'
+            }} 
+          />
+          
+          <CardContent sx={{ flexGrow: 1, p: 3, textAlign: 'center' }}>
+            {/* Avatar */}
+            <Box sx={{ mb: 2 }}>
+              <Avatar
+                src={profilePictureUrl}
                 sx={{
-                  '& .MuiBadge-badge': {
-                    fontSize: '0.7rem',
-                    fontWeight: 'bold',
-                    opacity: isDeployed ? 1 : 0.6
-                  }
+                  width: 64,
+                  height: 64,
+                  bgcolor: profilePictureUrl ? 'transparent' : (isDeployed ? profileColor : 'grey.300'),
+                  mx: 'auto',
+                  border: 3,
+                  borderColor: isDeployed ? 'primary.main' : 'grey.400',
+                  boxShadow: isDeployed ? 2 : 1,
+                  opacity: isDeployed ? 1 : 0.7,
+                  transition: 'all 0.2s ease-in-out'
                 }}
               >
-                <Avatar
-                  sx={{
-                    width: 80,
-                    height: 80,
-                    bgcolor: isDeployed ? profileColor : '#9e9e9e',
-                    mx: 'auto',
-                    border: '3px solid',
-                    borderColor: 'background.paper',
-                    boxShadow: 2,
-                    opacity: isDeployed ? 1 : 0.6
-                  }}
-                >
-                  <SmartToyIcon sx={{ fontSize: '2rem', color: isDeployed ? 'inherit' : '#666666' }} />
-                </Avatar>
-              </Badge>
-              
-              <Typography 
-                variant="h6" 
-                fontWeight="bold" 
-                sx={{ 
-                  mt: 1,
-                  opacity: isDeployed ? 1 : 0.7
-                }}
-              >
-                {agent.name || 'Unnamed Agent'}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {jobTitle}
-              </Typography>
+                {!profilePictureUrl && <SmartToyIcon sx={{ fontSize: '1.8rem' }} />}
+              </Avatar>
             </Box>
             
-            <Divider sx={{ my: 2 }} />
+            {/* Agent Name & Status */}
+            <Typography 
+              variant="h6" 
+              fontWeight="600" 
+              sx={{ 
+                mb: 0.5,
+                color: isDeployed ? 'text.primary' : 'text.secondary',
+                lineHeight: 1.2
+              }}
+            >
+              {agent.name || 'Unnamed Agent'}
+            </Typography>
             
-            <Grid container spacing={2} sx={{ mb: 2 }}>
-              <Grid item xs={6}>
-                <Box sx={{ textAlign: 'center' }}>
-                  <Typography variant="body2" color="text.secondary">Experience</Typography>
-                  <Typography variant="h6">
-                    {isDeployed && hasConversations ? `${experience} yrs` : '-'}
-                  </Typography>
-                </Box>
-              </Grid>
-              <Grid item xs={6}>
-                <Box sx={{ textAlign: 'center' }}>
-                  <Typography variant="body2" color="text.secondary">Performance</Typography>
-                  <Typography 
-                    variant="h6" 
-                    color={isDeployed && hasConversations ? (performance >= 90 ? 'success.main' : performance >= 75 ? 'warning.main' : 'error.main') : 'text.disabled'}
-                  >
-                    {isDeployed && hasConversations ? `${performance}%` : '-'}
-                  </Typography>
-                </Box>
-              </Grid>
-            </Grid>
+            <Chip 
+              label={agent.status || 'Draft'} 
+              size="small" 
+              variant={isDeployed ? 'filled' : 'outlined'}
+              color={getStatusColor(agent.status)}
+              sx={{ 
+                mb: 2,
+                fontSize: '0.75rem',
+                fontWeight: '500'
+              }}
+            />
             
-            <Box sx={{ textAlign: 'center', mb: 2 }}>
-              <Typography variant="body2" color="text.secondary">Usage Cost</Typography>
-              <Typography variant="h5" color={isDeployed && hasConversations ? "warning.main" : "text.disabled"} fontWeight="bold">
-                {isDeployed && hasConversations ? `₹${costs.toLocaleString('en-IN')}` : '-'}
-              </Typography>
-            </Box>
-            
-            <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center', flexWrap: 'wrap' }}>
-              <Chip 
-                label={agent.status || 'Draft'} 
-                size="small" 
-                color={getStatusColor(agent.status)}
-              />
-              {identity?.dominant_personality_traits?.slice(0, 2).map((trait, idx) => (
-                <Chip
-                  key={idx}
-                  label={trait}
-                  size="small"
-                  variant="outlined"
-                />
-              ))}
-            </Box>
-            
-            {!isDeployed && (
-              <Box sx={{ textAlign: 'center', mt: 2, p: 1, bgcolor: 'background.default', borderRadius: 1 }}>
-                <Typography variant="caption" color="text.secondary">
-                  Deploy this agent to see usage metrics
+            {/* Key Metrics for Deployed Agents */}
+            {isDeployed && hasConversations ? (
+              <Box sx={{ mb: 2 }}>
+                <Grid container spacing={2}>
+                  <Grid item xs={4}>
+                    <Typography variant="h6" fontWeight="600" color="primary.main">
+                      {performance}%
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Success Rate
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={4}>
+                    <Typography variant="h6" fontWeight="600">
+                      {totalTasks}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Tasks
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={4}>
+                    <Typography variant="h6" fontWeight="600" color="warning.main">
+                      ₹{Math.round(costs/1000)}k
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Usage
+                    </Typography>
+                  </Grid>
+                </Grid>
+              </Box>
+            ) : (
+              <Box sx={{ mb: 2, py: 1 }}>
+                <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                  {agent.status === 'draft' ? 'Ready to configure' : 'Ready to deploy'}
                 </Typography>
               </Box>
             )}
+            
+            {/* Job Title */}
+            <Typography 
+              variant="body2" 
+              color="text.secondary"
+              sx={{ 
+                fontSize: '0.875rem',
+                fontWeight: '400'
+              }}
+            >
+              {jobTitle}
+            </Typography>
           </CardContent>
-          
-          {showActions && (
-            <CardActions sx={{ justifyContent: 'center', gap: 1 }}>
-              <Button
-                size="small"
-                startIcon={<VisibilityIcon />}
-                onClick={() => navigate(`/agent-profile/${agent.id}`)}
-              >
-                Profile
-              </Button>
-              <Button
-                size="small"
-                startIcon={<EditIcon />}
-                onClick={() => navigate(`/agent/${agent.id}`)}
-              >
-                Manage
-              </Button>
-              <IconButton
-                size="small"
-                onClick={(e) => handleActionMenu(e, agent)}
-              >
-                <MoreVertIcon />
-              </IconButton>
-            </CardActions>
-          )}
         </Card>
       </Grow>
     );
@@ -518,54 +519,6 @@ const WorkforceGrid = ({
           </Typography>
         </Box>
       )}
-
-      {/* Action Menu */}
-      <Menu
-        anchorEl={actionMenuAnchor}
-        open={Boolean(actionMenuAnchor)}
-        onClose={closeActionMenu}
-        anchorOrigin={{
-          vertical: 'bottom',
-          horizontal: 'right',
-        }}
-        transformOrigin={{
-          vertical: 'top',
-          horizontal: 'right',
-        }}
-        PaperProps={{
-          sx: { minWidth: 200 }
-        }}
-      >
-        <MenuItem onClick={() => {
-          navigate(`/agent-profile/${selectedAgent?.id}`);
-          closeActionMenu();
-        }}>
-          <ListItemIcon><VisibilityIcon fontSize="small" /></ListItemIcon>
-          <ListItemText>View Profile</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={() => {
-          navigate(`/agent/${selectedAgent?.id}`);
-          closeActionMenu();
-        }}>
-          <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
-          <ListItemText>Manage Agent</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={() => {
-          navigate(`/agent-deployment/${selectedAgent?.id}`);
-          closeActionMenu();
-        }}>
-          <ListItemIcon><LaunchIcon fontSize="small" /></ListItemIcon>
-          <ListItemText>Deploy</ListItemText>
-        </MenuItem>
-        <Divider />
-        <MenuItem onClick={() => {
-          // Handle delete action
-          closeActionMenu();
-        }}>
-          <ListItemIcon><DeleteIcon fontSize="small" color="error" /></ListItemIcon>
-          <ListItemText>Delete Agent</ListItemText>
-        </MenuItem>
-      </Menu>
     </>
   );
 };

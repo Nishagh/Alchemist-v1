@@ -33,6 +33,7 @@ class FirebaseService:
             # Initialize collection references using centralized constants
             self.files_collection = self._firebase_client.get_knowledge_files_collection()
             self.embeddings_base_collection = Collections.KNOWLEDGE_EMBEDDINGS
+            self.agents_collection = Collections.AGENTS
             
             print("Knowledge Vault Firebase service initialized successfully using centralized client")
             
@@ -255,3 +256,30 @@ class FirebaseService:
                 'file_ids': [],
                 'error': str(e)
             }
+    
+    def get_agent(self, agent_id: str) -> Optional[Dict[str, Any]]:
+        """Get agent data from Firestore agents collection
+        
+        Args:
+            agent_id: The agent ID to fetch
+            
+        Returns:
+            Agent document data or None if not found
+        """
+        try:
+            # Get agent document from agents/[agentId] using centralized collection
+            agent_ref = self.db.collection(self.agents_collection).document(agent_id)
+            doc = agent_ref.get()
+            
+            if doc.exists:
+                agent_data = doc.to_dict()
+                # Ensure agent_id is included in the returned data
+                agent_data['id'] = agent_id
+                return agent_data
+            else:
+                print(f"Agent not found: {agent_id}")
+                return None
+                
+        except Exception as e:
+            print(f"Error fetching agent {agent_id}: {str(e)}")
+            return None

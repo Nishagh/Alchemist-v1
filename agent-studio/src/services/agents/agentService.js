@@ -157,6 +157,91 @@ export const updateAgent = async (agentId, agentData) => {
 };
 
 /**
+ * Get all agents for the current user (excluding deleted ones)
+ */
+export const getActiveAgents = async () => {
+  try {
+    const currentUser = auth.currentUser;
+    const userId = currentUser?.uid;
+    
+    if (!userId) {
+      throw new Error(ErrorMessages.USER_NOT_AUTHENTICATED);
+    }
+    
+    const { db } = await import('../../utils/firebase');
+    const { collection, query, where, getDocs, orderBy } = await import('firebase/firestore');
+    
+    const agentsRef = collection(db, Collections.AGENTS);
+    const agentsQuery = query(
+      agentsRef,
+      where(DocumentFields.Agent.OWNER_ID, '==', userId),
+      where('status', '!=', 'deleted'),
+      orderBy('status'),
+      orderBy('created_at', 'desc')
+    );
+    
+    const snapshot = await getDocs(agentsQuery);
+    const agents = [];
+    
+    snapshot.forEach((doc) => {
+      const agentData = doc.data();
+      agents.push({
+        [DocumentFields.ID]: doc.id,
+        [DocumentFields.AGENT_ID]: doc.id,
+        ...agentData
+      });
+    });
+    
+    return agents;
+  } catch (error) {
+    console.error('Error getting active agents:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get deleted agents for the current user (archives)
+ */
+export const getDeletedAgents = async () => {
+  try {
+    const currentUser = auth.currentUser;
+    const userId = currentUser?.uid;
+    
+    if (!userId) {
+      throw new Error(ErrorMessages.USER_NOT_AUTHENTICATED);
+    }
+    
+    const { db } = await import('../../utils/firebase');
+    const { collection, query, where, getDocs, orderBy } = await import('firebase/firestore');
+    
+    const agentsRef = collection(db, Collections.AGENTS);
+    const agentsQuery = query(
+      agentsRef,
+      where(DocumentFields.Agent.OWNER_ID, '==', userId),
+      where('status', '==', 'deleted'),
+      orderBy('deleted_at', 'desc')
+    );
+    
+    const snapshot = await getDocs(agentsQuery);
+    const deletedAgents = [];
+    
+    snapshot.forEach((doc) => {
+      const agentData = doc.data();
+      deletedAgents.push({
+        [DocumentFields.ID]: doc.id,
+        [DocumentFields.AGENT_ID]: doc.id,
+        ...agentData
+      });
+    });
+    
+    return deletedAgents;
+  } catch (error) {
+    console.error('Error getting deleted agents:', error);
+    throw error;
+  }
+};
+
+/**
  * Get an agent by ID
  */
 export const getAgent = async (agentId) => {
@@ -200,7 +285,85 @@ export const getAgent = async (agentId) => {
 };
 
 /**
- * Delete an agent
+ * Mark an agent as deleted (soft delete)
+ */
+export const markAgentAsDeleted = async (agentId) => {
+  try {
+    // Get current user ID
+    const currentUser = auth.currentUser;
+    const userId = currentUser?.uid;
+    
+    if (!userId) {
+      throw new Error('User not authenticated');
+    }
+    
+    // Get agent data first to verify ownership
+    const agent = await getAgent(agentId);
+    if (!agent) {
+      throw new Error('Agent not found');
+    }
+    
+    // Update agent status to 'deleted' and add deletion timestamp
+    const deletionData = {
+      status: 'deleted',
+      deleted_at: new Date().toISOString(),
+      deleted_by: userId
+    };
+    
+    // Update via API
+    const response = await api.put(`${ENDPOINTS.AGENTS}/${agentId}`, deletionData);
+    
+    // Also update Firestore directly to ensure consistency
+    const { db } = await import('../../utils/firebase');
+    const { doc, updateDoc } = await import('firebase/firestore');
+    
+    const agentRef = doc(db, Collections.AGENTS, agentId);
+    await updateDoc(agentRef, deletionData);
+    
+    // Create lifecycle event for agent deletion
+    await createAgentDeletionEvent(agentId, userId, agent.name);
+    
+    return response.data;
+  } catch (error) {
+    console.error(`Error marking agent ${agentId} as deleted:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Create a lifecycle event for agent deletion
+ */
+const createAgentDeletionEvent = async (agentId, userId, agentName) => {
+  try {
+    const { db } = await import('../../utils/firebase');
+    const { collection, addDoc } = await import('firebase/firestore');
+    
+    const eventData = {
+      agent_id: agentId,
+      event_type: 'agent_deleted',
+      title: 'Agent Deleted',
+      description: `Agent "${agentName}" has been marked as deleted and removed from active use`,
+      metadata: {
+        deleted_by: userId,
+        deletion_reason: 'user_initiated',
+        final_status: 'deleted'
+      },
+      timestamp: new Date(),
+      user_id: userId
+    };
+    
+    const eventsRef = collection(db, 'agent_lifecycle_events');
+    await addDoc(eventsRef, eventData);
+    
+    console.log('Agent deletion lifecycle event created:', agentId);
+  } catch (error) {
+    console.error('Error creating agent deletion lifecycle event:', error);
+    // Don't throw error here as it's not critical for the deletion process
+  }
+};
+
+/**
+ * Delete an agent (hard delete - use with caution)
  */
 export const deleteAgent = async (agentId) => {
   try {

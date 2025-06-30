@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import files, vectors
+from routes import register_routes
 from dotenv import load_dotenv
 import os
 import logging
@@ -87,9 +87,8 @@ app.add_middleware(
 setup_metrics_middleware(app, "knowledge-vault")
 logger.info("Metrics middleware enabled")
 
-# Include routers
-app.include_router(files.router, prefix="/api", tags=["files"])
-app.include_router(vectors.router, prefix="/api", tags=["vectors"])
+# Register all routes with the FastAPI app
+register_routes(app)
 
 @app.get("/")
 async def root():
@@ -141,4 +140,4 @@ async def options_handler(path: str):
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8080))
-    uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)

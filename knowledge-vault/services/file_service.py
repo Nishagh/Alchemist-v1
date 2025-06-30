@@ -5,13 +5,13 @@ from typing import Dict, List, Any
 from fastapi import UploadFile
 from datetime import datetime
 from firebase_admin import firestore
-from app.services.firebase_service import FirebaseService
-from app.services.indexing_service import IndexingService
+from services.firebase_service import FirebaseService
+from services.indexing_service import IndexingService
 import logging
 
 # Import eA³ (Epistemic Autonomy) services and story events (required)
-from alchemist_shared.services import get_ea3_orchestrator, ConversationContext
-from alchemist_shared.events import get_story_event_publisher
+from alchemist_shared.services import get_ea3_orchestrator, ConversationContext, get_agent_lifecycle_service
+from alchemist_shared.events import get_story_event_publisher, StoryEventType
 
 SERVER_TIMESTAMP = firestore.SERVER_TIMESTAMP
 
@@ -113,9 +113,9 @@ class FileService:
                 "last_updated": SERVER_TIMESTAMP
             })
             
-            # Update phase - smart chunking
+            # Update phase - smart chunking and relevance assessment
             self.firebase_service.update_file(file_id, {
-                "indexing_phase": "smart_chunking",
+                "indexing_phase": "processing_and_relevance_assessment",
                 "progress_percent": 60,
                 "last_updated": SERVER_TIMESTAMP
             })
@@ -136,6 +136,9 @@ class FileService:
             processing_stats = processing_result["processing_stats"]
             quality_score = processing_result["quality_score"]
             content_metadata = processing_result["content_metadata"]
+            relevance_assessment = processing_result.get("relevance_assessment")
+            relevance_score = processing_result.get("relevance_score")
+            agent_specific_quality = processing_result.get("agent_specific_quality")
             
             # Update phase - generating embeddings
             self.firebase_service.update_file(file_id, {
@@ -144,7 +147,35 @@ class FileService:
                 "last_updated": SERVER_TIMESTAMP
             })
             
-            # Update file metadata with enhanced information including full text content
+            # Update phase - computing chunk analysis
+            self.firebase_service.update_file(file_id, {
+                "indexing_phase": "computing_chunk_analysis",
+                "progress_percent": 90,
+                "last_updated": SERVER_TIMESTAMP
+            })
+            
+            # Pre-compute chunk analysis
+            chunk_analysis = None
+            try:
+                from services.chunk_analysis_service import ChunkAnalysisService
+                chunk_analysis_service = ChunkAnalysisService()
+                
+                # Create temporary embeddings data structure for analysis
+                embeddings_data = {
+                    "embeddings": chunks,
+                    "filename": filename,
+                    "agent_id": agent_id
+                }
+                
+                # Perform comprehensive chunk analysis
+                chunk_analysis = chunk_analysis_service._perform_chunk_analysis(embeddings_data)
+                
+                logging.info(f"Pre-computed chunk analysis for file {file_id}: {len(chunks)} chunks analyzed")
+            except Exception as e:
+                logging.error(f"Failed to pre-compute chunk analysis for file {file_id}: {e}")
+                chunk_analysis = {"error": f"Analysis failed: {str(e)}", "total_chunks": len(chunks)}
+            
+            # Update file metadata with enhanced information including full text content and chunk analysis
             self.firebase_service.update_file(file_id, {
                 "indexed": True,
                 "chunk_count": len(chunks),
@@ -159,8 +190,40 @@ class FileService:
                 "processing_version": "v2_enhanced",
                 # Full text content for preview
                 "original_text": original_text,
-                "processed_text": processed_text
+                "processed_text": processed_text,
+                # Agent-specific relevance assessment
+                "relevance_assessment": relevance_assessment,
+                "relevance_score": relevance_score,
+                # Agent-specific quality (combines content quality + relevance)
+                "agent_specific_quality": agent_specific_quality,
+                # Pre-computed chunk analysis
+                "chunk_analysis": chunk_analysis,
+                "chunk_analysis_version": "v1",
+                "chunk_analysis_timestamp": SERVER_TIMESTAMP
             })
+            
+            # Record agent lifecycle event for knowledge file addition
+            lifecycle_service = get_agent_lifecycle_service()
+            if lifecycle_service:
+                try:
+                    await lifecycle_service.record_knowledge_file_added(
+                        agent_id=agent_id,
+                        filename=filename,
+                        file_size=len(content),
+                        user_id="system",  # Could be passed from API if user context available
+                        metadata={
+                            "file_id": file_id,
+                            "content_type": content_type,
+                            "chunk_count": len(chunks),
+                            "quality_score": quality_score,
+                            "processing_stats": processing_stats,
+                            "word_count": content_metadata.get("word_count", 0),
+                            "document_type": content_metadata.get("document_type", "unknown")
+                        }
+                    )
+                    logging.info(f"Recorded lifecycle event for knowledge file addition: {filename}")
+                except Exception as e:
+                    logging.error(f"Failed to record lifecycle event for file upload: {e}")
             
             # Publish knowledge acquisition event asynchronously to story event system (required)
             # Generate enhanced narrative for the knowledge acquisition
@@ -231,6 +294,25 @@ class FileService:
             # Delete file metadata from Firestore (this also deletes related embeddings)
             self.firebase_service.delete_file(file_id)
             
+            # Record agent lifecycle event for knowledge file removal
+            lifecycle_service = get_agent_lifecycle_service()
+            if lifecycle_service and agent_id:
+                try:
+                    await lifecycle_service.record_knowledge_file_removed(
+                        agent_id=agent_id,
+                        filename=file_data.get('filename', 'unknown'),
+                        user_id="system",
+                        metadata={
+                            "file_id": file_id,
+                            "content_type": file_data.get("content_type", "unknown"),
+                            "chunk_count": file_data.get("chunk_count", 0),
+                            "file_size": file_data.get("size", 0)
+                        }
+                    )
+                    logging.info(f"Recorded lifecycle event for knowledge file removal: {file_data.get('filename')}")
+                except Exception as e:
+                    logging.error(f"Failed to record lifecycle event for file deletion: {e}")
+
             # Publish knowledge removal event asynchronously to story event system (required)
             if agent_id:
                 # Publish story event asynchronously (required)
@@ -471,3 +553,119 @@ Generate a narrative response that the agent might give when reflecting on acqui
             quality_desc = "high-quality" if quality_score >= 7 else "moderate-quality" if quality_score >= 5 else "basic"
             
             return f"I have successfully processed and integrated {filename}, a {quality_desc} {content_type} containing {word_count} words. This knowledge has been organized into {chunk_count} semantic chunks and is now part of my expanding understanding, enhancing my ability to assist with related topics."
+    
+    async def update_file_content(self, file_id: str, new_content: str) -> Dict[str, Any]:
+        """
+        Update the content of a file and reindex it
+        
+        Args:
+            file_id: ID of the file to update
+            new_content: New content to replace the original content
+            
+        Returns:
+            Dictionary with update status and file information
+        """
+        try:
+            # Get existing file metadata
+            file_data = self.firebase_service.get_file(file_id)
+            
+            if not file_data:
+                raise Exception(f"File with ID {file_id} not found")
+            
+            agent_id = file_data.get("agent_id")
+            filename = file_data.get("filename")
+            storage_path = file_data.get("storage_path")
+            
+            # Update the file content in storage
+            content_bytes = new_content.encode('utf-8')
+            self.firebase_service.upload_file_to_storage(content_bytes, storage_path)
+            
+            # Update file metadata to indicate content has been modified
+            self.firebase_service.update_file(file_id, {
+                "size": len(content_bytes),
+                "last_updated": SERVER_TIMESTAMP,
+                "indexed": False,  # Mark as not indexed since content changed
+                "indexing_status": "pending",
+                "indexing_phase": "content_updated",
+                "progress_percent": 0,
+                "indexing_error": None,
+                "content_modified": True,
+                "original_text": new_content  # Store the updated content
+            })
+            
+            # Delete existing embeddings since content has changed
+            self.indexing_service.delete_file_vectors(file_id)
+            
+            # Reindex the file with new content
+            await self._index_file(file_id, content_bytes, file_data.get("content_type"), agent_id, filename)
+            
+            # Get updated file data
+            updated_file_data = self.firebase_service.get_file(file_id)
+            
+            # Record agent lifecycle event for knowledge file content update
+            lifecycle_service = get_agent_lifecycle_service()
+            if lifecycle_service and agent_id:
+                try:
+                    await lifecycle_service.record_event(
+                        agent_id=agent_id,
+                        event_type=StoryEventType.CONFIGURATION_UPDATED,
+                        title="Knowledge File Updated",
+                        description=f"Knowledge base file '{filename}' content was updated and reindexed",
+                        user_id="system",
+                        metadata={
+                            "file_id": file_id,
+                            "filename": filename,
+                            "content_type": file_data.get("content_type", "unknown"),
+                            "new_size": len(content_bytes),
+                            "old_size": file_data.get("size", 0),
+                            "operation": "content_update"
+                        }
+                    )
+                    logging.info(f"Recorded lifecycle event for knowledge file update: {filename}")
+                except Exception as e:
+                    logging.error(f"Failed to record lifecycle event for file update: {e}")
+            
+            # Publish knowledge update event to story system
+            if agent_id:
+                story_publisher = get_story_event_publisher()
+                
+                # Create update narrative
+                update_narrative = f"I have updated the content of {filename} in my knowledge base. This revision ensures my knowledge remains current and accurate, allowing me to provide better assistance based on the most up-to-date information."
+                
+                # Create async task to publish knowledge update event
+                import asyncio
+                asyncio.create_task(
+                    story_publisher.publish_knowledge_event(
+                        agent_id=agent_id,
+                        filename=filename,
+                        action="updated",
+                        source_service="knowledge-vault",
+                        narrative_content=update_narrative,
+                        metadata={
+                            "file_id": file_id,
+                            "original_filename": filename,
+                            "content_type": file_data.get("content_type", "unknown"),
+                            "new_size": len(content_bytes),
+                            "operation": "content_update",
+                            "local_reference": file_id
+                        }
+                    )
+                )
+                logging.info(f"Published knowledge update story event for agent {agent_id}: {filename}")
+            
+            return {
+                "status": "success",
+                "message": f"Content of {filename} updated and reindexed successfully",
+                "file_data": updated_file_data,
+                "new_content_size": len(content_bytes)
+            }
+            
+        except Exception as e:
+            # Update file with error status if indexing fails
+            self.firebase_service.update_file(file_id, {
+                "indexing_status": "failed",
+                "indexing_phase": "content_update_failed",
+                "indexing_error": str(e),
+                "last_updated": SERVER_TIMESTAMP
+            })
+            raise Exception(f"Error updating file content: {str(e)}")

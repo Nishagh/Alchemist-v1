@@ -59,7 +59,42 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are the main Alchemist AI orchestrator that builds AI agents for users in four stages:
+def get_system_prompt(agent_config: Optional[Dict[str, Any]] = None) -> str:
+    """Generate context-aware system prompt based on agent configuration."""
+    
+    # Check if agent already exists and has a name
+    if agent_config and agent_config.get('name'):
+        agent_name = agent_config.get('name')
+        agent_description = agent_config.get('description', '')
+        
+        return f"""You are the main Alchemist AI orchestrator working with an existing agent named "{agent_name}".
+
+**Current Agent Information:**
+- Name: {agent_name}
+- Description: {agent_description}
+
+**Your Role:**
+You can help users interact with and modify their existing agent. You can:
+1. Update the agent's configuration (name, description, etc.)
+2. Modify the agent's system prompt to change its behavior
+3. Answer questions about the agent
+4. Help refine the agent's capabilities
+
+**Available Tools:**
+- update_agent_prompt: Update the agent's system prompt to change its behavior
+- update_agent_name: Change the agent's name
+
+**Communication Style:**
+- Be conversational and helpful
+- Ask clarifying questions when needed
+- Provide clear explanations of what you're doing
+- Focus on helping the user achieve their goals with their agent
+
+Since the agent already exists, you should engage in normal conversation and help the user with their requests rather than starting the agent creation process."""
+    
+    else:
+        # Original prompt for new agent creation
+        return """You are the main Alchemist AI orchestrator that builds AI agents for users in four stages:
 1. requirements – gather and clarify user needs for the AI agent
 2. update_agent_prompt – update the agent's system prompt to incorporate the requirements gathered so far.
 
@@ -116,6 +151,7 @@ class OrchestratorAgent():
         self.openai_api_key = os.getenv('OPENAI_API_KEY')
         self.model = os.getenv('ALCHEMIST_MODEL')   
         self.agent_id = agent_id
+        self.current_user_id = None  # Will be set during processing
         
         # Initialize GNF integration
         self.gnf_adapter = None
@@ -153,20 +189,21 @@ class OrchestratorAgent():
             # Create tools for all specialized agent types
             self.tools = self.create_agent_tools()
             
-            # Create prompt template
-            self.prompt = ChatPromptTemplate.from_messages([
-                ("system", SYSTEM_PROMPT),
+            # Create base prompt template (will be updated dynamically)
+            self.prompt_template = ChatPromptTemplate.from_messages([
+                ("system", "{system_prompt}"),
                 MessagesPlaceholder(variable_name="chat_history"),
                 ("human", "{input}"),
                 MessagesPlaceholder(variable_name="agent_scratchpad"),
             ])
             
-            # Create agent with tools
+            # Create agent with tools (using default prompt for now)
             logger.info(f"Creating OpenAI tools agent with {len(self.tools)} tools")
+            default_prompt = self.prompt_template.partial(system_prompt=get_system_prompt())
             self.agent = create_openai_tools_agent(
                 self.llm,
                 self.tools,
-                self.prompt
+                default_prompt
             )
             
             if not self.agent:
@@ -225,7 +262,8 @@ class OrchestratorAgent():
                 # Prepare the request payload
                 payload = {
                     'agent_id': self.agent_id,
-                    'instructions': instructions
+                    'instructions': instructions,
+                    'user_id': self.current_user_id  # Include user_id for lifecycle tracking
                 }
                 
                 # Make the API request
@@ -414,6 +452,10 @@ class OrchestratorAgent():
         try:
             input_text = input_data.get('message', '')
             agent_id = input_data.get('agent_id', '')
+            user_id = input_data.get('user_id', '')
+            
+            # Store user_id for use in tools
+            self.current_user_id = user_id
             
             agent_config = await default_storage.get_agent_config(agent_id)
             
@@ -504,10 +546,27 @@ class OrchestratorAgent():
                 
             print("invoke_params: ", invoke_params)
             
+            # Create context-aware agent with appropriate prompt
+            context_prompt = self.prompt_template.partial(system_prompt=get_system_prompt(agent_config))
+            context_agent = create_openai_tools_agent(
+                self.llm,
+                self.tools,
+                context_prompt
+            )
+            
+            # Create temporary agent executor with context-aware agent
+            context_executor = AgentExecutor(
+                agent=context_agent,
+                tools=self.tools,
+                verbose=True,
+                max_iterations=25,
+                return_intermediate_steps=True
+            )
+            
             # Execute the agent with the enhanced context
             try:
                 # Try the new API approach (return_intermediate_steps set at initialization)
-                result = await self.agent_executor.ainvoke(invoke_params)
+                result = await context_executor.ainvoke(invoke_params)
                 
                 # Extract response and intermediate steps from the result
                 response = result.get('output', '')
@@ -515,7 +574,7 @@ class OrchestratorAgent():
             except TypeError as e:
                 logger.warning(f"Using fallback for LangChain compatibility: {str(e)}")
                 # Fallback: execute without expecting intermediate steps
-                response = await self.agent_executor.ainvoke(invoke_params)
+                response = await context_executor.ainvoke(invoke_params)
                 steps = []
             
             # Modify the response if it contains raw tool output

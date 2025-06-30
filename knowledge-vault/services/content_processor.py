@@ -1,31 +1,55 @@
 import re
 import string
+from openai import OpenAI
+import json
 from typing import Dict, List, Tuple, Any
 from bs4 import BeautifulSoup
-from app.utils.logging_config import get_logger, log_with_data
+from utils.logging_config import get_logger, log_with_data
+from alchemist_shared.config.base_settings import BaseSettings
+from services.agent_relevance_service import AgentRelevanceService
 
 class ContentProcessor:
     def __init__(self):
         self.logger = get_logger("ContentProcessor")
         self.logger.info("Initializing Content Processor")
         
-        # Quality thresholds
+        # Initialize OpenAI for AI-powered content cleaning
+        self.settings = BaseSettings()
+        openai_config = self.settings.get_openai_config()
+        api_key = openai_config.get("api_key")
+        self.openai_available = bool(api_key)
+        
+        if self.openai_available:
+            self.openai_client = OpenAI(api_key=api_key)
+        else:
+            self.openai_client = None
+        
+        # Initialize Agent Relevance Service
+        self.relevance_service = AgentRelevanceService()
+        
+        if self.openai_available:
+            self.logger.info("OpenAI initialized for AI-powered content cleaning and relevance assessment")
+        else:
+            self.logger.warning("OpenAI not available, falling back to rule-based cleaning")
+        
+        # Quality thresholds (used as fallback for rule-based cleaning)
         self.min_paragraph_length = 20
         self.min_sentence_length = 10
         self.max_repetition_ratio = 0.3
         self.min_word_count = 5
         
-    def process_content(self, text: str, content_type: str = None, filename: str = None) -> Dict[str, Any]:
+    def process_content(self, text: str, content_type: str = None, filename: str = None, agent_id: str = None) -> Dict[str, Any]:
         """
-        Main content processing pipeline that cleans and enhances text
+        Main content processing pipeline that cleans and enhances text with agent-specific relevance assessment
         
         Args:
             text: Raw extracted text
             content_type: MIME type of original file
             filename: Original filename
+            agent_id: ID of the agent for relevance assessment
             
         Returns:
-            Dictionary with processed content and metadata
+            Dictionary with processed content, metadata, and relevance assessment
         """
         log_with_data(self.logger, "INFO", "Starting content processing", {
             "content_length": len(text),
@@ -37,19 +61,60 @@ class ContentProcessor:
         original_text = text
         original_length = len(text)
         
-        # Step 1: Basic text cleaning
+        # Step 1: Basic text cleaning (minimal preprocessing)
         cleaned_text = self._basic_text_cleaning(text)
         
-        # Step 2: Remove structural artifacts
-        cleaned_text = self._remove_structural_artifacts(cleaned_text, content_type)
+        # Step 1.5: Check if content already has perfect quality - skip cleaning if so
+        original_quality = self._calculate_quality_score(cleaned_text)
         
-        # Step 3: Content deduplication
-        cleaned_text = self._remove_duplicate_content(cleaned_text)
+        if original_quality >= 100.0:
+            self.logger.info(f"Content already has perfect quality ({original_quality}%), skipping cleaning")
+            quality_filtered_text = cleaned_text
+            quality_stats = {
+                "ai_cleaning_used": False,
+                "cleaning_skipped": True,
+                "reason": "perfect_quality",
+                "removed_sentences": 0,
+                "quality_issues": []
+            }
+        else:
+            # Step 2: AI-powered intelligent cleaning (if available)
+            if self.openai_available:
+                ai_cleaned_text = self._ai_powered_content_cleaning(cleaned_text, content_type)
+                
+                # Use AI cleaned version as the final result
+                quality_filtered_text = ai_cleaned_text
+                quality_stats = {
+                    "ai_cleaning_used": True,
+                    "cleaning_skipped": False,
+                    "removed_sentences": 0,
+                    "quality_issues": ["ai_cleaned"]
+                }
+            else:
+                # Fallback to rule-based cleaning (much less aggressive)
+                # Step 2: Remove structural artifacts
+                cleaned_text = self._remove_structural_artifacts(cleaned_text, content_type)
+                
+                # Step 3: Content deduplication
+                cleaned_text = self._remove_duplicate_content(cleaned_text)
+                
+                # Step 4: Light quality filtering (less aggressive than before)
+                quality_filtered_text, quality_stats = self._light_quality_filtering(cleaned_text)
+                quality_stats["cleaning_skipped"] = False
         
-        # Step 4: Quality filtering
-        quality_filtered_text, quality_stats = self._filter_low_quality_content(cleaned_text)
+        # Step 5: Agent-specific relevance assessment
+        relevance_assessment = None
+        if agent_id and self.openai_available:
+            try:
+                relevance_assessment = self.relevance_service.assess_content_relevance(
+                    quality_filtered_text, agent_id, content_type, filename
+                )
+                self.logger.info(f"Content relevance assessed for agent {agent_id}: {relevance_assessment.get('relevance_score', 'N/A')}/100")
+            except Exception as e:
+                self.logger.error(f"Relevance assessment failed for agent {agent_id}: {e}")
+                relevance_assessment = {"error": str(e), "relevance_score": 50}
         
-        # Step 5: Extract metadata
+        # Step 6: Extract metadata
         metadata = self._extract_content_metadata(quality_filtered_text, filename)
         
         # Calculate processing statistics
@@ -64,9 +129,21 @@ class ContentProcessor:
             "quality_score": self._calculate_quality_score(quality_filtered_text),
             "word_count": len(quality_filtered_text.split()),
             "paragraph_count": len([p for p in quality_filtered_text.split('\n\n') if p.strip()]),
+            "relevance_assessment": relevance_assessment,
+            "agent_id": agent_id,
             **quality_stats
         }
         
+        # Calculate agent-specific composite score if relevance assessment is available
+        agent_specific_quality = None
+        if relevance_assessment and relevance_assessment.get("relevance_score") is not None:
+            agent_specific_quality = self._calculate_agent_specific_quality(
+                processing_stats["quality_score"], 
+                relevance_assessment["relevance_score"]
+            )
+            processing_stats["agent_specific_quality"] = agent_specific_quality
+            self.logger.info(f"Agent-specific quality: {agent_specific_quality}% (content: {processing_stats['quality_score']}%, relevance: {relevance_assessment['relevance_score']}%)")
+
         log_with_data(self.logger, "INFO", "Content processing completed", processing_stats)
         
         return {
@@ -74,7 +151,10 @@ class ContentProcessor:
             "processed_text": quality_filtered_text,
             "metadata": metadata,
             "processing_stats": processing_stats,
-            "quality_score": processing_stats["quality_score"]
+            "quality_score": processing_stats["quality_score"],
+            "relevance_assessment": relevance_assessment,
+            "relevance_score": relevance_assessment.get("relevance_score", None) if relevance_assessment else None,
+            "agent_specific_quality": agent_specific_quality
         }
     
     def _basic_text_cleaning(self, text: str) -> str:
@@ -394,3 +474,139 @@ class ContentProcessor:
             score -= 15
         
         return max(0.0, min(100.0, score))
+    
+    def _calculate_agent_specific_quality(self, content_quality: float, relevance_score: float) -> float:
+        """
+        Calculate agent-specific quality score with heavy preference for relevance over content quality.
+        
+        This provides a meaningful score for agents by prioritizing:
+        - Relevance (85% weight): How useful the content is for the agent's specific domain/purpose
+        - Content Quality (15% weight): How well-written and structured the content is
+        
+        Additional penalties are applied for low relevance since agents need domain-specific content:
+        - Relevance < 30%: Heavy penalty (up to 30 points reduction)
+        - Relevance 30-50%: Moderate penalty (up to 10 points reduction)
+        
+        Args:
+            content_quality: Content structure/writing quality (0-100)
+            relevance_score: Agent-specific relevance score (0-100)
+            
+        Returns:
+            Combined agent-specific quality score (0-100) heavily weighted toward relevance
+        """
+        # Prioritize relevance heavily over content quality for agent usefulness
+        # 85% relevance, 15% content quality
+        relevance_weight = 0.85
+        content_weight = 0.15
+        
+        # Calculate weighted score
+        agent_specific_score = (relevance_score * relevance_weight) + (content_quality * content_weight)
+        
+        # Apply aggressive penalty for low relevance since relevance is paramount for agents
+        if relevance_score < 30:
+            # Apply additional penalty - reduce score by up to 30 points for very low relevance
+            penalty = (30 - relevance_score) * 1.5  # 1.5 point penalty per relevance point below 30
+            agent_specific_score = max(0, agent_specific_score - penalty)
+        elif relevance_score < 50:
+            # Apply moderate penalty for mediocre relevance
+            penalty = (50 - relevance_score) * 0.5  # 0.5 point penalty per relevance point below 50
+            agent_specific_score = max(0, agent_specific_score - penalty)
+        
+        return round(max(0.0, min(100.0, agent_specific_score)), 2)
+    
+    def _ai_powered_content_cleaning(self, text: str, content_type: str = None) -> str:
+        """Use OpenAI to intelligently clean content while preserving meaning and quality."""
+        if not self.openai_available or not text.strip():
+            return text
+        
+        try:
+            # Design intelligent prompt for content cleaning
+            prompt = f"""You are an expert content editor helping to clean and improve text for a knowledge base. Your goal is to make the content cleaner and more readable while preserving ALL important information and meaning.
+
+INSTRUCTIONS:
+1. Remove only truly redundant or meaningless content (random characters, excessive whitespace, obvious OCR errors)
+2. Fix obvious spelling and grammar mistakes
+3. Improve paragraph structure and readability
+4. Preserve ALL meaningful information, technical details, lists, and data
+5. Keep the original tone and style
+6. Do NOT remove content just because it's technical, has numbers, or contains specialized terminology
+7. Do NOT shorten the content unnecessarily - preserve comprehensive information
+
+Content Type: {content_type or 'general'}
+
+Original Text:
+{text[:4000]}  
+
+Please return only the cleaned version of the text, maintaining the same level of detail and information richness. Focus on clarity while preserving completeness:"""
+
+            response = self.openai_client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{
+                    "role": "user", 
+                    "content": prompt
+                }],
+                max_tokens=4000,
+                temperature=0.1  # Low temperature for consistent, conservative editing
+            )
+            
+            cleaned_text = response.choices[0].message.content.strip()
+            
+            # Validate that cleaning didn't remove too much content
+            original_words = len(text.split())
+            cleaned_words = len(cleaned_text.split())
+            
+            # If AI removed more than 40% of content, fall back to original
+            if cleaned_words < (original_words * 0.6):
+                self.logger.warning(f"AI cleaning removed too much content ({cleaned_words}/{original_words} words), using original")
+                return text
+            
+            self.logger.info(f"AI content cleaning: {original_words} → {cleaned_words} words ({((cleaned_words/original_words)*100):.1f}% retained)")
+            return cleaned_text
+            
+        except Exception as e:
+            self.logger.error(f"AI content cleaning failed: {e}, falling back to original text")
+            return text
+    
+    def _light_quality_filtering(self, text: str) -> Tuple[str, Dict[str, Any]]:
+        """Light quality filtering as fallback when AI cleaning is not available."""
+        if not text:
+            return "", {"removed_sentences": 0, "quality_issues": []}
+        
+        sentences = self._split_into_sentences(text)
+        quality_sentences = []
+        removed_count = 0
+        quality_issues = []
+        
+        for sentence in sentences:
+            sentence = sentence.strip()
+            
+            # Skip empty sentences
+            if not sentence:
+                continue
+            
+            # Only remove obviously broken content (much more lenient)
+            if len(sentence) < 3:  # Very short fragments
+                removed_count += 1
+                quality_issues.append("too_short")
+                continue
+            
+            # Only remove if entirely non-text (very lenient)
+            text_chars = sum(1 for c in sentence if c.isalpha())
+            if len(sentence) > 10 and text_chars / len(sentence) < 0.1:  # Less than 10% text
+                removed_count += 1
+                quality_issues.append("mostly_non_text")
+                continue
+            
+            quality_sentences.append(sentence)
+        
+        # Reconstruct text with quality sentences
+        quality_text = ' '.join(quality_sentences)
+        
+        # Group paragraphs back together
+        quality_text = re.sub(r'([.!?])\s+([A-Z])', r'\1\n\n\2', quality_text)
+        
+        return quality_text, {
+            "removed_sentences": removed_count,
+            "quality_issues": quality_issues,
+            "ai_cleaning_used": False
+        }

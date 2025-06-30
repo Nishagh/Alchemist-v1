@@ -23,6 +23,7 @@ from alchemist_shared.events import init_story_event_publisher, get_story_event_
 from alchemist_shared.config.environment import get_project_id
 from alchemist_shared.config.base_settings import BaseSettings
 from alchemist_shared.services import init_ea3_orchestrator, get_ea3_orchestrator
+from alchemist_shared.services.agent_lifecycle_service import init_agent_lifecycle_service
 
 # Set up logging
 logging.basicConfig(
@@ -61,6 +62,13 @@ async def lifespan(app: FastAPI):
             logger.info("Story event publisher initialized")
         except Exception as e:
             logger.warning(f"Story event publisher initialization failed: {e}")
+    
+    # Initialize agent lifecycle service for event tracking
+    try:
+        init_agent_lifecycle_service()
+        logger.info("Agent lifecycle service initialized")
+    except Exception as e:
+        logger.warning(f"Agent lifecycle service initialization failed: {e}")
     
     # Initialize EA3 orchestrator for prompt optimization tracking
     if project_id:
@@ -133,6 +141,10 @@ async def health_check():
     ea3_orchestrator = get_ea3_orchestrator()
     story_publisher = get_story_event_publisher()
     
+    # Get lifecycle service status
+    from alchemist_shared.services.agent_lifecycle_service import get_agent_lifecycle_service
+    lifecycle_service = get_agent_lifecycle_service()
+    
     return {
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
@@ -143,6 +155,7 @@ async def health_check():
         "components": {
             "ea3_orchestrator": ea3_orchestrator is not None,
             "story_event_publisher": story_publisher is not None,
+            "lifecycle_service": lifecycle_service is not None,
             "openai": {
                 "status": "configured" if openai_key_available else "not_configured",
                 "source": "alchemist-shared"

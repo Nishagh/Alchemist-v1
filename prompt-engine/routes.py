@@ -20,6 +20,12 @@ from alchemist_shared.events import (
     StoryEventPriority
 )
 
+# Import lifecycle service for agent lifecycle event tracking
+from alchemist_shared.services.agent_lifecycle_service import (
+    get_agent_lifecycle_service,
+    init_agent_lifecycle_service
+)
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/prompt-engineer", tags=["prompt-engineer"])
@@ -28,6 +34,7 @@ class PromptInstructionsRequest(BaseModel):
     """Model for prompt instructions requests."""
     agent_id: str
     instructions: str
+    user_id: Optional[str] = None  # For lifecycle event tracking
 
 class PromptResponse(BaseModel):
     """Model for prompt responses."""
@@ -94,6 +101,17 @@ async def create_or_update_prompt(
             request.instructions
         )
         
+        # Record lifecycle event (use default user_id if not provided)
+        user_id = request.user_id or "system"
+        background_tasks.add_task(
+            record_prompt_lifecycle_event,
+            request.agent_id,
+            user_id,
+            created,
+            request.instructions,
+            result.get("updated_prompt", "")
+        )
+        
         return response
         
     except Exception as e:
@@ -147,3 +165,35 @@ async def publish_prompt_update_event(
             logger.debug(f"Published prompt {action} story event for agent {agent_id}")
     except Exception as e:
         logger.error(f"Failed to publish prompt update story event: {e}")
+
+
+async def record_prompt_lifecycle_event(
+    agent_id: str,
+    user_id: str,
+    created: bool,
+    instructions: str,
+    prompt: str
+):
+    """Background task to record prompt update in agent lifecycle events."""
+    try:
+        lifecycle_service = get_agent_lifecycle_service()
+        if lifecycle_service:
+            action = "created" if created else "updated"
+            metadata = {
+                "instructions": instructions,
+                "prompt_length": len(prompt),
+                "action": action,
+                "prompt_preview": prompt[:200] + "..." if len(prompt) > 200 else prompt,
+                "service": "prompt-engine"
+            }
+            
+            await lifecycle_service.record_prompt_updated(
+                agent_id=agent_id,
+                user_id=user_id,
+                metadata=metadata
+            )
+            logger.info(f"Recorded prompt {action} lifecycle event for agent {agent_id}")
+        else:
+            logger.warning("Lifecycle service not available - skipping lifecycle event recording")
+    except Exception as e:
+        logger.error(f"Failed to record prompt lifecycle event for agent {agent_id}: {e}")

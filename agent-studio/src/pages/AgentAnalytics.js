@@ -73,8 +73,9 @@ ChartJS.register(
   ArcElement
 );
 
-const AgentAnalytics = () => {
-  const { agentId } = useParams();
+const AgentAnalytics = ({ agentId: propAgentId, embedded = false }) => {
+  const { agentId: routeAgentId } = useParams();
+  const agentId = propAgentId || routeAgentId;
   const navigate = useNavigate();
   const { currentUser } = useAuth();
   
@@ -279,31 +280,37 @@ const AgentAnalytics = () => {
     );
   }
 
-  return (
-    <Container maxWidth="xl" sx={{ py: 4 }}>
+  const content = (
+    <>
       {/* Header */}
-      <Box sx={{ mb: 4 }}>
+      <Box sx={{ mb: embedded ? 2 : 4 }}>
         <Box display="flex" alignItems="center" justifyContent="between" mb={2}>
           <Box display="flex" alignItems="center" gap={2}>
-            <IconButton 
-              onClick={() => navigate('/agents')}
-              sx={{
-                color: '#6366f1',
-                '&:hover': {
-                  bgcolor: '#6366f115',
-                  color: '#4f46e5'
-                }
-              }}
-            >
-              <ArrowBackIcon />
-            </IconButton>
+            {!embedded && (
+              <IconButton 
+                onClick={() => navigate('/agents')}
+                sx={{
+                  color: '#6366f1',
+                  '&:hover': {
+                    bgcolor: '#6366f115',
+                    color: '#4f46e5'
+                  }
+                }}
+              >
+                <ArrowBackIcon />
+              </IconButton>
+            )}
             <Box>
-              <Typography variant="h4" fontWeight="bold">
-                Agent Analytics: {agent?.name}
-              </Typography>
-              <Typography variant="body1" color="text.secondary">
-                Billing and usage analytics for your deployed agent
-              </Typography>
+              {!embedded && (
+                <>
+                  <Typography variant="h4" fontWeight="bold">
+                    Agent Analytics: {agent?.name}
+                  </Typography>
+                  <Typography variant="body1" color="text.secondary">
+                    Billing and usage analytics for your deployed agent
+                  </Typography>
+                </>
+              )}
             </Box>
           </Box>
           
@@ -695,8 +702,10 @@ const AgentAnalytics = () => {
           Edit Agent
         </Button>
       </Box>
-    </Container>
+    </>
   );
+
+  return embedded ? content : <Container maxWidth="xl" sx={{ py: 4 }}>{content}</Container>;
 };
 
 export default AgentAnalytics;

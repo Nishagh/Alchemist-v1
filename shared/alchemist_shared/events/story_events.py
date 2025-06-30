@@ -44,6 +44,21 @@ class StoryEventType(Enum):
     ERROR_ENCOUNTERED = "error_encountered"
     TOOL_USAGE = "tool_usage"
     SYSTEM_UPDATE = "system_update"
+    
+    # Life Journey Events
+    AGENT_CREATED = "agent_created"
+    AGENT_NAMED = "agent_named"
+    AGENT_DESCRIPTION_UPDATED = "agent_description_updated"
+    KNOWLEDGE_BASE_FILE_ADDED = "knowledge_base_file_added"
+    KNOWLEDGE_BASE_FILE_REMOVED = "knowledge_base_file_removed"
+    EXTERNAL_API_ATTACHED = "external_api_attached"
+    EXTERNAL_API_DETACHED = "external_api_detached"
+    AGENT_DEPLOYED = "agent_deployed"
+    AGENT_UNDEPLOYED = "agent_undeployed"
+    AGENT_STATUS_CHANGED = "agent_status_changed"
+    CONFIGURATION_UPDATED = "configuration_updated"
+    TRAINING_STARTED = "training_started"
+    TRAINING_COMPLETED = "training_completed"
 
 class StoryEventPriority(Enum):
     """Priority levels for story event processing"""

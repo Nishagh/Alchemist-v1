@@ -11,6 +11,8 @@ import asyncio
 from typing import Dict, Any, Optional
 from uuid import uuid4
 from datetime import datetime
+import io
+import base64
 
 from fastapi import FastAPI, Request, HTTPException, Depends, File, UploadFile, Form, Header, Query
 from fastapi.responses import JSONResponse, RedirectResponse, Response
@@ -20,10 +22,11 @@ from firebase_admin.firestore import SERVER_TIMESTAMP
 import yaml
 import requests
 import json
+from openai import OpenAI
 
 # Import Alchemist components
 from alchemist.services.storage_service import default_storage
-from alchemist.services.openai_init import initialize_openai
+from alchemist.services.openai_init import initialize_openai, get_openai_service
 from alchemist.agents.orchestrator_agent import OrchestratorAgent
 from alchemist.config.firebase_config import get_storage_bucket
 from firebase_admin import auth
@@ -91,6 +94,12 @@ class AgentActionRequest(BaseModel):
     action: str
     payload: Dict[str, Any] = {}
     userId: Optional[str] = None
+
+class ProfilePictureRequest(BaseModel):
+    agent_id: str
+    style: Optional[str] = "professional"
+    size: Optional[str] = "1024x1024"
+    quality: Optional[str] = "standard"
 
 # User authentication dependency
 async def get_current_user(
@@ -511,6 +520,7 @@ def register_routes(app: FastAPI):
             input_data = {
                 'message': message,
                 'agent_id': agent_id,
+                'user_id': user_id,
             }
             
             result = await orchestrator.process(input_data)
@@ -1334,6 +1344,237 @@ def register_routes(app: FastAPI):
                 
         except Exception as e:
             logger.error(f"Error in get_agent_umwelt for agent {agent_id}: {str(e)}")
+            return JSONResponse(
+                status_code=500,
+                content={"status": "error", "message": f"Error: {str(e)}"}
+            )
+
+    @app.post("/api/agents/generate-profile-picture")
+    async def generate_agent_profile_picture(request: ProfilePictureRequest, user_id: str = Depends(get_current_user)):
+        """Generate a profile picture for an agent using DALL-E."""
+        try:
+            agent_id = request.agent_id
+            
+            # Check if agent exists and user owns it
+            agent_config = await default_storage.get_agent_config(agent_id)
+            if not agent_config:
+                return JSONResponse(
+                    status_code=404,
+                    content={"status": "error", "message": f"Agent {agent_id} not found"}
+                )
+            
+            if agent_config.get("userId") != user_id:
+                return JSONResponse(
+                    status_code=403,
+                    content={"status": "error", "message": "You do not have permission to generate a profile picture for this agent"}
+                )
+            
+            # Create descriptive prompt based on agent data
+            agent_name = agent_config.get("name", "AI Agent")
+            agent_role = agent_config.get("instructions", "").strip() or agent_config.get("description", "").strip() or "AI Assistant"
+            agent_personality = agent_config.get("personality", "").strip()
+            
+            # Clean up role text - take first sentence or first 50 chars
+            if len(agent_role) > 50:
+                agent_role = agent_role.split('.')[0][:50] + "..."
+            
+            # Build AI agent-focused prompts based on style
+            style_prompts = {
+                "professional": "Digital AI avatar with robotic features, professional appearance, metallic elements, glowing blue eyes",
+                "friendly": "Friendly AI robot character with rounded features, soft lighting, approachable synthetic appearance",
+                "creative": "Artistic AI being with digital patterns, creative synthetic design, abstract technological elements",
+                "futuristic": "Advanced AI entity with futuristic design, holographic elements, sleek robotic appearance",
+                "minimalist": "Clean AI avatar with simple geometric design, minimal synthetic features, abstract digital form"
+            }
+            
+            base_prompt = style_prompts.get(request.style, style_prompts["professional"])
+            
+            logger.info(f"Generating profile picture for agent {agent_id} with prompt: {base_prompt}")
+            
+            # Generate image using OpenAI DALL-E
+            try:
+                # Get the OpenAI service and API key
+                openai_service = get_openai_service()
+                api_key = openai_service.api_key
+                
+                if not api_key:
+                    logger.error("No OpenAI API key available")
+                    return JSONResponse(
+                        status_code=500,
+                        content={
+                            "status": "error", 
+                            "message": "OpenAI API key not configured"
+                        }
+                    )
+                
+                # Create OpenAI client with the API key
+                client = OpenAI(api_key=api_key)
+                
+                # Use the AI agent-focused prompt
+                simple_prompt = base_prompt
+                logger.info(f"Making DALL-E API call with simplified prompt: {simple_prompt}")
+                logger.info(f"Parameters: model=gpt-image-1")
+                
+                # Use gpt-image-1 model as in your example
+                response = client.images.generate(
+                    model="gpt-image-1",
+                    prompt=simple_prompt
+                )
+                
+                # Extract base64 image data
+                image_base64 = response.data[0].b64_json
+                image_bytes = base64.b64decode(image_base64)
+                
+                # Upload to Firebase Storage
+                bucket = get_storage_bucket()
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                temp_path = f"temp_generated_images/{agent_id}/temp_{timestamp}.png"
+                blob = bucket.blob(temp_path)
+                blob.upload_from_string(image_bytes, content_type='image/png')
+                blob.make_public()
+                
+                image_url = blob.public_url
+                revised_prompt = simple_prompt
+                
+                logger.info(f"Successfully generated profile picture for agent {agent_id}")
+                
+                return {
+                    "status": "success",
+                    "agent_id": agent_id,
+                    "image_url": image_url,
+                    "prompt_used": base_prompt,
+                    "revised_prompt": revised_prompt,
+                    "style": request.style,
+                    "size": request.size,
+                    "quality": request.quality
+                }
+                
+            except Exception as e:
+                error_msg = str(e).lower()
+                if "400" in error_msg or "bad request" in error_msg:
+                    logger.error(f"OpenAI BadRequest error for agent {agent_id}: {str(e)}")
+                    return JSONResponse(
+                        status_code=400,
+                        content={
+                            "status": "error", 
+                            "message": f"Invalid request to image generation service. Please try a different style."
+                        }
+                    )
+                elif "429" in error_msg or "rate limit" in error_msg:
+                    logger.error(f"OpenAI RateLimit error for agent {agent_id}: {str(e)}")
+                    return JSONResponse(
+                        status_code=429,
+                        content={
+                            "status": "error", 
+                            "message": "Rate limit exceeded. Please try again in a few minutes."
+                        }
+                    )
+                else:
+                    logger.error(f"OpenAI DALL-E error for agent {agent_id}: {str(e)}")
+                    logger.error(f"Error type: {type(e)}")
+                    return JSONResponse(
+                        status_code=500,
+                        content={
+                            "status": "error", 
+                            "message": f"Failed to generate image: {str(e)}"
+                        }
+                    )
+                
+        except Exception as e:
+            logger.error(f"Error generating profile picture for agent {agent_id}: {str(e)}")
+            return JSONResponse(
+                status_code=500,
+                content={"status": "error", "message": f"Error: {str(e)}"}
+            )
+
+    @app.post("/api/agents/save-profile-picture")
+    async def save_agent_profile_picture(
+        request: Request, 
+        user_id: str = Depends(get_current_user)
+    ):
+        """Save a generated profile picture to Firebase Storage and update agent config."""
+        try:
+            body = await request.json()
+            agent_id = body.get("agent_id")
+            image_url = body.get("image_url")
+            
+            if not agent_id or not image_url:
+                return JSONResponse(
+                    status_code=400,
+                    content={"status": "error", "message": "agent_id and image_url are required"}
+                )
+            
+            # Check if agent exists and user owns it
+            agent_config = await default_storage.get_agent_config(agent_id)
+            if not agent_config:
+                return JSONResponse(
+                    status_code=404,
+                    content={"status": "error", "message": f"Agent {agent_id} not found"}
+                )
+            
+            if agent_config.get("userId") != user_id:
+                return JSONResponse(
+                    status_code=403,
+                    content={"status": "error", "message": "You do not have permission to save a profile picture for this agent"}
+                )
+            
+            # Download the image from the URL
+            try:
+                image_response = requests.get(image_url, timeout=30)
+                image_response.raise_for_status()
+                image_data = image_response.content
+                
+                # Generate storage path
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                storage_path = f"agent_profile_pictures/{agent_id}/profile_{timestamp}.png"
+                
+                # Upload to Firebase Storage
+                bucket = get_storage_bucket()
+                blob = bucket.blob(storage_path)
+                blob.upload_from_string(image_data, content_type='image/png')
+                blob.make_public()
+                
+                profile_picture_url = blob.public_url
+                
+                # Update agent config with profile picture URL
+                profile_picture_data = {
+                    "profile_picture_url": profile_picture_url,
+                    "profile_picture_storage_path": storage_path,
+                    "profile_picture_updated_at": firestore.SERVER_TIMESTAMP,
+                    "profile_picture_style": body.get("style", "professional")
+                }
+                
+                update_success = await default_storage.update_agent_config(agent_id, profile_picture_data)
+                
+                if not update_success:
+                    # If Firestore update fails, try to delete the uploaded file
+                    try:
+                        blob.delete()
+                    except:
+                        pass
+                    return JSONResponse(
+                        status_code=500,
+                        content={"status": "error", "message": "Failed to update agent configuration"}
+                    )
+                
+                logger.info(f"Successfully saved profile picture for agent {agent_id}")
+                
+                return {
+                    "status": "success",
+                    "agent_id": agent_id,
+                    "profile_picture_url": profile_picture_url,
+                    "storage_path": storage_path
+                }
+                
+            except requests.RequestException as e:
+                logger.error(f"Error downloading image for agent {agent_id}: {str(e)}")
+                return JSONResponse(
+                    status_code=500,
+                    content={"status": "error", "message": f"Failed to download image: {str(e)}"}
+                )
+                
+        except Exception as e:
+            logger.error(f"Error saving profile picture for agent {agent_id}: {str(e)}")
             return JSONResponse(
                 status_code=500,
                 content={"status": "error", "message": f"Error: {str(e)}"}

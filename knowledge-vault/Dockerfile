@@ -27,4 +27,4 @@ ENV PYTHONUNBUFFERED=1
 # Note: GOOGLE_APPLICATION_CREDENTIALS not set - using default service account in Cloud Run
 
 # Run the application with Gunicorn
-CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 app.main:app -k uvicorn.workers.UvicornWorker
+CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 main:app -k uvicorn.workers.UvicornWorker

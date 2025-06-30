@@ -18,7 +18,8 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass
 import json
-import openai
+from openai import AsyncOpenAI
+import os
 
 # Import story event system
 try:
@@ -77,7 +78,15 @@ class EA3Orchestrator:
         self.graph_service: Optional[SpannerGraphService] = None
         self.coherence_threshold = 0.85
         self.revision_trigger_threshold = 0.7
-        self.narrative_model = "gpt-4-1106-preview"  # GPT-4.1 for enhanced narrative intelligence
+        self.narrative_model = "gpt-4.1"  # GPT-4.1 for enhanced narrative intelligence
+        
+        # Initialize OpenAI client
+        api_key = os.getenv("OPENAI_API_KEY")
+        if api_key:
+            self.openai_client = AsyncOpenAI(api_key=api_key)
+        else:
+            self.openai_client = None
+            logger.warning("No OpenAI API key found - narrative analysis features will be limited")
         
         # Story event system integration
         self.story_subscriber: Optional[StoryEventSubscriber] = None
@@ -498,21 +507,41 @@ Respond in JSON format:
 """
             
             # Call GPT-4.1 for enhanced analysis
-            response = await openai.ChatCompletion.acreate(
+            if not self.openai_client:
+                logger.error("OpenAI client not initialized - cannot perform narrative analysis")
+                return {
+                    "error": "OpenAI client not available",
+                    "fallback_analysis": True,
+                    "coherence_score": 0.5,
+                    "analysis_timestamp": datetime.utcnow().isoformat()
+                }
+                
+            response = await self.openai_client.responses.create(
                 model=self.narrative_model,
-                messages=[
+                input=[
                     {
-                        "role": "system", 
+                        "role": "developer",
                         "content": "You are a specialized AI narrative intelligence system. Analyze agent life-stories for coherence, consistency, and optimal epistemic autonomy. Always respond with valid JSON."
                     },
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.3,
-                max_tokens=2000
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ]
             )
             
-            # Parse the enhanced analysis
-            analysis = json.loads(response.choices[0].message.content)
+            # Parse the enhanced analysis with error handling
+            response_content = response.output_text
+            if not response_content or response_content.strip() == "":
+                logger.error(f"Empty response from GPT-4.1 for agent {agent_id}")
+                raise ValueError("Empty response from OpenAI API")
+            
+            try:
+                analysis = json.loads(response_content)
+            except json.JSONDecodeError as json_error:
+                logger.error(f"Invalid JSON response from GPT-4.1 for agent {agent_id}: {json_error}")
+                logger.debug(f"Raw response content: {response_content[:500]}...")
+                raise ValueError(f"Invalid JSON response: {json_error}")
             
             # Add metadata
             analysis["analysis_timestamp"] = datetime.utcnow().isoformat()
@@ -662,21 +691,36 @@ Respond in JSON format:
 }}
 """
             
-            response = await openai.ChatCompletion.acreate(
+            if not self.openai_client:
+                logger.error("OpenAI client not initialized - cannot process conversation")
+                return []
+                
+            response = await self.openai_client.responses.create(
                 model=self.narrative_model,
-                messages=[
+                input=[
                     {
-                        "role": "system",
+                        "role": "developer",
                         "content": "You are a specialized narrative intelligence system for AI agent life-stories. Extract only narratively significant events that contribute to the agent's coherent life-story. Always respond with valid JSON."
                     },
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.4,
-                max_tokens=1500
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ]
             )
             
-            result = json.loads(response.choices[0].message.content)
-            events = result.get("events", [])
+            response_content = response.output_text
+            if not response_content or response_content.strip() == "":
+                logger.error(f"Empty response from GPT-4.1 story extraction for agent {context.agent_id}")
+                return []
+            
+            try:
+                result = json.loads(response_content)
+                events = result.get("events", [])
+            except json.JSONDecodeError as json_error:
+                logger.error(f"Invalid JSON response from GPT-4.1 story extraction for agent {context.agent_id}: {json_error}")
+                logger.debug(f"Raw response content: {response_content[:500]}...")
+                return []
             
             # Convert event types to SpannerStoryEventType enums
             type_mapping = {
