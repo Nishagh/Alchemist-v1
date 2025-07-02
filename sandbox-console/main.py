@@ -17,19 +17,24 @@ from fastapi.responses import Response
 from agent import UserAgent
 from dotenv import load_dotenv
 from routes import register_routes
-from config.firebase_config import get_firestore_client, get_storage_bucket
+from alchemist_shared.config.base_settings import BaseSettings
 
-# Import metrics functionality
+# Import middleware functionality
 try:
     from alchemist_shared.middleware import (
         setup_metrics_middleware,
         start_background_metrics_collection,
         stop_background_metrics_collection
     )
+    from alchemist_shared.middleware.api_logging_middleware import setup_api_logging_middleware
     METRICS_AVAILABLE = True
 except ImportError:
-    logging.warning("Metrics middleware not available - install alchemist-shared package")
+    logging.warning("Middleware not available - install alchemist-shared package")
     METRICS_AVAILABLE = False
+    
+    def setup_api_logging_middleware(app, service_name):
+        """Fallback function when middleware is not available."""
+        pass
 
 load_dotenv()
 
@@ -73,42 +78,54 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
-# Configure standard CORS middleware
+# Configure CORS to allow agent-studio access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins
+    allow_origins=[
+        "http://localhost:3000",  # Local agent-studio
+        "https://agent-studio-851487020021.us-central1.run.app",  # Deployed agent-studio
+        "*"  # Allow all origins as fallback
+    ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"],
-    allow_headers=["*"],
+    allow_headers=[
+        "Content-Type",
+        "Authorization", 
+        "X-Requested-With",
+        "Accept",
+        "Origin",
+        "User-Agent",
+        "DNT",
+        "Cache-Control",
+        "X-Mx-ReqToken",
+        "Keep-Alive",
+        "X-Requested-With",
+        "If-Modified-Since"
+    ],
     expose_headers=["*"],
-    max_age=1200,  # Cache preflight requests for 20 minutes
+    max_age=86400,  # Cache preflight requests for 24 hours
 )
 
-# Add middleware directly to ensure headers are properly set for all responses
+# Simplified CORS headers middleware for additional coverage
 @app.middleware("http")
 async def add_cors_headers(request, call_next):
+    # Handle preflight requests
+    if request.method == "OPTIONS":
+        response = Response(content="", status_code=200)
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+        response.headers["Access-Control-Max-Age"] = "86400"
+        return response
+    
     response = await call_next(request)
     
-    # Add CORS headers to every response
+    # Add CORS headers to all responses
     response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Credentials"] = "true"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD"
     response.headers["Access-Control-Allow-Headers"] = "*"
-    response.headers["Access-Control-Max-Age"] = "1200"
+    response.headers["Access-Control-Max-Age"] = "86400"
     
-    return response
-
-# Handle OPTIONS requests explicitly
-@app.options("/{path:path}")
-async def options_route(request: Request, path: str):
-    response = Response(
-        content="",
-        media_type="text/plain",
-    )
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, HEAD"
-    response.headers["Access-Control-Allow-Headers"] = "*"
-    response.headers["Access-Control-Max-Age"] = "1200"
     return response
 
 # Add metrics middleware if available
@@ -118,6 +135,16 @@ if METRICS_AVAILABLE:
 
 register_routes(app)
 
+# Add CORS test endpoint
+@app.get("/cors-test")
+async def cors_test():
+    """Simple endpoint to test CORS functionality"""
+    return {
+        "message": "CORS test successful",
+        "timestamp": datetime.datetime.now().isoformat(),
+        "service": "alchemist-sandbox-console"
+    }
+
 # Add a simple status endpoint at the root
 @app.get("/")
 async def root():
@@ -126,17 +153,16 @@ async def root():
         "status": "success",
         "message": "Alchemist API is running on Google Cloud Run",
         "version": "1.0.0",
-        "firebase_project": os.environ.get("FIREBASE_PROJECT_ID", "Not set")
+        "firebase_project": BaseSettings().get_project_id() or "Not set"
     }
 
 @app.get('/health')
 async def health_check():
     try:
-        # Check OpenAI API key configuration
-        openai_configured = bool(os.getenv('OPENAI_API_KEY'))
-        
-        # Check Firebase project configuration
-        firebase_configured = bool(os.getenv('FIREBASE_PROJECT_ID'))
+        # Use alchemist-shared settings for configuration checks
+        settings = BaseSettings()
+        openai_configured = bool(settings.openai_api_key)
+        firebase_configured = bool(settings.firebase_project_id)
         
         # Check if tools are properly configured
         tools_configured = os.path.exists('knowledge_base_tool.py') and os.path.exists('mcp_tool.py')

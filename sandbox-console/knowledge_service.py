@@ -8,6 +8,7 @@ import os
 import logging
 import requests
 from typing import Dict, Any, List, Optional
+from alchemist_shared.config.base_settings import BaseSettings
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -26,7 +27,9 @@ class KnowledgeBaseClient:
         Args:
             base_url: URL of the Knowledge Base Service. If None, uses environment variable.
         """
-        self.base_url = base_url or os.environ.get("KNOWLEDGE_BASE_URL", "http://localhost:8000")
+        settings = BaseSettings()
+        # Use specified knowledge vault URL as default
+        self.base_url = base_url or settings.get_service_url("knowledge-vault") or os.environ.get("KNOWLEDGE_BASE_URL", "https://alchemist-knowledge-vault-851487020021.us-central1.run.app")
         logger.info(f"Initialized Knowledge Base client with URL: {self.base_url}")
     
     def search(self, agent_id: str, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
@@ -55,7 +58,7 @@ class KnowledgeBaseClient:
             response = requests.post(
                 f"{self.base_url}/api/search-knowledge-base/storage",
                 json=search_data,
-                timeout=10  # Add timeout to prevent hanging indefinitely
+                timeout=30  # Increased timeout for knowledge base search
             )
             logging.info(f"🔍 Knowledge Base Service: Received response with status code: {response.status_code}")
         except requests.exceptions.Timeout:
@@ -87,7 +90,7 @@ class KnowledgeBaseClient:
         try:
             response = requests.get(
                 f"{self.base_url}/api/knowledge-base/{agent_id}/files",
-                timeout=10
+                timeout=30
             )
             result = response.json()
             logging.info(f"🔍 Knowledge Base Service: Received response: {result}")
@@ -104,7 +107,7 @@ class KnowledgeBaseClient:
         try:
             response = requests.get(
                 f"{self.base_url}/api/knowledge-base/{agent_id}/vector-files",
-                timeout=10
+                timeout=30
             )
             result = response.json()
             logging.info(f"🔍 Knowledge Base Service: Received response: {result}")

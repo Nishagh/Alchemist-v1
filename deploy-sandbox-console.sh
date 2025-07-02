@@ -5,7 +5,7 @@
 set -e
 
 # Configuration
-PROJECT_ID="alchemist-e69bb"
+PROJECT_ID=$(gcloud config get-value project)
 SERVICE_NAME="alchemist-sandbox-console"
 REGION="us-central1"
 IMAGE_NAME="gcr.io/${PROJECT_ID}/${SERVICE_NAME}"
@@ -37,11 +37,6 @@ if ! command -v gcloud &> /dev/null; then
     exit 1
 fi
 
-if ! command -v docker &> /dev/null; then
-    echo -e "${RED}❌ Docker not found. Please install it first.${NC}"
-    exit 1
-fi
-
 # Check if .env file exists and load it
 if [ -f ".env" ]; then
   echo -e "${BLUE}📋 Loading environment variables from .env file...${NC}"
@@ -49,9 +44,19 @@ if [ -f ".env" ]; then
 elif [ -f "sandbox-console/.env" ]; then
   echo -e "${BLUE}📋 Loading environment variables from sandbox-console/.env file...${NC}"
   source sandbox-console/.env
+elif [ -f "shared/.env.spanner" ]; then
+  echo -e "${BLUE}📋 Loading eA³ Spanner environment variables...${NC}"
+  source shared/.env.spanner
 else
   echo -e "${YELLOW}⚠️  Warning: .env file not found. Will use default values.${NC}"
 fi
+
+# For Cloud Run deployment, we use the default service account
+echo -e "${GREEN}✅ Using Cloud Run default service account for production deployment${NC}"
+echo -e "${BLUE}ℹ️  Ensure your Cloud Run service account has proper permissions:${NC}"
+echo -e "${BLUE}   - Cloud Spanner Database User${NC}"
+echo -e "${BLUE}   - Pub/Sub Publisher/Subscriber${NC}"
+echo -e "${BLUE}   - Firebase Admin${NC}"
 
 # Authenticate with Google Cloud
 echo -e "${YELLOW}🔐 Checking authentication...${NC}"
@@ -64,9 +69,6 @@ fi
 echo -e "${YELLOW}📁 Setting Google Cloud project to: ${PROJECT_ID}${NC}"
 gcloud config set project ${PROJECT_ID}
 
-# Configure Docker for gcr.io
-echo -e "${YELLOW}🐳 Configuring Docker for Google Container Registry...${NC}"
-gcloud auth configure-docker
 
 # Create temporary Dockerfile for deployment
 echo -e "${YELLOW}📦 Creating deployment Dockerfile...${NC}"
@@ -90,9 +92,10 @@ RUN groupadd -r appuser && useradd -r -g appuser appuser
 
 WORKDIR /app
 
-# Copy requirements and install dependencies
+# Copy requirements and install dependencies (excluding alchemist-shared)
 COPY sandbox-console/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt gunicorn
+RUN grep -v "alchemist-shared" requirements.txt > requirements_filtered.txt && \\
+    pip install --no-cache-dir -r requirements_filtered.txt gunicorn
 
 # Copy and install shared libraries
 COPY shared /app/shared
@@ -204,13 +207,14 @@ Thumbs.db
 **/*.sqlite3
 **/*.db
 
-# Exclude credentials and config files that shouldn't be in container
+# Exclude all credentials - Cloud Run uses default service account
 firebase-credentials.json
 **/firebase-credentials.json
 gcloud-credentials.json
 **/gcloud-credentials.json
 service-account-key.json
 **/service-account-key.json
+shared/spanner-key.json
 **/secrets/
 **/credentials/
 **/keys/
@@ -239,22 +243,75 @@ fi
 # Use deployment .dockerignore
 cp .dockerignore.sandbox-console .dockerignore
 
-# Build the Docker image from root directory
-echo -e "${YELLOW}🔨 Building Docker image...${NC}"
-docker build --platform linux/amd64 -f Dockerfile.sandbox-console -t ${IMAGE_NAME}:latest .
-
-# Tag with timestamp
+# Build and submit to Cloud Build
+echo -e "${YELLOW}🔨 Building and pushing image with Cloud Build...${NC}"
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-docker tag ${IMAGE_NAME}:latest ${IMAGE_NAME}:${TIMESTAMP}
 
-# Push to Google Container Registry
-echo -e "${YELLOW}📤 Pushing image to Google Container Registry...${NC}"
-docker push ${IMAGE_NAME}:latest
-docker push ${IMAGE_NAME}:${TIMESTAMP}
+# Create a temporary cloudbuild.yaml for custom Dockerfile
+cat > cloudbuild-temp.yaml << EOF
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['build', '-f', 'Dockerfile.sandbox-console', '-t', '${IMAGE_NAME}:latest', '.']
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['push', '${IMAGE_NAME}:latest']
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['tag', '${IMAGE_NAME}:latest', '${IMAGE_NAME}:${TIMESTAMP}']
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['push', '${IMAGE_NAME}:${TIMESTAMP}']
+EOF
+
+if ! gcloud builds submit --config=cloudbuild-temp.yaml .; then
+    echo -e "${RED}❌ Build failed! Check the build logs above.${NC}"
+    exit 1
+fi
 
 # Deploy to Cloud Run
 echo -e "${YELLOW}🚀 Deploying to Cloud Run...${NC}"
-gcloud run deploy ${SERVICE_NAME} \
+
+# Build environment variables from sandbox-console/.env
+ENV_VARS=""
+if [ -f "sandbox-console/.env" ]; then
+    echo -e "${BLUE}📋 Loading environment variables from sandbox-console/.env...${NC}"
+    while IFS= read -r line || [ -n "$line" ]; do
+        # Skip comments and empty lines
+        if [[ "$line" =~ ^[[:space:]]*# ]] || [[ -z "${line// }" ]]; then
+            continue
+        fi
+        # Skip lines that don't contain =
+        if [[ ! "$line" =~ = ]]; then
+            continue
+        fi
+        # Extract key=value pairs
+        key=$(echo "$line" | cut -d'=' -f1 | xargs)
+        value=$(echo "$line" | cut -d'=' -f2- | xargs)
+        # Skip empty values, commented out variables, and GOOGLE_APPLICATION_CREDENTIALS for Cloud Run
+        if [[ -n "$value" && ! "$line" =~ ^[[:space:]]*# && "$key" != "GOOGLE_APPLICATION_CREDENTIALS" ]]; then
+            if [ -n "$ENV_VARS" ]; then
+                ENV_VARS="$ENV_VARS,$key=$value"
+            else
+                ENV_VARS="$key=$value"
+            fi
+        fi
+    done < "sandbox-console/.env"
+fi
+
+# Override with production-specific values
+ENV_VARS="$ENV_VARS,ENVIRONMENT=production,PROJECT_ID=${PROJECT_ID}"
+
+# Cloud Run will use default service account - no GOOGLE_APPLICATION_CREDENTIALS needed
+
+# Add eA³ configuration
+ENV_VARS="$ENV_VARS,SPANNER_INSTANCE_ID=alchemist-graph,SPANNER_DATABASE_ID=agent-stories"
+
+# Validate environment variables
+if [ -z "$ENV_VARS" ] || [ "$ENV_VARS" = "," ]; then
+    echo -e "${YELLOW}⚠️  No environment variables found. Using minimal configuration${NC}"
+    ENV_VARS="ENVIRONMENT=production,PROJECT_ID=${PROJECT_ID},SPANNER_INSTANCE_ID=alchemist-graph,SPANNER_DATABASE_ID=agent-stories"
+fi
+
+echo -e "${BLUE}🔧 Setting environment variables: $ENV_VARS${NC}"
+
+if ! gcloud run deploy ${SERVICE_NAME} \
     --image ${IMAGE_NAME}:latest \
     --platform managed \
     --region ${REGION} \
@@ -264,15 +321,17 @@ gcloud run deploy ${SERVICE_NAME} \
     --timeout 3600 \
     --concurrency 80 \
     --max-instances 5 \
-    --set-env-vars "SANDBOX_ENVIRONMENT=production" \
-    --set-env-vars "FIREBASE_PROJECT_ID=${PROJECT_ID}"
+    --set-env-vars "$ENV_VARS"; then
+    echo -e "${RED}❌ Deployment failed! Check the deployment logs above.${NC}"
+    exit 1
+fi
 
 # Get the service URL
 SERVICE_URL=$(gcloud run services describe ${SERVICE_NAME} --region=${REGION} --format="value(status.url)")
 
 # Cleanup temporary files
 echo -e "${YELLOW}🧹 Cleaning up temporary files...${NC}"
-rm -f Dockerfile.sandbox-console .dockerignore.sandbox-console
+rm -f Dockerfile.sandbox-console .dockerignore.sandbox-console cloudbuild-temp.yaml
 
 # Restore original .dockerignore if it existed
 if [ -f ".dockerignore.backup" ]; then
@@ -300,5 +359,16 @@ fi
 
 echo ""
 echo -e "${GREEN}🎉 Sandbox Console deployment complete!${NC}"
-echo -e "${BLUE}💡 To view logs: gcloud logs read --project=${PROJECT_ID} --filter=\"resource.labels.service_name=${SERVICE_NAME}\"${NC}"
-echo -e "${BLUE}💡 To redeploy: ./deploy-sandbox-console.sh${NC}"
+echo ""
+echo -e "${BLUE}📋 Cloud Run Configuration:${NC}"
+echo -e "${GREEN}✅ Using Cloud Run default service account${NC}"
+echo -e "${BLUE}ℹ️  Ensure your service account has these roles:${NC}"
+echo -e "${BLUE}   - Cloud Spanner Database User${NC}"
+echo -e "${BLUE}   - Pub/Sub Publisher/Subscriber${NC}"
+echo -e "${BLUE}   - Firebase Admin${NC}"
+echo ""
+echo -e "${BLUE}💡 Useful commands:${NC}"
+echo -e "${BLUE}💡 View logs: gcloud logs read --project=${PROJECT_ID} --filter=\"resource.labels.service_name=${SERVICE_NAME}\" --limit=50${NC}"
+echo -e "${BLUE}💡 Stream logs: gcloud logs tail --project=${PROJECT_ID} --filter=\"resource.labels.service_name=${SERVICE_NAME}\"${NC}"
+echo -e "${BLUE}💡 Redeploy: ./deploy-sandbox-console.sh${NC}"
+echo -e "${BLUE}💡 Scale down: gcloud run services update ${SERVICE_NAME} --region=${REGION} --max-instances=0${NC}"

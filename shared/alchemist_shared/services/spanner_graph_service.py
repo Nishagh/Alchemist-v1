@@ -140,7 +140,7 @@ class SpannerGraphService:
                 IsCoreBeliefBool BOOL DEFAULT (FALSE),
                 AlignmentScore FLOAT64 DEFAULT (1.0),
                 CreatedAt TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP()),
-                UpdatedAt TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP())
+                UpdatedAt TIMESTAMP NOT NULL DEFAULT (PENDING_COMMIT_TIMESTAMP()) OPTIONS (allow_commit_timestamp=true)
             ) PRIMARY KEY (AgentId, EventId)
             """,
             
@@ -213,9 +213,9 @@ class SpannerGraphService:
                 OverallCoherence FLOAT64 DEFAULT (1.0),
                 TotalEvents INT64 DEFAULT (0),
                 TotalRevisions INT64 DEFAULT (0),
-                LastRevisionAt TIMESTAMP,
-                StoryStartedAt TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP()),
-                LastUpdatedAt TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP())
+                LastRevisionAt TIMESTAMP OPTIONS (allow_commit_timestamp=true),
+                StoryStartedAt TIMESTAMP NOT NULL DEFAULT (PENDING_COMMIT_TIMESTAMP()) OPTIONS (allow_commit_timestamp=true),
+                LastUpdatedAt TIMESTAMP NOT NULL DEFAULT (PENDING_COMMIT_TIMESTAMP()) OPTIONS (allow_commit_timestamp=true)
             ) PRIMARY KEY (AgentId)
             """
         ]
@@ -292,11 +292,11 @@ class SpannerGraphService:
         )
         
         def create_story_txn(transaction):
-            # Insert agent story metadata
+            # Insert agent story metadata (StoryStartedAt and LastUpdatedAt will be set automatically)
             transaction.insert(
                 table="AgentStories",
-                columns=("AgentId", "StoryTitle", "CoreObjective", "TotalEvents", "StoryStartedAt"),
-                values=[(agent_id, story_title, core_objective, 2, spanner.COMMIT_TIMESTAMP)]
+                columns=("AgentId", "StoryTitle", "CoreObjective", "TotalEvents"),
+                values=[(agent_id, story_title, core_objective, 2)]
             )
             
             # Insert birth event
@@ -413,11 +413,11 @@ class SpannerGraphService:
                     values=[(str(uuid.uuid4()), agent_id, parent_id, event.id, "causal", 0.8, confidence)]
                 )
             
-            # Update agent story metadata
+            # Update agent story metadata (LastUpdatedAt will be automatically set due to allow_commit_timestamp)
             transaction.execute_update(
-                "UPDATE AgentStories SET TotalEvents = TotalEvents + 1, LastUpdatedAt = @timestamp WHERE AgentId = @agent_id",
-                params={"agent_id": agent_id, "timestamp": spanner.COMMIT_TIMESTAMP},
-                param_types={"agent_id": param_types.STRING, "timestamp": param_types.TIMESTAMP}
+                "UPDATE AgentStories SET TotalEvents = TotalEvents + 1 WHERE AgentId = @agent_id",
+                params={"agent_id": agent_id},
+                param_types={"agent_id": param_types.STRING}
             )
         
         self.database.run_in_transaction(add_event_txn)
@@ -578,11 +578,11 @@ class SpannerGraphService:
                                 revision.confidence_change, revision.coherence_improvement)]
                     )
                 
-                # Update agent story metadata
+                # Update agent story metadata (LastRevisionAt will be automatically set due to allow_commit_timestamp)
                 transaction.execute_update(
-                    "UPDATE AgentStories SET TotalRevisions = TotalRevisions + @revision_count, LastRevisionAt = @timestamp WHERE AgentId = @agent_id",
-                    params={"agent_id": agent_id, "revision_count": len(revisions_made), "timestamp": spanner.COMMIT_TIMESTAMP},
-                    param_types={"agent_id": param_types.STRING, "revision_count": param_types.INT64, "timestamp": param_types.TIMESTAMP}
+                    "UPDATE AgentStories SET TotalRevisions = TotalRevisions + @revision_count WHERE AgentId = @agent_id",
+                    params={"agent_id": agent_id, "revision_count": len(revisions_made)},
+                    param_types={"agent_id": param_types.STRING, "revision_count": param_types.INT64}
                 )
             
             self.database.run_in_transaction(record_revisions_txn)

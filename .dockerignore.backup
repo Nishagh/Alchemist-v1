@@ -98,8 +98,9 @@ shared/spanner-key.json
 shared/build/
 shared/dist/
 
-# Include what we need for tool-forge
-!tool-forge/
+# Include what we need for mcp deployment job
+!tool-forge/deploy_job.py
+!tool-forge/requirements.txt
 !shared/
 
 # Exclude deployment configs at root

@@ -42,7 +42,7 @@ import {
 } from '@mui/icons-material';
 import { formatDeploymentStatus, convertTimestamp } from '../../../utils/agentEditorHelpers';
 import StatusBadge from '../../shared/StatusBadge';
-import { subscribeToDeploymentStatus } from '../../../services/mcpServer/mcpServerService';
+import { subscribeToDeploymentStatus, getMcpServerInfo } from '../../../services/mcpServer/mcpServerService';
 
 const McpDeploymentStatus = ({ 
   agentId,
@@ -58,6 +58,7 @@ const McpDeploymentStatus = ({
   const [expandedAccordion, setExpandedAccordion] = useState(false);
   const [realtimeDeploymentStatus, setRealtimeDeploymentStatus] = useState(null);
   const [deploymentError, setDeploymentError] = useState(null);
+  const [mcpServerInfo, setMcpServerInfo] = useState(null);
 
   // Set up real-time listener for deployment status
   useEffect(() => {
@@ -99,6 +100,42 @@ const McpDeploymentStatus = ({
       }
     };
   }, [currentDeploymentId]);
+
+  // Fetch MCP server info when deployment is successful
+  useEffect(() => {
+    const fetchMcpServerInfo = async () => {
+      console.log('McpDeploymentStatus: Checking fetch conditions:', {
+        realtimeDeploymentStatus: realtimeDeploymentStatus?.status,
+        deploymentStatus: deploymentStatus?.status,
+        integrationSummary: integrationSummary?.status,
+        agentId,
+        shouldFetch: (realtimeDeploymentStatus?.status === 'deployed' || 
+                     deploymentStatus?.status === 'deployed' ||
+                     integrationSummary?.status === 'active') && agentId
+      });
+      
+      if ((realtimeDeploymentStatus?.status === 'deployed' || 
+           deploymentStatus?.status === 'deployed' ||
+           integrationSummary?.status === 'active') && agentId) {
+        try {
+          console.log('McpDeploymentStatus: Deployment successful, fetching MCP server info from Firestore for agentId:', agentId);
+          const serverInfo = await getMcpServerInfo(agentId);
+          console.log('McpDeploymentStatus: Firestore response:', serverInfo);
+          if (serverInfo) {
+            setMcpServerInfo(serverInfo);
+            console.log('McpDeploymentStatus: MCP server info set in state:', serverInfo);
+          } else {
+            console.log('McpDeploymentStatus: No server info found in Firestore for agentId:', agentId);
+          }
+        } catch (error) {
+          console.error('McpDeploymentStatus: Failed to fetch MCP server info:', error);
+          setDeploymentError('Failed to fetch server information from Firestore');
+        }
+      }
+    };
+
+    fetchMcpServerInfo();
+  }, [realtimeDeploymentStatus?.status, deploymentStatus?.status, integrationSummary?.status, agentId]);
 
   const getDeploymentSteps = () => {
     // Use real-time status if available, otherwise fall back to prop
@@ -385,14 +422,29 @@ const McpDeploymentStatus = ({
                     }
                   >
                     <Typography variant="body2">
-                      {integrationSummary?.status ? (
-                        <>MCP Server Status: {integrationSummary.status === 'active' ? 'Active' : integrationSummary.status}</>
-                      ) : (
-                        <>Deployment Status: {formatDeploymentStatus(deploymentStatus?.status || 'pending')}</>
-                      )}
-                      {(integrationSummary?.service_url || deploymentStatus?.url) && (
-                        <> • Server URL: {integrationSummary?.service_url || deploymentStatus?.url}</>
-                      )}
+                      {(() => {
+                        console.log('McpDeploymentStatus: Rendering status with data:', {
+                          mcpServerInfo: !!mcpServerInfo,
+                          mcpServerInfoUrl: mcpServerInfo?.service_url,
+                          integrationSummary: !!integrationSummary,
+                          integrationSummaryUrl: integrationSummary?.service_url,
+                          deploymentStatusUrl: deploymentStatus?.url
+                        });
+                        
+                        if (mcpServerInfo) {
+                          return <>MCP Server Status: Active (Firestore)</>;
+                        } else if (integrationSummary?.status) {
+                          return <>MCP Server Status: {integrationSummary.status === 'active' ? 'Active' : integrationSummary.status}</>;
+                        } else {
+                          return <>Deployment Status: {formatDeploymentStatus(deploymentStatus?.status || 'pending')}</>;
+                        }
+                      })()}
+                      {(() => {
+                        // Prioritize Firestore URL over integrationSummary URL
+                        const serverUrl = mcpServerInfo?.service_url || mcpServerInfo?.url || 
+                                         integrationSummary?.service_url || deploymentStatus?.url;
+                        return serverUrl ? <> • Server URL: {serverUrl}</> : null;
+                      })()}
                     </Typography>
                   </Alert>
                 </Box>
@@ -402,8 +454,8 @@ const McpDeploymentStatus = ({
             {/* Deployment Progress */}
             {deploymentStatus && renderDeploymentProgress()}
 
-            {/* Integration Summary */}
-            {integrationSummary && (
+            {/* Integration Summary - Use mcpServerInfo from Firestore if available, otherwise use integrationSummary */}
+            {(integrationSummary || mcpServerInfo) && (
               <>
                 {/* Server Info */}
                 <Accordion 
@@ -421,52 +473,75 @@ const McpDeploymentStatus = ({
                   </AccordionSummary>
                   <AccordionDetails>
                     <List dense>
-                      {integrationSummary.server_info?.name && (
-                        <ListItem>
-                          <ListItemText
-                            primary="Server Name"
-                            secondary={integrationSummary.server_info.name}
-                          />
-                        </ListItem>
-                      )}
-                      {integrationSummary.server_info?.description && (
-                        <ListItem>
-                          <ListItemText
-                            primary="Description"
-                            secondary={integrationSummary.server_info.description}
-                          />
-                        </ListItem>
-                      )}
-                      {integrationSummary.server_info?.version && (
-                        <ListItem>
-                          <ListItemText
-                            primary="Version"
-                            secondary={integrationSummary.server_info.version}
-                          />
-                        </ListItem>
-                      )}
-                      {integrationSummary.deployment_id && (
-                        <ListItem>
-                          <ListItemText
-                            primary="Deployment ID"
-                            secondary={integrationSummary.deployment_id}
-                          />
-                        </ListItem>
-                      )}
-                      {integrationSummary.deployed_at && (
-                        <ListItem>
-                          <ListItemText
-                            primary="Deployed At"
-                            secondary={convertTimestamp(integrationSummary.deployed_at)?.toLocaleString() || 'Unknown'}
-                          />
-                        </ListItem>
-                      )}
+                      {/* Use mcpServerInfo from Firestore if available, otherwise use integrationSummary */}
+                      {(() => {
+                        const serverInfo = mcpServerInfo || integrationSummary;
+                        return (
+                          <>
+                            {(serverInfo.server_info?.name || serverInfo.name) && (
+                              <ListItem>
+                                <ListItemText
+                                  primary="Server Name"
+                                  secondary={serverInfo.server_info?.name || serverInfo.name}
+                                />
+                              </ListItem>
+                            )}
+                            {(serverInfo.server_info?.description || serverInfo.description) && (
+                              <ListItem>
+                                <ListItemText
+                                  primary="Description"
+                                  secondary={serverInfo.server_info?.description || serverInfo.description}
+                                />
+                              </ListItem>
+                            )}
+                            {(serverInfo.server_info?.version || serverInfo.version) && (
+                              <ListItem>
+                                <ListItemText
+                                  primary="Version"
+                                  secondary={serverInfo.server_info?.version || serverInfo.version}
+                                />
+                              </ListItem>
+                            )}
+                            {serverInfo.deployment_id && (
+                              <ListItem>
+                                <ListItemText
+                                  primary="Deployment ID"
+                                  secondary={serverInfo.deployment_id}
+                                />
+                              </ListItem>
+                            )}
+                            {(serverInfo.deployed_at || serverInfo.created_at) && (
+                              <ListItem>
+                                <ListItemText
+                                  primary="Deployed At"
+                                  secondary={convertTimestamp(serverInfo.deployed_at || serverInfo.created_at)?.toLocaleString() || 'Unknown'}
+                                />
+                              </ListItem>
+                            )}
+                            {mcpServerInfo && (
+                              <ListItem>
+                                <ListItemText
+                                  primary="Data Source"
+                                  secondary="Firestore (mcp_server collection)"
+                                />
+                              </ListItem>
+                            )}
+                          </>
+                        );
+                      })()}
                     </List>
                   </AccordionDetails>
                 </Accordion>
 
                 {/* Endpoints */}
-                {integrationSummary.endpoints && Object.keys(integrationSummary.endpoints).length > 0 && (
+                {(() => {
+                  const serverInfo = mcpServerInfo || integrationSummary;
+                  const endpoints = serverInfo?.endpoints || {};
+                  // Handle both object and object-of-objects structure
+                  const endpointsList = typeof endpoints === 'object' && endpoints !== null ? 
+                    Object.keys(endpoints).filter(key => endpoints[key] && typeof endpoints[key] === 'string' || typeof endpoints[key] === 'object') : [];
+                  return endpointsList.length > 0;
+                })() && (
                   <Accordion 
                     expanded={expandedAccordion === 'endpoints'} 
                     onChange={handleAccordionChange('endpoints')}
@@ -476,43 +551,80 @@ const McpDeploymentStatus = ({
                       <Box sx={{ display: 'flex', alignItems: 'center' }}>
                         <LinkIcon sx={{ mr: 1, fontSize: 20 }} />
                         <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
-                          Available Endpoints ({Object.keys(integrationSummary.endpoints).length})
+                          Available Endpoints ({(() => {
+                            const serverInfo = mcpServerInfo || integrationSummary;
+                            const endpoints = serverInfo?.endpoints || {};
+                            const endpointsList = typeof endpoints === 'object' && endpoints !== null ? 
+                              Object.keys(endpoints).filter(key => endpoints[key] && (typeof endpoints[key] === 'string' || typeof endpoints[key] === 'object')) : [];
+                            return endpointsList.length;
+                          })()})
                         </Typography>
                       </Box>
                     </AccordionSummary>
                     <AccordionDetails>
                       <List dense>
-                        {Object.entries(integrationSummary.endpoints).map(([key, url]) => (
-                          <ListItem key={key}>
-                            <ListItemText
-                              primary={key.charAt(0).toUpperCase() + key.slice(1)}
-                              secondary={
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                  <Typography variant="caption" sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
-                                    {url}
-                                  </Typography>
-                                  <Button
-                                    size="small"
-                                    variant="outlined"
-                                    startIcon={<OpenInNewIcon />}
-                                    href={url}
-                                    target="_blank"
-                                    sx={{ minWidth: 'auto', px: 1 }}
-                                  >
-                                    Test
-                                  </Button>
-                                </Box>
-                              }
-                            />
-                          </ListItem>
-                        ))}
+                        {(() => {
+                          const serverInfo = mcpServerInfo || integrationSummary;
+                          const endpoints = serverInfo?.endpoints || {};
+                          
+                          if (typeof endpoints !== 'object' || endpoints === null) {
+                            return [];
+                          }
+                          
+                          return Object.entries(endpoints).map(([key, endpointData]) => {
+                            // Handle both string URLs and object structures from Firestore
+                            let displayUrl = '';
+                            let displayName = key.charAt(0).toUpperCase() + key.slice(1);
+                            
+                            if (typeof endpointData === 'string') {
+                              displayUrl = endpointData;
+                            } else if (typeof endpointData === 'object' && endpointData !== null) {
+                              displayUrl = endpointData.path || endpointData.url || JSON.stringify(endpointData);
+                              displayName = endpointData.method ? `${endpointData.method} ${key}` : displayName;
+                            }
+                            
+                            return (
+                              <ListItem key={key}>
+                                <ListItemText
+                                  primary={displayName}
+                                  secondary={
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                      <Typography variant="caption" sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                                        {displayUrl}
+                                      </Typography>
+                                      {typeof endpointData === 'string' && endpointData.startsWith('http') && (
+                                        <Button
+                                          size="small"
+                                          variant="outlined"
+                                          startIcon={<OpenInNewIcon />}
+                                          href={displayUrl}
+                                          target="_blank"
+                                          sx={{ minWidth: 'auto', px: 1 }}
+                                        >
+                                          Test
+                                        </Button>
+                                      )}
+                                    </Box>
+                                  }
+                                />
+                              </ListItem>
+                            );
+                          });
+                        })()}
                       </List>
                     </AccordionDetails>
                   </Accordion>
                 )}
 
                 {/* MCP Tools */}
-                {integrationSummary.tools && integrationSummary.tools.length > 0 && (
+                {(() => {
+                  const serverInfo = mcpServerInfo || integrationSummary;
+                  const tools = serverInfo?.tools || [];
+                  // Handle both array and object structures from Firestore
+                  const toolsList = Array.isArray(tools) ? tools : 
+                    (typeof tools === 'object' && tools !== null ? Object.values(tools) : []);
+                  return toolsList.length > 0;
+                })() && (
                   <Accordion 
                     expanded={expandedAccordion === 'tools'} 
                     onChange={handleAccordionChange('tools')}
@@ -522,52 +634,86 @@ const McpDeploymentStatus = ({
                       <Box sx={{ display: 'flex', alignItems: 'center' }}>
                         <FunctionsIcon sx={{ mr: 1, fontSize: 20 }} />
                         <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
-                          MCP Tools ({integrationSummary.tools.length})
+                          MCP Tools ({(() => {
+                            const serverInfo = mcpServerInfo || integrationSummary;
+                            const tools = serverInfo?.tools || [];
+                            const toolsList = Array.isArray(tools) ? tools : 
+                              (typeof tools === 'object' && tools !== null ? Object.values(tools) : []);
+                            return toolsList.length;
+                          })()})
                         </Typography>
                       </Box>
                     </AccordionSummary>
                     <AccordionDetails>
                       <List dense>
-                        {integrationSummary.tools.map((tool, index) => (
-                          <ListItem key={index} sx={{ flexDirection: 'column', alignItems: 'flex-start' }}>
-                            <ListItemText
-                              primary={
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                  <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
-                                    {tool.name}
-                                  </Typography>
-                                  <Chip 
-                                    label={tool.method}
-                                    size="small"
-                                    color={tool.method === 'GET' ? 'primary' : tool.method === 'POST' ? 'secondary' : 'default'}
-                                    sx={{ fontSize: '0.7rem', height: 20 }}
-                                  />
-                                  {tool.args_count > 0 && (
-                                    <Chip 
-                                      label={`${tool.args_count} args`}
-                                      size="small"
-                                      variant="outlined"
-                                      sx={{ fontSize: '0.7rem', height: 20 }}
-                                    />
-                                  )}
-                                </Box>
-                              }
-                              secondary={
-                                <Box sx={{ mt: 0.5 }}>
-                                  <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-                                    {tool.description}
-                                  </Typography>
-                                  <Typography variant="caption" sx={{ fontFamily: 'monospace', wordBreak: 'break-all', color: 'text.secondary' }}>
-                                    {tool.url_template}
-                                  </Typography>
-                                </Box>
-                              }
-                            />
-                            {index < integrationSummary.tools.length - 1 && (
-                              <Box sx={{ width: '100%', mt: 1, mb: 1, borderBottom: '1px solid', borderColor: 'divider' }} />
-                            )}
-                          </ListItem>
-                        ))}
+                        {(() => {
+                          const serverInfo = mcpServerInfo || integrationSummary;
+                          const tools = serverInfo?.tools || [];
+                          const toolsList = Array.isArray(tools) ? tools : 
+                            (typeof tools === 'object' && tools !== null ? Object.values(tools) : []);
+                          
+                          return toolsList.map((tool, index) => {
+                            // Handle different tool data structures from Firestore
+                            const toolName = tool?.name || tool?.id || `Tool ${index + 1}`;
+                            const toolDescription = tool?.description || 'No description available';
+                            const toolMethod = tool?.method || (tool?.content_type ? 'API' : 'FUNCTION');
+                            const toolPath = tool?.path || tool?.url_template || '';
+                            const argsCount = tool?.args_count || tool?.arguments?.length || 
+                              (tool?.parameters ? Object.keys(tool.parameters).length : 0);
+                            
+                            return (
+                              <ListItem key={toolName || index} sx={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+                                <ListItemText
+                                  primary={
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                      <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                                        {toolName}
+                                      </Typography>
+                                      <Chip 
+                                        label={toolMethod}
+                                        size="small"
+                                        color={toolMethod === 'GET' ? 'primary' : toolMethod === 'POST' ? 'secondary' : 'default'}
+                                        sx={{ fontSize: '0.7rem', height: 20 }}
+                                      />
+                                      {argsCount > 0 && (
+                                        <Chip 
+                                          label={`${argsCount} args`}
+                                          size="small"
+                                          variant="outlined"
+                                          sx={{ fontSize: '0.7rem', height: 20 }}
+                                        />
+                                      )}
+                                      {tool?.available === false && (
+                                        <Chip 
+                                          label="Unavailable"
+                                          size="small"
+                                          color="error"
+                                          variant="outlined"
+                                          sx={{ fontSize: '0.7rem', height: 20 }}
+                                        />
+                                      )}
+                                    </Box>
+                                  }
+                                  secondary={
+                                    <Box sx={{ mt: 0.5 }}>
+                                      <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                                        {toolDescription}
+                                      </Typography>
+                                      {toolPath && (
+                                        <Typography variant="caption" sx={{ fontFamily: 'monospace', wordBreak: 'break-all', color: 'text.secondary' }}>
+                                          {toolPath}
+                                        </Typography>
+                                      )}
+                                    </Box>
+                                  }
+                                />
+                                {index < toolsList.length - 1 && (
+                                  <Box sx={{ width: '100%', mt: 1, mb: 1, borderBottom: '1px solid', borderColor: 'divider' }} />
+                                )}
+                              </ListItem>
+                            );
+                          });
+                        })()}
                       </List>
                     </AccordionDetails>
                   </Accordion>
@@ -718,26 +864,33 @@ const McpDeploymentStatus = ({
                   >
                     Redeploy
                   </Button>
-                  {integrationSummary.service_url && (
-                    <Button
-                      variant="outlined"
-                      startIcon={<OpenInNewIcon />}
-                      href={integrationSummary.service_url}
-                      target="_blank"
-                    >
-                      Open Server
-                    </Button>
-                  )}
-                  {integrationSummary.mcp_config_url && (
-                    <Button
-                      variant="outlined"
-                      startIcon={<OpenInNewIcon />}
-                      href={integrationSummary.mcp_config_url}
-                      target="_blank"
-                    >
-                      View Config
-                    </Button>
-                  )}
+                  {(() => {
+                    // Prioritize Firestore URLs over integrationSummary URLs
+                    const serverUrl = mcpServerInfo?.service_url || mcpServerInfo?.url || integrationSummary?.service_url;
+                    return serverUrl ? (
+                      <Button
+                        variant="outlined"
+                        startIcon={<OpenInNewIcon />}
+                        href={serverUrl}
+                        target="_blank"
+                      >
+                        Open Server {mcpServerInfo ? '(Firestore)' : ''}
+                      </Button>
+                    ) : null;
+                  })()}
+                  {(() => {
+                    const configUrl = mcpServerInfo?.mcp_config_url || integrationSummary?.mcp_config_url;
+                    return configUrl ? (
+                      <Button
+                        variant="outlined"
+                        startIcon={<OpenInNewIcon />}
+                        href={configUrl}
+                        target="_blank"
+                      >
+                        View Config {mcpServerInfo ? '(Firestore)' : ''}
+                      </Button>
+                    ) : null;
+                  })()}
                   {onStop && (
                     <Button
                       variant="outlined"

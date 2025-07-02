@@ -1330,6 +1330,21 @@ async def init_ea3_orchestrator(
     """Initialize the eA³ orchestrator with story event system"""
     global _ea3_orchestrator
     
+    # Validate Spanner configuration before initialization
+    try:
+        from ..config.spanner_config import validate_spanner_config, print_configuration_help
+        
+        if not validate_spanner_config():
+            logger.error("Spanner configuration validation failed")
+            print_configuration_help()
+            raise RuntimeError("Invalid Spanner configuration - check environment variables")
+            
+    except ImportError:
+        logger.warning("Spanner configuration validator not available - proceeding with basic validation")
+        # Basic validation
+        if not project_id:
+            raise ValueError("project_id is required for eA³ orchestrator")
+    
     _ea3_orchestrator = EA3Orchestrator()
     await _ea3_orchestrator.initialize(
         project_id, 
@@ -1339,7 +1354,7 @@ async def init_ea3_orchestrator(
         enable_event_processing
     )
     
-    logger.info("eA³ Orchestrator initialized successfully with story event system")
+    logger.info("eA³ Orchestrator initialized successfully with validated Spanner configuration")
     return _ea3_orchestrator
 
 async def get_ea3_orchestrator() -> EA3Orchestrator:
@@ -1348,3 +1363,41 @@ async def get_ea3_orchestrator() -> EA3Orchestrator:
         raise RuntimeError("eA³ Orchestrator not initialized. Call init_ea3_orchestrator() first.")
     
     return _ea3_orchestrator
+
+def is_ea3_available() -> bool:
+    """
+    Check if eA³ services are available and properly configured
+    
+    This is more robust than just checking imports - it validates actual configuration
+    """
+    try:
+        from ..config.spanner_config import validate_spanner_config
+        return validate_spanner_config()
+    except ImportError:
+        # Fallback to basic environment check
+        import os
+        required_vars = ["GOOGLE_CLOUD_PROJECT"]
+        return all(os.environ.get(var) for var in required_vars)
+
+def get_ea3_availability_status() -> Dict[str, Any]:
+    """Get detailed eA³ availability status for debugging"""
+    try:
+        from ..config.spanner_config import get_spanner_config
+        config = get_spanner_config()
+        return {
+            "available": config.is_configured(),
+            "configuration": config.get_config_dict(),
+            "initialized": _ea3_orchestrator is not None
+        }
+    except ImportError:
+        import os
+        return {
+            "available": bool(os.environ.get("GOOGLE_CLOUD_PROJECT")),
+            "configuration": {
+                "project_id": os.environ.get("GOOGLE_CLOUD_PROJECT"),
+                "instance_id": os.environ.get("SPANNER_INSTANCE_ID", "alchemist-graph"),
+                "database_id": os.environ.get("SPANNER_DATABASE_ID", "agent-stories"),
+                "credentials_path": os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+            },
+            "initialized": _ea3_orchestrator is not None
+        }

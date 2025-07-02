@@ -22,8 +22,10 @@ from alchemist_shared.events import init_story_event_publisher
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Load environment variables
-load_dotenv()
+# Load environment variables from multiple sources
+load_dotenv()  # Load local .env
+load_dotenv(".env.local")  # Load local development overrides
+load_dotenv("../.env")  # Load root .env for shared config
 
 # Initialize centralized settings if available
 settings = BaseSettings()
@@ -45,16 +47,15 @@ async def lifespan(app: FastAPI):
     story_publisher = init_story_event_publisher(project_id)
     logger.info("Story event publisher initialized in knowledge vault")
     
-    # Initialize eA³ orchestrator with Spanner Graph (no event processing in knowledge vault)
-    redis_url = os.environ.get("REDIS_URL")  # Optional Redis for caching
-    await init_ea3_orchestrator(
-        project_id=project_id,
-        instance_id=os.environ.get("SPANNER_INSTANCE_ID", "alchemist-graph"),
-        database_id=os.environ.get("SPANNER_DATABASE_ID", "agent-stories"),
-        redis_url=redis_url,
-        enable_event_processing=False  # Knowledge vault publishes events but doesn't process them
-    )
-    logger.info("eA³ services initialized in knowledge vault for agent story tracking")
+    # Check if eA³ orchestrator is available (it should be initialized by other services)
+    # Knowledge vault only publishes events but doesn't initialize the orchestrator itself
+    from alchemist_shared.services import is_ea3_available, get_ea3_availability_status
+    
+    ea3_status = get_ea3_availability_status()
+    if is_ea3_available():
+        logger.info("eA³ services are available - knowledge vault will publish story events")
+    else:
+        logger.info(f"eA³ services not available ({ea3_status}) - knowledge vault will operate without story tracking")
     
     yield
     

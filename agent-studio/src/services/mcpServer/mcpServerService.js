@@ -8,7 +8,7 @@ import axios from 'axios';
 import { auth, db } from '../../utils/firebase';
 import { getAuthToken } from '../auth/authService';
 import { TOOL_FORGE_URL } from '../config/apiConfig';
-import { collection, addDoc, serverTimestamp, doc, onSnapshot } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, doc, onSnapshot, getDoc } from 'firebase/firestore';
 
 /**
  * Deploy MCP server for an agent - Creates deployment request in Firestore
@@ -387,6 +387,31 @@ export const testTool = async (agentId, toolName, testParams = {}) => {
       console.error('Response status:', error.response.status);
       console.error('Response data:', error.response.data);
     }
+    throw error;
+  }
+};
+
+/**
+ * Get MCP server information from Firestore
+ * Fetches server info, endpoints, and tools from mcp_server collection
+ */
+export const getMcpServerInfo = async (agentId) => {
+  try {
+    console.log(`Fetching MCP server info for agent ${agentId} from Firestore`);
+    
+    const serverRef = doc(db, 'mcp_servers', agentId);
+    const serverDoc = await getDoc(serverRef);
+    
+    if (serverDoc.exists()) {
+      const data = serverDoc.data();
+      console.log('MCP server info fetched:', data);
+      return { id: serverDoc.id, ...data };
+    } else {
+      console.log('No MCP server document found for agent:', agentId);
+      return null;
+    }
+  } catch (error) {
+    console.error('Error fetching MCP server info from Firestore:', error);
     throw error;
   }
 };

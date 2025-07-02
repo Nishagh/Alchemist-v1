@@ -203,6 +203,8 @@ gcloud-credentials.json
 **/gcloud-credentials.json
 service-account-key.json
 **/service-account-key.json
+spanner-key.json
+**/spanner-key.json
 **/secrets/
 **/credentials/
 **/keys/
@@ -269,6 +271,10 @@ if [ -f "knowledge-vault/.env" ]; then
         # Extract key=value pairs
         key=$(echo "$line" | cut -d'=' -f1 | xargs)
         value=$(echo "$line" | cut -d'=' -f2- | xargs)
+        # Skip credentials and local-only variables for cloud deployment
+        if [[ "$key" == "GOOGLE_APPLICATION_CREDENTIALS" ]]; then
+            continue
+        fi
         # Skip empty values and commented out variables
         if [[ -n "$value" && ! "$line" =~ ^[[:space:]]*# ]]; then
             if [ -n "$ENV_VARS" ]; then
@@ -281,7 +287,7 @@ if [ -f "knowledge-vault/.env" ]; then
 fi
 
 # Override with production-specific values
-ENV_VARS="$ENV_VARS,ENVIRONMENT=production,FIREBASE_PROJECT_ID=${PROJECT_ID}"
+ENV_VARS="$ENV_VARS,ENVIRONMENT=production,FIREBASE_PROJECT_ID=${PROJECT_ID},GOOGLE_CLOUD_PROJECT=${PROJECT_ID}"
 
 echo -e "${BLUE}🔧 Setting environment variables: $ENV_VARS${NC}"
 

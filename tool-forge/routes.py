@@ -219,6 +219,22 @@ async def handle_eventarc_event(request: Request):
                     # Trigger Cloud Run Job for this deployment
                     job_triggered = await trigger_deployment_job(deployment_id)
                     
+                    # Record MCP deployment lifecycle event
+                    try:
+                        lifecycle_service = get_agent_lifecycle_service()
+                        if lifecycle_service:
+                            await lifecycle_service.record_mcp_deployment_triggered(
+                                deployment_id=deployment_id,
+                                user_id="system",
+                                metadata={
+                                    'mcp_deployment': True,
+                                    'job_triggered': job_triggered,
+                                    'trigger_source': 'eventarc'
+                                }
+                            )
+                    except Exception as e:
+                        logger.warning(f"Failed to record MCP deployment lifecycle event: {e}")
+                    
                     if job_triggered:
                         return {"status": "job_triggered", "deployment_id": deployment_id}
                     else:

@@ -1083,20 +1083,25 @@ async def publish_interaction_story_event(agent_id: str, interaction_data: Dict[
     try:
         story_publisher = get_story_event_publisher()
         if story_publisher:
-            await story_publisher.publish_conversation_event(
+            # Create story event for interaction
+            story_event = StoryEvent(
                 agent_id=agent_id,
-                user_message=interaction_data.get('content', '')[:200],
-                agent_response="Interaction processed",
-                conversation_id=f"gnf-{agent_id}-{datetime.utcnow().timestamp()}",
+                event_type=StoryEventType.CONVERSATION,
+                content=f"Agent interaction: {interaction_data.get('content', '')[:200]}",
                 source_service="global-narrative-framework",
+                priority=StoryEventPriority.MEDIUM,
                 metadata={
                     "interaction_type": interaction_data.get('type'),
                     "participants": interaction_data.get('participants', []),
                     "impact_level": interaction_data.get('impact', 'medium'),
-                    "emotional_tone": interaction_data.get('emotional_tone', 'neutral')
+                    "emotional_tone": interaction_data.get('emotional_tone', 'neutral'),
+                    "conversation_id": f"gnf-{agent_id}-{datetime.utcnow().timestamp()}"
                 }
             )
-            logger.debug(f"Published interaction story event for agent {agent_id}")
+            await story_publisher.publish_event(story_event)
+            logger.info(f"Published interaction story event for agent {agent_id}")
+        else:
+            logger.warning("Story publisher not available for interaction event")
     except Exception as e:
         logger.error(f"Failed to publish interaction story event: {e}")
 
@@ -1130,21 +1135,27 @@ async def publish_action_story_event(agent_id: str, action_data: Dict[str, Any])
 async def enhance_interaction_with_ai(agent_id: str, interaction_data: Dict[str, Any], ai_system: NarrativeAI):
     """Background task to enhance interaction with AI analysis."""
     try:
-        tracker = get_narrative_tracker()
-        agent = await tracker.get_agent(agent_id)
-        if agent:
-            interaction_record = InteractionRecord(**{
-                'agent_id': agent_id,
-                'interaction_type': InteractionType(interaction_data['type']),
-                'content': interaction_data['content'],
-                'participants': interaction_data.get('participants', []),
-                'context': interaction_data.get('context', {}),
-                'impact_level': ImpactLevel(interaction_data.get('impact', 'medium')),
-                'emotional_tone': EmotionalTone(interaction_data.get('emotional_tone', 'neutral'))
-            })
-            
-            enhancement = await ai_system.enhance_interaction_analysis(interaction_record, agent)
-            logger.info(f"Enhanced interaction analysis for agent {agent_id}")
+        # Use global narrative tracker instance
+        global narrative_tracker
+        if narrative_tracker:
+            agent = await narrative_tracker.get_agent(agent_id)
+            if agent:
+                interaction_record = InteractionRecord(**{
+                    'agent_id': agent_id,
+                    'interaction_type': InteractionType(interaction_data['type']),
+                    'content': interaction_data['content'],
+                    'participants': interaction_data.get('participants', []),
+                    'context': interaction_data.get('context', {}),
+                    'impact_level': ImpactLevel(interaction_data.get('impact', 'medium')),
+                    'emotional_tone': EmotionalTone(interaction_data.get('emotional_tone', 'neutral'))
+                })
+                
+                enhancement = await ai_system.enhance_interaction_analysis(interaction_record, agent)
+                logger.info(f"Enhanced interaction analysis for agent {agent_id}")
+            else:
+                logger.warning(f"Agent {agent_id} not found for AI enhancement")
+        else:
+            logger.warning("Narrative tracker not available for AI enhancement")
     except Exception as e:
         logger.error(f"Failed to enhance interaction with AI: {e}")
 

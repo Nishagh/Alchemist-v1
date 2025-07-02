@@ -1,13 +1,22 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import Dict, Any, List
+from pydantic import BaseModel
 from services.firebase_service import FirebaseService
+from services.openai_service import OpenAIService
 import logging
+import numpy as np
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 firebase_service = FirebaseService()
+openai_service = OpenAIService()
+
+class SearchRequest(BaseModel):
+    agent_id: str
+    query: str
+    top_k: int = 5
 
 @router.get("/knowledge-base/{agent_id}/embeddings", tags=["embeddings"])
 async def get_agent_embeddings(agent_id: str) -> Dict[str, Any]:
@@ -154,3 +163,77 @@ async def delete_agent_embeddings(agent_id: str) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Error deleting embeddings for agent {agent_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error deleting embeddings: {str(e)}")
+
+def cosine_similarity(a, b):
+    """Calculate cosine similarity between two vectors"""
+    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+@router.post("/search-knowledge-base/storage", tags=["search"])
+async def search_knowledge_base_storage(request: SearchRequest) -> Dict[str, Any]:
+    """
+    Search the knowledge base using semantic similarity.
+    
+    This endpoint performs vector search across the agent's indexed documents
+    to find the most relevant content for the given query.
+    """
+    try:
+        logger.info(f"Searching knowledge base for agent {request.agent_id} with query: {request.query}")
+        
+        # Get query embedding
+        query_embedding = openai_service.get_embeddings([request.query])[0]
+        
+        # Get all embeddings for the agent
+        embeddings = firebase_service.get_embeddings_by_agent(request.agent_id)
+        
+        if not embeddings:
+            logger.info(f"No embeddings found for agent {request.agent_id}")
+            return {
+                "status": "success",
+                "results": [],
+                "total_results": 0,
+                "agent_id": request.agent_id,
+                "query": request.query
+            }
+        
+        # Calculate similarities
+        results = []
+        for embedding_doc in embeddings:
+            if 'embedding' not in embedding_doc or not embedding_doc['embedding']:
+                continue
+                
+            # Calculate cosine similarity
+            doc_embedding = np.array(embedding_doc['embedding'])
+            similarity = cosine_similarity(query_embedding, doc_embedding)
+            
+            # Create result object
+            result = {
+                "content": embedding_doc.get('content', ''),
+                "filename": embedding_doc.get('filename', ''),
+                "file_id": embedding_doc.get('file_id', ''),
+                "chunk_index": embedding_doc.get('chunk_index', 0),
+                "page_number": embedding_doc.get('page_number', 1),
+                "similarity_score": float(similarity),
+                "metadata": embedding_doc.get('chunk_metadata', {})
+            }
+            results.append(result)
+        
+        # Sort by similarity score (descending)
+        results.sort(key=lambda x: x['similarity_score'], reverse=True)
+        
+        # Return top_k results
+        top_results = results[:request.top_k]
+        
+        logger.info(f"Found {len(results)} total results, returning top {len(top_results)}")
+        
+        return {
+            "status": "success",
+            "results": top_results,
+            "total_results": len(results),
+            "returned_results": len(top_results),
+            "agent_id": request.agent_id,
+            "query": request.query
+        }
+        
+    except Exception as e:
+        logger.error(f"Error searching knowledge base for agent {request.agent_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error searching knowledge base: {str(e)}")

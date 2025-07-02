@@ -16,9 +16,12 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.tools import BaseTool, tool, Tool
 from langchain_core.messages import AIMessage, HumanMessage
 
-from services.openai_init import get_openai_service, initialize_openai
+from alchemist_shared.database.firebase_client import FirebaseClient
+from alchemist_shared.config.base_settings import BaseSettings
+from alchemist_shared.constants.collections import Collections
+from alchemist_shared.models.agent_models import Agent
+from alchemist_shared.models.base_models import TimestampedModel
 from services.openai_service import default_openai_service
-from services.firebase_service import get_conversation_repository
 
 from dotenv import load_dotenv
 from langchain.chat_models import init_chat_model
@@ -32,33 +35,79 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-def get_system_prompt(agent_id: str):
-    from services.firebase_service import get_firestore_service
-    firestore_service = get_firestore_service()
-    agent_doc = firestore_service.collection('agents').document(agent_id).get().to_dict()
-    system_prompt = agent_doc['system_prompt']
+def get_system_prompt(agent_id: str) -> str:
+    """Get system prompt from agent document in Firestore."""
+    firebase_client = FirebaseClient()
+    agent_doc_ref = firebase_client.get_collection(Collections.AGENTS).document(agent_id)
+    agent_doc = agent_doc_ref.get()
+    
+    if not agent_doc.exists:
+        raise ValueError(f"Agent {agent_id} not found")
+        
+    agent_data = agent_doc.to_dict()
+    
+    # Try different field names for system prompt
+    system_prompt = agent_data.get('system_prompt') or agent_data.get('prompt') or agent_data.get('description', '')
+    if not system_prompt:
+        logger.warning(f"No system prompt found for agent {agent_id}, using default")
+        system_prompt = "You are a helpful AI assistant."
+    
     return system_prompt
 
-def get_messages(agent_id: str, conversation_id: str):
-    repo = get_conversation_repository()
-    messages = repo.get_messages(agent_id, conversation_id)
+def get_messages(agent_id: str, conversation_id: str) -> List[Dict[str, Any]]:
+    """Get conversation messages from Firestore."""
+    firebase_client = FirebaseClient()
+    
+    # Get messages from conversations collection
+    messages_query = firebase_client.db.collection(Collections.CONVERSATIONS)\
+        .document(conversation_id)\
+        .collection('messages')\
+        .order_by('timestamp')
+    
     messages_list = []
-    for message in messages:
-        messages_list.append(message.to_dict())
-    # Reverse to maintain descending order (newest first) as in original implementation
-    return list(reversed(messages_list))
+    for message_doc in messages_query.stream():
+        message_data = message_doc.to_dict()
+        messages_list.append(message_data)
+    
+    return messages_list
 
-def get_mcp_server(agent_id: str):
-    from services.firebase_service import get_firestore_service
-    firestore_service = get_firestore_service()
-    mcp_url = None
-    agent_ref = firestore_service.collection('agents').document(agent_id).get()
-    if agent_ref.exists:
-        agent_doc = agent_ref.to_dict()
-        if 'api_integration' in agent_doc.keys():
-            if 'service_url' in agent_doc['api_integration'].keys():
-                mcp_url = agent_doc['api_integration']['service_url']
-    return mcp_url
+def get_mcp_server(agent_id: str) -> Optional[str]:
+    """Get MCP server URL from mcp_servers collection and fallback to standard format."""
+    firebase_client = FirebaseClient()
+    
+    try:
+        # First, try to get MCP server info from mcp_servers collection
+        mcp_doc_ref = firebase_client.get_collection(Collections.MCP_SERVERS).document(agent_id)
+        mcp_doc = mcp_doc_ref.get()
+        
+        if mcp_doc.exists:
+            mcp_data = mcp_doc.to_dict()
+            
+            # Check for service URL in MCP deployment document
+            if 'service_url' in mcp_data:
+                logger.info(f"Found MCP server URL in mcp_servers collection: {mcp_data['service_url']}")
+                return mcp_data['service_url']
+            
+            # Check for deployment status and construct URL if deployed
+            if mcp_data.get('status') == 'deployed' or mcp_data.get('deployment_status') == 'deployed':
+                # Use the standard MCP server URL format
+                mcp_url = f"https://mcp-{agent_id}-851487020021.us-central1.run.app"
+                logger.info(f"MCP server marked as deployed, using standard URL format: {mcp_url}")
+                return mcp_url
+        
+        # Fallback: Check if there's an active MCP deployment for this agent
+        # by trying the standard URL format
+        mcp_url = f"https://mcp-{agent_id}-851487020021.us-central1.run.app"
+        logger.info(f"No MCP server document found, trying standard URL format: {mcp_url}")
+        return mcp_url
+        
+    except Exception as e:
+        logger.error(f"Error retrieving MCP server info for agent {agent_id}: {e}")
+        
+        # Final fallback: use standard format
+        mcp_url = f"https://mcp-{agent_id}-851487020021.us-central1.run.app"
+        logger.info(f"Error occurred, falling back to standard URL format: {mcp_url}")
+        return mcp_url
 
 
 class UserAgent():
@@ -80,21 +129,39 @@ class UserAgent():
             agent_id: Unique identifier for the agent
             config: Configuration dictionary for the agent
         """
-        # Get config with defaults
-        self.openai_api_key = os.getenv('OPENAI_API_KEY')
-        self.model = os.getenv('AGENT_MODEL')   
+        # Get config from alchemist-shared settings
+        self.settings = BaseSettings()
+        self.openai_api_key = self.settings.openai_api_key
+        self.model = self.settings.openai_model or os.getenv('AGENT_MODEL', 'gpt-4')
+        
+        # Log configuration info for debugging
+        logger.info(f"Agent initialization - Using OpenAI key ending: ...{self.openai_api_key[-4:] if self.openai_api_key else 'None'}")
+        logger.info(f"Agent initialization - Using model: {self.model}")
+        
         self.agent_id = agent_id
         self.conversation_id = conversation_id
+        self.firebase_client = FirebaseClient()
         self.mcp_server = None
         self.init_langchain()        
         
     def init_langchain(self):
         """Initialize the LangChain agent with tools for specialized agents."""
         try:
-            # Validate the API key using the service
-            if not default_openai_service.validate_api_key():
+            # Validate the API key
+            if not self.openai_api_key:
                 logger.warning("OpenAI API key is missing. LangChain initialization will fail.")
                 raise ValueError("OpenAI API key is required for LangChain initialization")
+            
+            # Force use of alchemist-shared OpenAI API key
+            os.environ['OPENAI_API_KEY'] = self.openai_api_key
+            logger.info(f"✅ Set environment OPENAI_API_KEY from alchemist-shared (ending: ...{self.openai_api_key[-4:] if self.openai_api_key else 'None'})")
+            
+            # Verify the key is properly set
+            verify_key = os.getenv('OPENAI_API_KEY')
+            if verify_key != self.openai_api_key:
+                logger.warning(f"⚠️  Environment key mismatch after setting: {verify_key[-4:] if verify_key else 'None'} vs {self.openai_api_key[-4:] if self.openai_api_key else 'None'}")
+            else:
+                logger.info(f"✅ Environment key verification successful")
             
             self.llm = init_chat_model(self.model, model_provider="openai")            
             # Test the LLM connection

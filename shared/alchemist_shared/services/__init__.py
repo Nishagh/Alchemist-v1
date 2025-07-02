@@ -84,7 +84,9 @@ from .ea3_orchestrator import (
     ConversationContext,
     EA3Assessment,
     get_ea3_orchestrator,
-    init_ea3_orchestrator
+    init_ea3_orchestrator,
+    is_ea3_available,
+    get_ea3_availability_status
 )
 from .agent_lifecycle_service import (
     AgentLifecycleService,
@@ -158,6 +160,8 @@ __all__ = [
     "EA3Assessment",
     "get_ea3_orchestrator",
     "init_ea3_orchestrator",
+    "is_ea3_available",
+    "get_ea3_availability_status",
     
     # Agent Lifecycle Service
     "AgentLifecycleService",

@@ -165,6 +165,25 @@ class NarrativeTracker:
             'config': config
         })
         
+        # Record lifecycle event for agent creation
+        try:
+            from alchemist_shared.services.agent_lifecycle_service import get_agent_lifecycle_service
+            lifecycle_service = get_agent_lifecycle_service()
+            if lifecycle_service:
+                await lifecycle_service.record_agent_created(
+                    agent_id=agent_id,
+                    agent_name=agent.name,
+                    user_id=config.get('owner_id', 'system') if config else 'system',
+                    metadata={
+                        'gnf_created': True,
+                        'development_stage': agent.development_stage.value if hasattr(agent, 'development_stage') else 'nascent',
+                        'personality_traits': [trait.name for trait in agent.core.traits][:5] if hasattr(agent, 'core') and hasattr(agent.core, 'traits') else [],
+                        'narrative_voice': agent.narrative.narrative_voice if hasattr(agent, 'narrative') else 'first_person'
+                    }
+                )
+        except Exception as e:
+            logger.warning(f"Failed to record lifecycle event for agent creation: {e}")
+        
         logger.info(f"Created agent: {agent_id} ({agent.name})")
         return agent
     
@@ -276,6 +295,31 @@ class NarrativeTracker:
             'interaction': interaction,
             'analysis': analysis
         })
+        
+        # Record lifecycle event for significant interactions
+        if analysis.experience_significance > 0.7:  # Only record high-significance interactions
+            try:
+                from alchemist_shared.services.agent_lifecycle_service import get_agent_lifecycle_service
+                lifecycle_service = get_agent_lifecycle_service()
+                if lifecycle_service:
+                    from alchemist_shared.events.story_events import StoryEventType
+                    await lifecycle_service.record_event(
+                        agent_id=agent_id,
+                        event_type=StoryEventType.CONVERSATION,
+                        title=f"Significant {interaction.interaction_type.value} interaction",
+                        description=f"Agent had a significant interaction: {interaction.content[:100]}...",
+                        user_id=interaction_data.get('user_id', 'system'),
+                        metadata={
+                            'gnf_interaction': True,
+                            'narrative_significance': analysis.experience_significance,
+                            'personality_impact': analysis.personality_impact,
+                            'emotional_tone': interaction.emotional_tone.value,
+                            'impact_level': interaction.impact_level.value,
+                            'learning_outcome': analysis.learning_outcome
+                        }
+                    )
+            except Exception as e:
+                logger.warning(f"Failed to record lifecycle event for interaction: {e}")
         
         return {
             'interaction_id': f"int_{uuid.uuid4().hex[:8]}",

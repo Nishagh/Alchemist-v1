@@ -268,6 +268,25 @@ async def create_account(
         account_id = await firebase.create_managed_account(account_data)
         logger.info(f"Managed account created with ID: {account_id}")
         
+        # Record deployment lifecycle event
+        try:
+            from alchemist_shared.services.agent_lifecycle_service import get_agent_lifecycle_service
+            lifecycle_service = get_agent_lifecycle_service()
+            if lifecycle_service:
+                await lifecycle_service.record_deployment_created(
+                    agent_id=request.account_id,
+                    deployment_type="whatsapp_integration",
+                    user_id="system",  # Use actual user if available
+                    metadata={
+                        'deployment_event': True,
+                        'phone_number': response.phone_number,
+                        'business_name': request.business_profile.name,
+                        'verification_required': response.verification_required
+                    }
+                )
+        except Exception as e:
+            logger.warning(f"Failed to record deployment lifecycle event: {e}")
+        
         return response
         
     except HTTPException:
@@ -446,6 +465,24 @@ async def delete_account(
         if success:
             # Delete from Firebase
             await firebase.delete_managed_account(account['id'])
+            
+            # Record deployment deletion lifecycle event
+            try:
+                from alchemist_shared.services.agent_lifecycle_service import get_agent_lifecycle_service
+                lifecycle_service = get_agent_lifecycle_service()
+                if lifecycle_service:
+                    await lifecycle_service.record_deployment_deleted(
+                        agent_id=deployment_id,
+                        deployment_type="whatsapp_integration",
+                        user_id="system",  # Use actual user if available
+                        metadata={
+                            'deployment_event': True,
+                            'phone_number': account.get('phone_number'),
+                            'business_name': account.get('business_name')
+                        }
+                    )
+            except Exception as e:
+                logger.warning(f"Failed to record deployment deletion lifecycle event: {e}")
             
             return DeleteAccountResponse(
                 success=True,

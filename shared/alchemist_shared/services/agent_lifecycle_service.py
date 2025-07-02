@@ -16,6 +16,13 @@ from ..events.story_events import (
     get_story_event_publisher
 )
 
+# Import metrics service for recording success/failure metrics
+try:
+    from .metrics_service import get_metrics_service
+    METRICS_AVAILABLE = True
+except ImportError:
+    METRICS_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 class AgentLifecycleService:
@@ -91,10 +98,51 @@ class AgentLifecycleService:
                 await self.publisher.publish_event(story_event)
             
             logger.info(f"Recorded lifecycle event {event_id} for agent {agent_id}: {title}")
+            
+            # Record successful event recording metric
+            if METRICS_AVAILABLE:
+                try:
+                    metrics_service = get_metrics_service()
+                    if metrics_service:
+                        await metrics_service.record_metric(
+                            service_name="agent-lifecycle",
+                            metric_name="lifecycle_event_recorded",
+                            metric_type="counter",
+                            value=1,
+                            tags={
+                                'event_type': event_type.value,
+                                'priority': priority.value,
+                                'status': 'success'
+                            }
+                        )
+                except Exception as metrics_error:
+                    logger.warning(f"Failed to record success metric: {metrics_error}")
+            
             return event_id
             
         except Exception as e:
             logger.error(f"Failed to record lifecycle event for agent {agent_id}: {e}")
+            
+            # Record failed event recording metric
+            if METRICS_AVAILABLE:
+                try:
+                    metrics_service = get_metrics_service()
+                    if metrics_service:
+                        await metrics_service.record_metric(
+                            service_name="agent-lifecycle",
+                            metric_name="lifecycle_event_recorded",
+                            metric_type="counter",
+                            value=1,
+                            tags={
+                                'event_type': event_type.value,
+                                'priority': priority.value,
+                                'status': 'failed',
+                                'error': str(e)
+                            }
+                        )
+                except Exception as metrics_error:
+                    logger.warning(f"Failed to record failure metric: {metrics_error}")
+            
             raise
     
     def get_agent_lifecycle_events(
@@ -347,6 +395,169 @@ class AgentLifecycleService:
             user_id=user_id,
             metadata={'config_section': config_section, **(metadata or {})},
             priority=StoryEventPriority.MEDIUM
+        )
+    
+    async def record_billing_transaction(
+        self, 
+        user_id: str,
+        transaction_type: str,
+        amount: float,
+        agent_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """Record billing/credit transaction event"""
+        # Determine event type and title based on transaction type
+        if transaction_type == "purchase":
+            title = "Credits Purchased"
+            description = f"User purchased {amount} credits"
+            event_type = StoryEventType.BILLING_TRANSACTION
+        elif transaction_type == "usage":
+            title = "Credits Used"
+            description = f"Agent consumed {abs(amount)} credits"
+            event_type = StoryEventType.BILLING_TRANSACTION
+        else:
+            title = f"Credit {transaction_type.title()}"
+            description = f"Credit transaction: {transaction_type} of {amount} credits"
+            event_type = StoryEventType.BILLING_TRANSACTION
+        
+        # Use agent_id if provided, otherwise use a billing system identifier
+        effective_agent_id = agent_id or f"billing_system_{user_id}"
+        
+        return await self.record_event(
+            agent_id=effective_agent_id,
+            event_type=event_type,
+            title=title,
+            description=description,
+            user_id=user_id,
+            metadata={
+                'billing_transaction': True,
+                'transaction_type': transaction_type, 
+                'amount': amount,
+                **(metadata or {})
+            },
+            priority=StoryEventPriority.MEDIUM
+        )
+    
+    async def record_deployment_created(
+        self,
+        agent_id: str,
+        deployment_type: str,
+        user_id: str,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """Record deployment creation event"""
+        return await self.record_event(
+            agent_id=agent_id,
+            event_type=StoryEventType.AGENT_DEPLOYED,
+            title="Deployment Created",
+            description=f"New {deployment_type} deployment created for agent",
+            user_id=user_id,
+            metadata={'deployment_type': deployment_type, **(metadata or {})},
+            priority=StoryEventPriority.HIGH
+        )
+    
+    async def record_deployment_deleted(
+        self,
+        agent_id: str,
+        deployment_type: str,
+        user_id: str,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """Record deployment deletion event"""
+        return await self.record_event(
+            agent_id=agent_id,
+            event_type=StoryEventType.AGENT_UNDEPLOYED,
+            title="Deployment Deleted",
+            description=f"{deployment_type} deployment removed for agent",
+            user_id=user_id,
+            metadata={'deployment_type': deployment_type, **(metadata or {})},
+            priority=StoryEventPriority.HIGH
+        )
+    
+    async def record_mcp_deployment_triggered(
+        self,
+        deployment_id: str,
+        user_id: str,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """Record MCP deployment trigger event"""
+        return await self.record_event(
+            agent_id=deployment_id,
+            event_type=StoryEventType.AGENT_DEPLOYED,
+            title="MCP Server Deployment Triggered",
+            description=f"MCP server deployment job triggered for agent",
+            user_id=user_id,
+            metadata={'mcp_deployment': True, **(metadata or {})},
+            priority=StoryEventPriority.HIGH
+        )
+    
+    async def record_integration_event(
+        self,
+        agent_id: str,
+        integration_type: str,
+        action: str,  # 'connected' or 'disconnected'
+        user_id: str,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """Record integration connection/disconnection event"""
+        event_type = StoryEventType.INTEGRATION_CONNECTED if action == 'connected' else StoryEventType.INTEGRATION_DISCONNECTED
+        title = f"{integration_type.title()} Integration {action.title()}"
+        description = f"Agent {action} to {integration_type} integration"
+        
+        return await self.record_event(
+            agent_id=agent_id,
+            event_type=event_type,
+            title=title,
+            description=description,
+            user_id=user_id,
+            metadata={'integration_type': integration_type, 'action': action, **(metadata or {})},
+            priority=StoryEventPriority.MEDIUM
+        )
+    
+    async def record_user_feedback(
+        self,
+        agent_id: str,
+        feedback_type: str,
+        rating: Optional[int],
+        user_id: str,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """Record user feedback event"""
+        title = f"User Feedback: {feedback_type.title()}"
+        description = f"User provided {feedback_type} feedback" + (f" with rating {rating}" if rating else "")
+        
+        return await self.record_event(
+            agent_id=agent_id,
+            event_type=StoryEventType.USER_FEEDBACK,
+            title=title,
+            description=description,
+            user_id=user_id,
+            metadata={'feedback_type': feedback_type, 'rating': rating, **(metadata or {})},
+            priority=StoryEventPriority.MEDIUM
+        )
+    
+    async def record_performance_issue(
+        self,
+        agent_id: str,
+        issue_type: str,
+        severity: str,
+        user_id: str = "system",
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """Record performance issue event"""
+        title = f"Performance Issue: {issue_type.title()}"
+        description = f"Agent experienced {severity} {issue_type} performance issue"
+        
+        priority = StoryEventPriority.CRITICAL if severity == "critical" else StoryEventPriority.HIGH
+        
+        return await self.record_event(
+            agent_id=agent_id,
+            event_type=StoryEventType.PERFORMANCE_ISSUE,
+            title=title,
+            description=description,
+            user_id=user_id,
+            metadata={'issue_type': issue_type, 'severity': severity, **(metadata or {})},
+            priority=priority
         )
 
 # Global instance for easy access

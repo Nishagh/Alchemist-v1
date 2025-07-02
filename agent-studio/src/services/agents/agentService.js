@@ -332,32 +332,55 @@ export const markAgentAsDeleted = async (agentId) => {
 
 /**
  * Create a lifecycle event for agent deletion
+ * 
+ * STANDARDIZED: This follows the exact format used by the backend AgentLifecycleService
+ * to ensure consistency across all lifecycle event recording.
  */
 const createAgentDeletionEvent = async (agentId, userId, agentName) => {
   try {
     const { db } = await import('../../utils/firebase');
-    const { collection, addDoc } = await import('firebase/firestore');
+    const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
     
+    // Follow exact AgentLifecycleService format for consistency
     const eventData = {
       agent_id: agentId,
       event_type: 'agent_deleted',
       title: 'Agent Deleted',
       description: `Agent "${agentName}" has been marked as deleted and removed from active use`,
+      user_id: userId,
+      timestamp: serverTimestamp(), // Use server timestamp for consistency
       metadata: {
+        agent_name: agentName,
         deleted_by: userId,
         deletion_reason: 'user_initiated',
-        final_status: 'deleted'
+        final_status: 'deleted',
+        deletion_method: 'frontend_service'
       },
-      timestamp: new Date(),
-      user_id: userId
+      priority: 'high' // Matches AgentLifecycleService.record_agent_deleted priority
     };
     
     const eventsRef = collection(db, 'agent_lifecycle_events');
-    await addDoc(eventsRef, eventData);
+    const docRef = await addDoc(eventsRef, eventData);
     
-    console.log('Agent deletion lifecycle event created:', agentId);
+    // Update document with its own ID (matching backend pattern)
+    const { updateDoc, doc } = await import('firebase/firestore');
+    await updateDoc(doc(db, 'agent_lifecycle_events', docRef.id), {
+      event_id: docRef.id
+    });
+    
+    console.log('Agent deletion lifecycle event created:', agentId, 'Event ID:', docRef.id);
+    
+    // TODO: Consider migrating to use backend lifecycle API endpoint for better consistency
+    // This would eliminate direct Firebase access from frontend
+    
   } catch (error) {
     console.error('Error creating agent deletion lifecycle event:', error);
+    // Log additional context for debugging
+    console.error('Event data that failed:', {
+      agent_id: agentId,
+      user_id: userId,
+      agent_name: agentName
+    });
     // Don't throw error here as it's not critical for the deletion process
   }
 };

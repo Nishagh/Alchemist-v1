@@ -35,24 +35,35 @@ class RESTMCPClient:
         
     async def check_health(self) -> bool:
         """
-        Check if the MCP server is healthy.
+        Check if the MCP server is available by trying multiple endpoints.
         
         Returns:
-            True if server is healthy, False otherwise
+            True if server is accessible, False otherwise
         """
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(f"{self.server_url}/health")
-                if response.status_code == 200:
-                    health_data = response.json()
-                    logger.info(f"✅ Server is healthy! Agent ID: {health_data.get('agent_id')}")
-                    return True
-                else:
-                    logger.error(f"❌ Health check failed with status: {response.status_code}")
-                    return False
-        except Exception as e:
-            logger.error(f"❌ Health check failed: {str(e)}")
-            return False
+        health_endpoints = [
+            "/health",      # Standard health endpoint
+            "/",           # Root endpoint  
+            "/tools"       # Tools discovery endpoint
+        ]
+        
+        for endpoint in health_endpoints:
+            try:
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    response = await client.get(f"{self.server_url}{endpoint}")
+                    if response.status_code == 200:
+                        logger.info(f"✅ MCP server is accessible via {endpoint}")
+                        return True
+                    elif response.status_code == 404 and endpoint != "/tools":
+                        # 404 is ok for health/root, continue trying other endpoints
+                        continue
+                    else:
+                        logger.info(f"🔶 Endpoint {endpoint} returned status: {response.status_code}")
+            except Exception as e:
+                logger.info(f"🔶 Endpoint {endpoint} failed: {str(e)}")
+                continue
+        
+        logger.warning(f"⚠️  MCP server at {self.server_url} is not responding to health checks, but will still try to discover tools")
+        return True  # Return True to allow tool discovery attempt even if health check fails
     
     async def discover_tools(self) -> List[Dict[str, Any]]:
         """

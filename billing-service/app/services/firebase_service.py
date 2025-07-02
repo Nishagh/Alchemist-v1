@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from firebase_admin import auth
 from google.cloud.firestore import Client as FirestoreClient
 from google.cloud.firestore import FieldFilter, Query, SERVER_TIMESTAMP
+from google.cloud import firestore
 
 # Import centralized Firebase client
 from alchemist_shared.database.firebase_client import FirebaseClient
@@ -163,6 +164,26 @@ class FirebaseService:
             
             user_doc_ref = self.db.collection(settings.USER_CREDITS_COLLECTION).document(user_id)
             result = update_balance_transaction(transaction_ref, user_doc_ref, amount, transaction_type, transaction_data)
+            
+            # Record lifecycle event for billing transaction
+            try:
+                from alchemist_shared.services.agent_lifecycle_service import get_agent_lifecycle_service
+                lifecycle_service = get_agent_lifecycle_service()
+                if lifecycle_service:
+                    await lifecycle_service.record_billing_transaction(
+                        user_id=user_id,
+                        transaction_type=transaction_type,
+                        amount=amount,
+                        agent_id=transaction_data.get('agent_id'),
+                        metadata={
+                            'billing_event': True,
+                            'balance_before': result['transaction']['balance_before'],
+                            'balance_after': result['transaction']['balance_after'],
+                            'transaction_data': transaction_data
+                        }
+                    )
+            except Exception as e:
+                logger.warning(f"Failed to record billing lifecycle event: {e}")
             
             return result
             

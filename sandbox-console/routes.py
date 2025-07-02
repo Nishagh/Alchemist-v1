@@ -14,12 +14,10 @@ from datetime import datetime
 from fastapi import FastAPI, Request, HTTPException, Depends, File, UploadFile, Form, Header, Query
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel
-from services.firebase_service import (
-    get_conversation_repository, 
-    get_firestore_service,
-    ConversationRepository,
-    FirestoreService
-)
+from alchemist_shared.database.firebase_client import FirebaseClient
+from alchemist_shared.constants.collections import Collections
+from alchemist_shared.config.base_settings import BaseSettings
+from firebase_admin.firestore import SERVER_TIMESTAMP, Increment
 from agent import UserAgent
 
 
@@ -54,27 +52,31 @@ async def get_current_user(
         )
     return user_id
 
-def create_new_conversation(agent_id: str, repo: ConversationRepository = Depends(get_conversation_repository)) -> str:
+def create_new_conversation(agent_id: str) -> str:
     """
-    Create a new conversation with the specified agent using the repository pattern.
+    Create a new conversation with the specified agent using alchemist-shared.
     
     Args:
         agent_id: ID of the agent to use for this conversation
-        repo: ConversationRepository dependency
     
     Returns:
         The ID of the new conversation
     """
     try:
-        # Prepare conversation data
+        firebase_client = FirebaseClient()
+        
+        # Prepare conversation data using alchemist-shared structure
         conversation_data = {
             'agent_id': agent_id,
             'status': 'active',
-            'message_count': 0
+            'message_count': 0,
+            'created_at': SERVER_TIMESTAMP,
+            'updated_at': SERVER_TIMESTAMP
         }
         
-        # Create conversation using repository
-        conversation_id = repo.create_conversation(agent_id, conversation_data)
+        # Create conversation in conversations collection
+        doc_ref, doc = firebase_client.get_collection(Collections.CONVERSATIONS).add(conversation_data)
+        conversation_id = doc.id
         
         logger.info(f"Created new conversation: {conversation_id} with agent: {agent_id}")
         return conversation_id
@@ -86,31 +88,43 @@ def add_message_to_conversation(
     conversation_id: str,
     role: str,
     content: str,
-    agent_id: str,
-    repo: ConversationRepository = Depends(get_conversation_repository)
+    agent_id: str
 ) -> str:
     """
-    Add a message to an existing conversation using the repository pattern.
+    Add a message to an existing conversation using alchemist-shared.
     
     Args:
         conversation_id: ID of the conversation
-        role: 'user' or 'agent'
+        role: 'user' or 'assistant'
         content: The message content
         agent_id: ID of the agent
-        repo: ConversationRepository dependency
     
     Returns:
         The ID of the new message
     """
     try:
-        # Prepare message data
+        firebase_client = FirebaseClient()
+        
+        # Prepare message data using alchemist-shared structure
         message_data = {
             'role': role,
             'content': content,
+            'agent_id': agent_id,
+            'timestamp': SERVER_TIMESTAMP
         }
         
-        # Add message using repository
-        message_id = repo.add_message(agent_id, conversation_id, message_data)
+        # Add message to conversation's messages subcollection
+        messages_ref = firebase_client.get_collection(Collections.CONVERSATIONS).document(conversation_id).collection('messages')
+        doc_ref, doc = messages_ref.add(message_data)
+        message_id = doc.id
+        
+        # Update conversation metadata
+        conversation_ref = firebase_client.get_collection(Collections.CONVERSATIONS).document(conversation_id)
+        conversation_ref.update({
+            'updated_at': SERVER_TIMESTAMP,
+            'message_count': Increment(1),
+            'last_message': content[:100] if content else ''
+        })
         
         logger.info(f"Added message from {role} to conversation: {conversation_id}")
         return message_id
@@ -122,8 +136,7 @@ def add_message_to_conversation(
 async def process_message(
     conversation_id: str, 
     message: str, 
-    agent_id: str,
-    repo: ConversationRepository = Depends(get_conversation_repository)
+    agent_id: str
 ) -> Dict[str, Any]:
     """
     Process a user message in a conversation using the modular approach.
@@ -143,8 +156,7 @@ async def process_message(
             conversation_id=conversation_id,
             role='user',
             content=message,
-            agent_id=agent_id,
-            repo=repo
+            agent_id=agent_id
         )
         
         # Process with agent
@@ -172,17 +184,21 @@ async def process_message(
         logger.info(f"Response Text: {response_text[:100]}..." if len(response_text) > 100 else f"Response Text: {response_text}")
         response_id = add_message_to_conversation(
             conversation_id=conversation_id,
-            role='agent',
+            role='assistant',
             content=response_text,
-            agent_id=agent_id,
-            repo=repo
+            agent_id=agent_id
         )
         
         return {
             'conversation_id': conversation_id,
             'message_id': message_id,
             'response_id': response_id,
-            'content': response_text
+            'content': response_text,
+            'metadata': {
+                'agent_id': agent_id,
+                'timestamp': datetime.now().isoformat(),
+                'processing_time': None  # Could be enhanced to track processing time
+            }
         }
     except Exception as e:
         logger.error(f"Error processing message: {str(e)}")
@@ -204,11 +220,10 @@ def register_routes(app: FastAPI):
     async def health_check():
         """Health check endpoint for the sandbox console service"""
         try:
-            # Check OpenAI API key configuration
-            openai_configured = bool(os.getenv('OPENAI_API_KEY'))
-            
-            # Check Firebase project configuration
-            firebase_configured = bool(os.getenv('FIREBASE_PROJECT_ID'))
+            # Use alchemist-shared settings
+            settings = BaseSettings()
+            openai_configured = bool(settings.openai_api_key)
+            firebase_configured = bool(settings.firebase_project_id)
             
             # Check if tools are properly configured (basic check)
             tools_configured = True  # Simplified for now
@@ -251,13 +266,12 @@ def register_routes(app: FastAPI):
     
     @app.post("/api/agent/create_conversation")
     async def create_conversation_endpoint(
-        request: CreateConversationRequest,
-        repo: ConversationRepository = Depends(get_conversation_repository)
+        request: CreateConversationRequest
     ):
-        """Create a new conversation for an agent using dependency injection."""
+        """Create a new conversation for an agent."""
         try:
             logger.info(f"Creating new conversation for agent: {request.agent_id}")
-            conversation_id = create_new_conversation(request.agent_id, repo)
+            conversation_id = create_new_conversation(request.agent_id)
             return {"status": "success", "conversation_id": conversation_id}
         except Exception as e:
             logger.error(f"Error creating conversation: {str(e)}")
@@ -265,16 +279,14 @@ def register_routes(app: FastAPI):
             
     @app.post("/api/agent/process_message")
     async def process_message_endpoint(
-        request: ProcessMessageRequest,
-        repo: ConversationRepository = Depends(get_conversation_repository)
+        request: ProcessMessageRequest
     ):
-        """Process a message for an agent using dependency injection."""
+        """Process a message for an agent."""
         try:
             response = await process_message(
                 request.conversation_id, 
                 request.message, 
-                request.agent_id,
-                repo
+                request.agent_id
             )
             return {"status": "success", "response": response}
         except Exception as e:
@@ -285,13 +297,21 @@ def register_routes(app: FastAPI):
     async def get_conversation_messages(
         agent_id: str,
         conversation_id: str,
-        limit: Optional[int] = Query(50, ge=1, le=100),
-        repo: ConversationRepository = Depends(get_conversation_repository)
+        limit: Optional[int] = Query(50, ge=1, le=100)
     ):
         """Get messages from a conversation with pagination."""
         try:
+            firebase_client = FirebaseClient()
+            
+            # Get messages from conversation's messages subcollection
+            messages_query = firebase_client.db.collection(Collections.CONVERSATIONS)\
+                .document(conversation_id)\
+                .collection('messages')\
+                .order_by('timestamp')\
+                .limit(limit)
+            
             messages = []
-            for message_doc in repo.get_messages(agent_id, conversation_id, limit):
+            for message_doc in messages_query.stream():
                 message_data = message_doc.to_dict()
                 message_data['id'] = message_doc.id
                 messages.append(message_data)
@@ -308,17 +328,22 @@ def register_routes(app: FastAPI):
     @app.get("/api/agent/{agent_id}/conversations/{conversation_id}")
     async def get_conversation(
         agent_id: str,
-        conversation_id: str,
-        repo: ConversationRepository = Depends(get_conversation_repository)
+        conversation_id: str
     ):
         """Get conversation details."""
         try:
-            conversation = repo.get_conversation(agent_id, conversation_id)
-            if not conversation.exists:
+            firebase_client = FirebaseClient()
+            conversation_doc = firebase_client.get_collection(Collections.CONVERSATIONS).document(conversation_id).get()
+            
+            if not conversation_doc.exists:
                 raise HTTPException(status_code=404, detail="Conversation not found")
             
-            conversation_data = conversation.to_dict()
-            conversation_data['id'] = conversation.id
+            conversation_data = conversation_doc.to_dict()
+            
+            if not conversation_data:
+                raise HTTPException(status_code=404, detail="Conversation not found")
+            
+            conversation_data['id'] = conversation_id
             
             return {"status": "success", "conversation": conversation_data}
         except HTTPException:

@@ -37,13 +37,25 @@ logger = logging.getLogger(__name__)
 # Import eA³ (Epistemic Autonomy) services (required)
 try:
     from alchemist_shared.services import (
-        get_ea3_orchestrator, ConversationContext
+        get_ea3_orchestrator, ConversationContext, is_ea3_available, get_ea3_availability_status
     )
     from alchemist_shared.events import get_story_event_publisher
     EA3_SERVICES_AVAILABLE = True
 except ImportError:
     logger.warning("eA³ services not available")
     EA3_SERVICES_AVAILABLE = False
+
+# Enhanced availability check with configuration validation
+def check_ea3_availability():
+    """Check if eA³ services are actually available and configured"""
+    if not EA3_SERVICES_AVAILABLE:
+        return False
+    
+    try:
+        return is_ea3_available()
+    except Exception as e:
+        logger.warning(f"eA³ availability check failed: {e}")
+        return False
 
 # Import metrics routes
 try:
@@ -456,7 +468,7 @@ def register_routes(app: FastAPI):
                 agent_config = await default_storage.create_agent_config(agent_id, message, user_id)
                 
                 # Initialize agent's life-story for eA³ (Epistemic Autonomy, Accountability, Alignment) - optional
-                if EA3_SERVICES_AVAILABLE:
+                if check_ea3_availability():
                     try:
                         ea3_orchestrator = await get_ea3_orchestrator()
                         core_objective = f"Assist users as a helpful AI agent specializing in: {message}"
@@ -504,7 +516,7 @@ def register_routes(app: FastAPI):
             result = await orchestrator.process(input_data)
             
             # eA³ (Epistemic Autonomy, Accountability, Alignment) processing with async story events - optional
-            if EA3_SERVICES_AVAILABLE:
+            if check_ea3_availability():
                 try:
                     ea3_orchestrator = await get_ea3_orchestrator()
                     
@@ -627,7 +639,7 @@ def register_routes(app: FastAPI):
                     content={"status": "error", "message": "You do not have permission to access this agent's life-story"}
                 )
             
-            if not EA3_SERVICES_AVAILABLE:
+            if not check_ea3_availability():
                 return JSONResponse(
                     status_code=503,
                     content={"status": "error", "message": "eA³ services not available"}
@@ -676,7 +688,7 @@ def register_routes(app: FastAPI):
                     content={"status": "error", "message": "You do not have permission to access this agent's eA³ status"}
                 )
             
-            if not EA3_SERVICES_AVAILABLE:
+            if not check_ea3_availability():
                 return JSONResponse(
                     status_code=503,
                     content={"status": "error", "message": "eA³ services not available"}
@@ -746,7 +758,7 @@ def register_routes(app: FastAPI):
                     content={"status": "error", "message": "You do not have permission to trigger reflection for this agent"}
                 )
             
-            if not EA3_SERVICES_AVAILABLE:
+            if not check_ea3_availability():
                 return JSONResponse(
                     status_code=503,
                     content={"status": "error", "message": "eA³ services not available"}
@@ -798,7 +810,7 @@ def register_routes(app: FastAPI):
                     content={"status": "error", "message": "You do not have permission to access this agent's coherence trends"}
                 )
             
-            if not EA3_SERVICES_AVAILABLE:
+            if not check_ea3_availability():
                 return JSONResponse(
                     status_code=503,
                     content={"status": "error", "message": "eA³ services not available"}
@@ -841,7 +853,7 @@ def register_routes(app: FastAPI):
                     content={"status": "error", "message": "You do not have permission to access this agent's conflicts"}
                 )
             
-            if not EA3_SERVICES_AVAILABLE:
+            if not check_ea3_availability():
                 return JSONResponse(
                     status_code=503,
                     content={"status": "error", "message": "eA³ services not available"}

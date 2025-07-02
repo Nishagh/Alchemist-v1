@@ -177,7 +177,7 @@ class MCPDeploymentJob:
             )
             
             # Test the deployed service
-            if await self._verify_deployment(service_url):
+            if await self._verify_deployment(service_url, agent_id):
                 await self._update_deployment_status(
                     'deployed', 
                     100, 
@@ -297,11 +297,64 @@ requests==2.31.0
 import os
 import asyncio
 import logging
-from fastapi import FastAPI
+import yaml
+import json
+import aiohttp
+from fastapi import FastAPI, HTTPException, Body, Request
 from pydantic import BaseModel
 import uvicorn
+from typing import Dict, List, Any, Optional
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="MCP Server", version="1.0.0")
+
+# Global variable to store loaded MCP config
+mcp_config: Optional[Dict[str, Any]] = None
+
+async def load_mcp_config():
+    """Load MCP configuration from the URL"""
+    global mcp_config
+    
+    config_url = os.getenv("MCP_CONFIG_URL")
+    if not config_url:
+        logger.error("MCP_CONFIG_URL environment variable not set")
+        return
+    
+    try:
+        logger.info(f"Loading MCP config from: {config_url}")
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(config_url, timeout=30) as response:
+                if response.status != 200:
+                    logger.error(f"Failed to download config: HTTP {response.status}")
+                    return
+                
+                config_text = await response.text()
+                
+                # Parse YAML config
+                if config_url.endswith('.yaml') or config_url.endswith('.yml'):
+                    mcp_config = yaml.safe_load(config_text)
+                elif config_url.endswith('.json'):
+                    mcp_config = json.loads(config_text)
+                else:
+                    # Try YAML first, then JSON
+                    try:
+                        mcp_config = yaml.safe_load(config_text)
+                    except:
+                        mcp_config = json.loads(config_text)
+                
+                logger.info(f"Successfully loaded MCP config with {len(mcp_config.get('tools', []))} tools")
+                
+    except Exception as e:
+        logger.error(f"Failed to load MCP config: {e}")
+        mcp_config = None
+
+@app.on_event("startup")
+async def startup_event():
+    """Load MCP configuration on startup"""
+    await load_mcp_config()
 
 @app.get("/health")
 async def health():
@@ -309,7 +362,143 @@ async def health():
 
 @app.get("/tools")
 async def list_tools():
-    return {"tools": [], "agent_id": os.getenv("AGENT_ID")}
+    """Return the list of available tools from MCP config"""
+    if mcp_config is None:
+        return {"tools": [], "agent_id": os.getenv("AGENT_ID"), "error": "MCP config not loaded"}
+    
+    tools = mcp_config.get("tools", [])
+    return {"tools": tools, "agent_id": os.getenv("AGENT_ID"), "config_loaded": True}
+
+@app.get("/config")
+async def get_config():
+    """Return the full MCP configuration"""
+    if mcp_config is None:
+        raise HTTPException(status_code=503, detail="MCP config not loaded")
+    
+    return mcp_config
+
+@app.post("/tools/{tool_name}/execute")
+async def execute_tool(tool_name: str, request: Request, request_data: Dict[str, Any] = Body(default={})):
+    """Execute a specific tool using the MCP configuration"""
+    if mcp_config is None:
+        raise HTTPException(status_code=503, detail="MCP config not loaded")
+    
+    # Find the tool in the config
+    tool_config = None
+    for tool in mcp_config.get("tools", []):
+        if tool.get("name") == tool_name:
+            tool_config = tool
+            break
+    
+    if not tool_config:
+        raise HTTPException(status_code=404, detail=f"Tool '{tool_name}' not found")
+    
+    try:
+        # Get request template from tool config
+        request_template = tool_config.get("requestTemplate", {})
+        url = request_template.get("url")
+        method = request_template.get("method", "GET")
+        headers = request_template.get("headers", [])
+        security = request_template.get("security", {})
+        
+        if not url:
+            raise HTTPException(status_code=500, detail=f"No URL configured for tool '{tool_name}'")
+        
+        # Prepare request parameters based on tool arguments and their positions
+        tool_args = tool_config.get("args", [])
+        query_params = {}
+        body_params = {}
+        
+        # Collect all available parameters from query params and request body
+        all_params = {}
+        
+        # Add query parameters
+        for key, value in request.query_params.items():
+            all_params[key] = value
+        
+        # Add body parameters
+        if request_data:
+            all_params.update(request_data)
+        
+        logger.info(f"Tool {tool_name}: Available params: {all_params}")
+        logger.info(f"Tool {tool_name}: Tool args schema: {tool_args}")
+        
+        # Process arguments based on their position in the tool schema
+        for arg in tool_args:
+            arg_name = arg.get("name")
+            position = arg.get("position", "body")
+            
+            if arg_name in all_params:
+                value = all_params[arg_name]
+                if position == "query":
+                    query_params[arg_name] = value
+                elif position == "path":
+                    # Replace path parameters in URL
+                    url = url.replace(f"{{{arg_name}}}", str(value))
+                else:  # body or default
+                    body_params[arg_name] = value
+        
+        logger.info(f"Tool {tool_name}: Final query_params: {query_params}")
+        logger.info(f"Tool {tool_name}: Final body_params: {body_params}")
+        logger.info(f"Tool {tool_name}: Final URL: {url}")
+        
+        # Prepare headers
+        request_headers = {}
+        for header in headers:
+            request_headers[header.get("key")] = header.get("value")
+        
+        # Add security headers (Bearer token)
+        if security and security.get("id") == "BearerAuth":
+            # Get the credential from server config or environment
+            server_config = mcp_config.get("server", {})
+            security_schemes = server_config.get("securitySchemes", [])
+            
+            for scheme in security_schemes:
+                if scheme.get("id") == "BearerAuth":
+                    credential = scheme.get("defaultCredential")
+                    if credential:
+                        request_headers["Authorization"] = f"Bearer {credential}"
+                    break
+        
+        # Make the HTTP request to the actual API
+        async with aiohttp.ClientSession() as session:
+            request_kwargs = {
+                "url": url,
+                "headers": request_headers,
+                "params": query_params if query_params else None
+            }
+            
+            if method.upper() in ["POST", "PUT", "PATCH"] and body_params:
+                request_kwargs["json"] = body_params
+                if "Content-Type" not in request_headers:
+                    request_headers["Content-Type"] = "application/json"
+            
+            async with session.request(method.upper(), **request_kwargs) as response:
+                if response.status >= 400:
+                    error_text = await response.text()
+                    raise HTTPException(
+                        status_code=response.status,
+                        detail=f"API request failed: {error_text}"
+                    )
+                
+                response_data = await response.json()
+                
+                # Apply response template if configured
+                response_template = tool_config.get("responseTemplate", {})
+                prepend_body = response_template.get("prependBody", "")
+                
+                if prepend_body:
+                    # Format the response with prepended information
+                    formatted_response = f"{prepend_body}\\n\\n```json\\n{json.dumps(response_data, indent=2)}\\n```"
+                    return {"result": formatted_response, "raw_data": response_data}
+                else:
+                    return response_data
+                
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error executing tool {tool_name}: {e}")
+        raise HTTPException(status_code=500, detail=f"Tool execution failed: {str(e)}")
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8080))
@@ -419,8 +608,8 @@ if __name__ == "__main__":
             logger.error(f"Cloud Run deployment failed: {e}")
             raise Exception(f"Cloud Run deployment failed: {e}")
     
-    async def _verify_deployment(self, service_url: str) -> bool:
-        """Verify that the deployed service is healthy"""
+    async def _verify_deployment(self, service_url: str, agent_id: str) -> bool:
+        """Verify that the deployed service is healthy and gather server information"""
         try:
             logger.info(f"Verifying deployment at {service_url}")
             
@@ -430,12 +619,15 @@ if __name__ == "__main__":
             async with aiohttp.ClientSession() as session:
                 # Try multiple times with backoff
                 max_retries = 5
+                health_check_passed = False
+                
                 for attempt in range(max_retries):
                     try:
                         async with session.get(f"{service_url}/health", timeout=30) as response:
                             if response.status == 200:
                                 logger.info(f"Deployment verification successful for {service_url}")
-                                return True
+                                health_check_passed = True
+                                break
                             else:
                                 logger.warning(f"Health check returned HTTP {response.status}")
                     except Exception as e:
@@ -444,12 +636,136 @@ if __name__ == "__main__":
                     if attempt < max_retries - 1:
                         await asyncio.sleep(5 * (attempt + 1))  # Exponential backoff
                 
-                logger.error("All health check attempts failed")
-                return False
+                if not health_check_passed:
+                    logger.error("All health check attempts failed")
+                    return False
+                
+                # If health check passed, gather server information for mcp_servers collection
+                await self._create_mcp_server_document(service_url, agent_id, session)
+                
+                return True
                 
         except Exception as e:
             logger.error(f"Deployment verification failed: {e}")
             return False
+    
+    async def _create_mcp_server_document(self, service_url: str, agent_id: str, session: aiohttp.ClientSession):
+        """Create or update the mcp_servers document with server information"""
+        try:
+            logger.info(f"Creating MCP server document for agent {agent_id}")
+            
+            # Discover available endpoints
+            endpoints = await self._discover_endpoints(service_url, session)
+            
+            # Fetch tools information
+            tools_info = await self._fetch_tools_info(service_url, session)
+            
+            # Fetch server configuration
+            config_info = await self._fetch_config_info(service_url, session)
+            
+            # Create server document data
+            server_data = {
+                'agent_id': agent_id,
+                'service_url': service_url,
+                'status': 'active',
+                'endpoints': endpoints,
+                'tools': tools_info.get('tools', []),
+                'tools_count': len(tools_info.get('tools', [])),
+                'config_loaded': tools_info.get('config_loaded', False),
+                'server_info': {
+                    'deployment_id': self.deployment_id,
+                    'project_id': self.project_id,
+                    'region': self.region,
+                    'last_verified': SERVER_TIMESTAMP
+                },
+                'mcp_config': config_info,
+                'created_at': SERVER_TIMESTAMP,
+                'updated_at': SERVER_TIMESTAMP
+            }
+            
+            # Add error information if tools failed to load
+            if 'error' in tools_info:
+                server_data['error'] = tools_info['error']
+                server_data['status'] = 'error'
+            
+            # Store in Firestore
+            server_ref = self.db.collection('mcp_servers').document(agent_id)
+            server_ref.set(server_data, merge=True)
+            
+            logger.info(f"Created MCP server document for agent {agent_id} with {len(tools_info.get('tools', []))} tools")
+            
+        except Exception as e:
+            logger.error(f"Failed to create MCP server document: {e}")
+            # Don't fail the deployment for this
+    
+    async def _discover_endpoints(self, service_url: str, session: aiohttp.ClientSession) -> List[Dict[str, Any]]:
+        """Discover available endpoints on the MCP server"""
+        endpoints = []
+        
+        # Standard endpoints to check
+        standard_endpoints = [
+            {'path': '/health', 'method': 'GET', 'description': 'Health check endpoint'},
+            {'path': '/tools', 'method': 'GET', 'description': 'List available MCP tools'},
+            {'path': '/config', 'method': 'GET', 'description': 'Get MCP configuration'},
+            {'path': '/', 'method': 'GET', 'description': 'Root endpoint'},
+            {'path': '/docs', 'method': 'GET', 'description': 'API documentation'},
+            {'path': '/openapi.json', 'method': 'GET', 'description': 'OpenAPI specification'}
+        ]
+        
+        for endpoint in standard_endpoints:
+            try:
+                async with session.get(f"{service_url}{endpoint['path']}", timeout=10) as response:
+                    endpoint_info = {
+                        'path': endpoint['path'],
+                        'method': endpoint['method'],
+                        'description': endpoint['description'],
+                        'status_code': response.status,
+                        'available': response.status < 500,
+                        'content_type': response.headers.get('content-type', 'unknown')
+                    }
+                    endpoints.append(endpoint_info)
+                    
+            except Exception as e:
+                endpoints.append({
+                    'path': endpoint['path'],
+                    'method': endpoint['method'],
+                    'description': endpoint['description'],
+                    'status_code': None,
+                    'available': False,
+                    'error': str(e)
+                })
+        
+        return endpoints
+    
+    async def _fetch_tools_info(self, service_url: str, session: aiohttp.ClientSession) -> Dict[str, Any]:
+        """Fetch tools information from the MCP server"""
+        try:
+            async with session.get(f"{service_url}/tools", timeout=30) as response:
+                if response.status == 200:
+                    tools_data = await response.json()
+                    return tools_data
+                else:
+                    logger.warning(f"Tools endpoint returned HTTP {response.status}")
+                    return {'tools': [], 'error': f'HTTP {response.status}'}
+                    
+        except Exception as e:
+            logger.error(f"Failed to fetch tools info: {e}")
+            return {'tools': [], 'error': str(e)}
+    
+    async def _fetch_config_info(self, service_url: str, session: aiohttp.ClientSession) -> Optional[Dict[str, Any]]:
+        """Fetch configuration information from the MCP server"""
+        try:
+            async with session.get(f"{service_url}/config", timeout=30) as response:
+                if response.status == 200:
+                    config_data = await response.json()
+                    return config_data
+                else:
+                    logger.info(f"Config endpoint returned HTTP {response.status} (may not be available)")
+                    return None
+                    
+        except Exception as e:
+            logger.info(f"Config endpoint not available: {e}")
+            return None
     
     async def _update_deployment_status(self, status: str, progress: int, 
                                        current_step: str, error_message: str = None, 

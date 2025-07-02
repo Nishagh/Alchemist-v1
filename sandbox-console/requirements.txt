@@ -1,3 +1,6 @@
+# Alchemist Shared Library
+alchemist-shared
+
 # Core dependencies
 firebase-admin>=6.5.0
 google-cloud-firestore>=2.13.0

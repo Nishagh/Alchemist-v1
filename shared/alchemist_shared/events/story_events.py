@@ -59,6 +59,19 @@ class StoryEventType(Enum):
     CONFIGURATION_UPDATED = "configuration_updated"
     TRAINING_STARTED = "training_started"
     TRAINING_COMPLETED = "training_completed"
+    
+    # Additional comprehensive tracking events
+    BILLING_TRANSACTION = "billing_transaction"
+    INTEGRATION_CONNECTED = "integration_connected"
+    INTEGRATION_DISCONNECTED = "integration_disconnected"
+    PERFORMANCE_ISSUE = "performance_issue"
+    SECURITY_EVENT = "security_event"
+    USER_FEEDBACK = "user_feedback"
+    MODEL_VERSION_UPDATED = "model_version_updated"
+    MEMORY_ARCHIVED = "memory_archived"
+    COLLABORATION_EVENT = "collaboration_event"
+    EXPERIMENT_STARTED = "experiment_started"
+    EXPERIMENT_COMPLETED = "experiment_completed"
 
 class StoryEventPriority(Enum):
     """Priority levels for story event processing"""
