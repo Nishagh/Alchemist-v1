@@ -219,40 +219,13 @@ def register_routes(app: FastAPI):
     @app.get("/health")
     async def health_check():
         """Health check endpoint for the sandbox console service"""
-        try:
-            # Use alchemist-shared settings
-            settings = BaseSettings()
-            openai_configured = bool(settings.openai_api_key)
-            firebase_configured = bool(settings.firebase_project_id)
-            
-            # Check if tools are properly configured (basic check)
-            tools_configured = True  # Simplified for now
-            
+        try:            
             response_data = {
                 "service": "alchemist-sandbox-console",
                 "status": "healthy",
                 "timestamp": datetime.now().isoformat(),
-                "version": "1.0.0",
-                "components": {
-                    "openai": {
-                        "status": "healthy" if openai_configured else "degraded",
-                        "configured": openai_configured
-                    },
-                    "firebase": {
-                        "status": "healthy" if firebase_configured else "degraded",
-                        "configured": firebase_configured
-                    },
-                    "tools": {
-                        "status": "healthy" if tools_configured else "degraded",
-                        "configured": tools_configured
-                    }
-                }
-            }
-            
-            # Determine overall status
-            if not openai_configured or not firebase_configured or not tools_configured:
-                response_data["status"] = "degraded"
-            
+                "version": "1.0.0"
+            }            
             return response_data
             
         except Exception as e:

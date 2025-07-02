@@ -92,10 +92,9 @@ RUN groupadd -r appuser && useradd -r -g appuser appuser
 
 WORKDIR /app
 
-# Copy requirements and install dependencies (excluding alchemist-shared)
+# Copy requirements and install dependencies
 COPY sandbox-console/requirements.txt .
-RUN grep -v "alchemist-shared" requirements.txt > requirements_filtered.txt && \\
-    pip install --no-cache-dir -r requirements_filtered.txt gunicorn
+RUN pip install --no-cache-dir -r requirements.txt gunicorn
 
 # Copy and install shared libraries
 COPY shared /app/shared

@@ -1,9 +1,0 @@
-steps:
-- name: 'gcr.io/cloud-builders/docker'
-  args: ['build', '-f', 'Dockerfile.sandbox-console', '-t', 'gcr.io/alchemist-e69bb/alchemist-sandbox-console:latest', '.']
-- name: 'gcr.io/cloud-builders/docker'
-  args: ['push', 'gcr.io/alchemist-e69bb/alchemist-sandbox-console:latest']
-- name: 'gcr.io/cloud-builders/docker'
-  args: ['tag', 'gcr.io/alchemist-e69bb/alchemist-sandbox-console:latest', 'gcr.io/alchemist-e69bb/alchemist-sandbox-console:20250703-030857']
-- name: 'gcr.io/cloud-builders/docker'
-  args: ['push', 'gcr.io/alchemist-e69bb/alchemist-sandbox-console:20250703-030857']

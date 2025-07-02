@@ -1,5 +1,4 @@
-# Alchemist Shared Library
-alchemist-shared
+# Shared Alchemist libraries are installed separately in Dockerfile
 
 # Core dependencies
 firebase-admin>=6.5.0

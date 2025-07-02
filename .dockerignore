@@ -1,18 +1,18 @@
-# Exclude all other services except sandbox-console and shared
+# Exclude all other services except tool-forge and shared
 admin-dashboard/
 agent-bridge/
 agent-studio/
-agent-tuning-service/
 agent-engine/
+agent-tuning-service/
 alchemist-monitor-service/
 banking-api-service/
 knowledge-vault/
 mcp_config_generator/
-billing-service/
 prompt-engine/
-tool-forge/
+sandbox-console/
 user-deployment-monitor/
 agent-launcher/
+billing-service/
 global-narative-framework/
 
 # Exclude documentation and scripts
@@ -98,8 +98,9 @@ shared/spanner-key.json
 shared/build/
 shared/dist/
 
-# Include what we need for sandbox-console
-!sandbox-console/
+# Include what we need for mcp deployment job
+!tool-forge/deploy_job.py
+!tool-forge/requirements.txt
 !shared/
 
 # Exclude deployment configs at root
