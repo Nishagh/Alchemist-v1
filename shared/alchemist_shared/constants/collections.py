@@ -49,6 +49,10 @@ class Collections:
     # Integrations
     INTEGRATION_CHANNELS = "integration_channels"
     
+    # Tool Forge - MCP Server Management
+    MCP_SERVERS = "mcp_servers"
+    MCP_DEPLOYMENTS = "mcp_deployments"
+    
     # ============================================================================
     # GLOBAL NARRATIVE FRAMEWORK COLLECTIONS
     # ============================================================================
@@ -82,6 +86,8 @@ class Collections:
             cls.KNOWLEDGE_EMBEDDINGS,
             cls.TRAINING_JOBS,
             cls.INTEGRATION_CHANNELS,
+            cls.MCP_SERVERS,
+            cls.MCP_DEPLOYMENTS,
             # GNF Collections
             cls.AGENT_MEMORIES,
             cls.EVOLUTION_EVENTS,
@@ -245,6 +251,20 @@ class DocumentFields:
         ETHICAL_WEIGHT = "ethical_weight"
         DECISION_QUALITY = "decision_quality"
         LEARNING_POTENTIAL = "learning_potential"
+    
+    # ============================================================================
+    # MCP DEPLOYMENT FIELDS
+    # ============================================================================
+    
+    class McpDeployment:
+        DEPLOYMENT_ID = "deployment_id"
+        PROGRESS = "progress"
+        CURRENT_STEP = "current_step"
+        DEPLOYMENT_CONFIG = "deployment_config"
+        ERROR_MESSAGE = "error_message"
+        COMPLETED_AT = "completed_at"
+        SERVICE_URL = "service_url"
+        PROGRESS_STEPS = "progress_steps"
 
 
 class StatusValues:
@@ -262,6 +282,15 @@ class StatusValues:
         DEPLOYED = "deployed"
         FAILED = "failed"
         CANCELLED = "cancelled"
+        
+    # General status values used across services
+    PENDING = "pending"
+    BUILDING = "building"
+    DEPLOYING = "deploying"
+    DEPLOYED = "deployed"
+    FAILED = "failed"
+    DELETING = "deleting"
+    DELETED = "deleted"
     
     # ============================================================================
     # PROCESSING STATUS

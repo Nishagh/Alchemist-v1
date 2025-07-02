@@ -44,33 +44,28 @@ class FirebaseClient:
     
     def _initialize(self):
         """Initialize Firebase app with appropriate credentials."""
+        # Check if app already exists
         try:
-            # Check if app already exists
-            try:
-                app = firebase_admin.get_app()
-                logger.info("Firebase app already initialized")
-            except ValueError:
-                # Initialize new app
-                if self._is_cloud_environment():
-                    logger.info("Initializing Firebase with Application Default Credentials")
-                    app = firebase_admin.initialize_app()
-                else:
-                    logger.info("Initializing Firebase with credentials file")
-                    cred_path = self._get_credentials_path()
-                    cred = credentials.Certificate(cred_path)
-                    app = firebase_admin.initialize_app(cred)
-            
-            # Initialize Firestore client
-            self._firestore_client = firestore.client(app)
-            
-            # Validate deployment security
-            self.validate_deployment_security()
-            
-            logger.info("Firebase client initialized successfully")
-            
-        except Exception as e:
-            logger.error(f"Failed to initialize Firebase client: {e}")
-            raise
+            app = firebase_admin.get_app()
+            logger.info("Firebase app already initialized")
+        except ValueError:
+            # Initialize new app
+            if self._is_cloud_environment():
+                logger.info("Initializing Firebase with Application Default Credentials")
+                app = firebase_admin.initialize_app()
+            else:
+                logger.info("Initializing Firebase with credentials file")
+                cred_path = self._get_credentials_path()
+                cred = credentials.Certificate(cred_path)
+                app = firebase_admin.initialize_app(cred)
+        
+        # Initialize Firestore client
+        self._firestore_client = firestore.client(app)
+        
+        # Validate deployment security
+        self.validate_deployment_security()
+        
+        logger.info("Firebase client initialized successfully")
     
     def _is_cloud_environment(self) -> bool:
         """Check if running in cloud environment."""
@@ -193,32 +188,24 @@ class FirebaseClient:
     
     def _get_storage_bucket(self):
         """Initialize and return Firebase Storage bucket."""
-        try:
-            bucket_name = os.environ.get("FIREBASE_STORAGE_BUCKET")
-            
-            if not bucket_name:
-                project_id = self._get_project_id()
-                bucket_name = f"{project_id}.appspot.com"
-            
-            logger.info(f"Using Firebase Storage bucket: {bucket_name}")
-            return storage.bucket(bucket_name)
-            
-        except Exception as e:
-            logger.error(f"Failed to get Firebase Storage bucket: {e}")
-            raise
+        bucket_name = os.environ.get("FIREBASE_STORAGE_BUCKET")
+        
+        if not bucket_name:
+            project_id = self._get_project_id()
+            bucket_name = f"{project_id}.appspot.com"
+        
+        logger.info(f"Using Firebase Storage bucket: {bucket_name}")
+        return storage.bucket(bucket_name)
     
     def _get_project_id(self) -> str:
         """Get Firebase project ID from environment or credentials file."""
         project_id = os.environ.get("FIREBASE_PROJECT_ID") or os.environ.get("GOOGLE_CLOUD_PROJECT")
         
         if not project_id:
-            try:
-                cred_path = self._get_credentials_path()
-                with open(cred_path, 'r') as f:
-                    cred_data = json.load(f)
-                    project_id = cred_data.get('project_id')
-            except Exception as e:
-                logger.warning(f"Could not extract project ID from credentials: {e}")
+            cred_path = self._get_credentials_path()
+            with open(cred_path, 'r') as f:
+                cred_data = json.load(f)
+                project_id = cred_data.get('project_id')
         
         if not project_id:
             raise ValueError("Firebase project ID not found in environment or credentials")
@@ -290,57 +277,41 @@ class FirebaseClient:
     # CRUD operation methods
     async def add_document(self, collection_name: str, data: Dict[str, Any]) -> str:
         """Add a document to a collection and return the document ID."""
-        try:
-            doc_ref = self.get_collection(collection_name).add(data)
-            # Handle both sync and async returns from Firestore
-            if hasattr(doc_ref, '__await__'):
-                doc_ref = await doc_ref
-            # doc_ref is a tuple (timestamp, document_reference) for add operations
-            if isinstance(doc_ref, tuple):
-                return doc_ref[1].id
-            return doc_ref.id
-        except Exception as e:
-            logger.error(f"Failed to add document to {collection_name}: {e}")
-            raise
+        doc_ref = self.get_collection(collection_name).add(data)
+        # Handle both sync and async returns from Firestore
+        if hasattr(doc_ref, '__await__'):
+            doc_ref = await doc_ref
+        # doc_ref is a tuple (timestamp, document_reference) for add operations
+        if isinstance(doc_ref, tuple):
+            return doc_ref[1].id
+        return doc_ref.id
     
     async def update_document(self, collection_name: str, document_id: str, data: Dict[str, Any]) -> bool:
         """Update a document in a collection."""
-        try:
-            doc_ref = self.get_document(collection_name, document_id)
-            result = doc_ref.update(data)
-            # Handle both sync and async returns from Firestore
-            if hasattr(result, '__await__'):
-                await result
-            return True
-        except Exception as e:
-            logger.error(f"Failed to update document {document_id} in {collection_name}: {e}")
-            raise
+        doc_ref = self.get_document(collection_name, document_id)
+        result = doc_ref.update(data)
+        # Handle both sync and async returns from Firestore
+        if hasattr(result, '__await__'):
+            await result
+        return True
     
     async def get_document_data(self, collection_name: str, document_id: str) -> Optional[Dict[str, Any]]:
         """Get a document's data from a collection."""
-        try:
-            doc_ref = self.get_document(collection_name, document_id)
-            doc = doc_ref.get()
-            # Handle both sync and async returns from Firestore
-            if hasattr(doc, '__await__'):
-                doc = await doc
-            return doc.to_dict() if doc.exists else None
-        except Exception as e:
-            logger.error(f"Failed to get document {document_id} from {collection_name}: {e}")
-            raise
+        doc_ref = self.get_document(collection_name, document_id)
+        doc = doc_ref.get()
+        # Handle both sync and async returns from Firestore
+        if hasattr(doc, '__await__'):
+            doc = await doc
+        return doc.to_dict() if doc.exists else None
     
     async def delete_document(self, collection_name: str, document_id: str) -> bool:
         """Delete a document from a collection."""
-        try:
-            doc_ref = self.get_document(collection_name, document_id)
-            result = doc_ref.delete()
-            # Handle both sync and async returns from Firestore
-            if hasattr(result, '__await__'):
-                await result
-            return True
-        except Exception as e:
-            logger.error(f"Failed to delete document {document_id} from {collection_name}: {e}")
-            raise
+        doc_ref = self.get_document(collection_name, document_id)
+        result = doc_ref.delete()
+        # Handle both sync and async returns from Firestore
+        if hasattr(result, '__await__'):
+            await result
+        return True
 
 
 # Convenience functions for backward compatibility

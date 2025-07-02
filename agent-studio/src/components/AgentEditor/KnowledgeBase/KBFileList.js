@@ -4,6 +4,7 @@
  * Displays files in table or card view with upload and delete functionality
  */
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Table,
@@ -14,7 +15,6 @@ import {
   TableRow,
   IconButton,
   Typography,
-  Grid,
   Paper,
   Button,
   Dialog,
@@ -24,31 +24,46 @@ import {
   Fade,
   Chip,
   LinearProgress,
-  CircularProgress
+  CircularProgress,
+  Tooltip
 } from '@mui/material';
 import {
   Delete as DeleteIcon,
   Upload as UploadIcon,
   CloudUpload as CloudUploadIcon,
-  InsertDriveFile as FileIcon
+  InsertDriveFile as FileIcon,
+  Assessment as AssessmentIcon,
+  PlayArrow as IndexIcon,
+  CleaningServices as CleanAndIndexIcon
 } from '@mui/icons-material';
 import { formatDate, formatFileSize } from '../../../utils/agentEditorHelpers';
 import { getFileTypeFromName } from '../../shared/FileIcon';
 import FileUploadArea from '../AgentConversation/FileUploadArea';
-import KBFileCard from './KBFileCard';
 import StatusBadge from '../../shared/StatusBadge';
 
 const KBFileList = ({ 
   files = [],
-  viewMode = 'table',
+  agentId,
   onFileUpload,
   onFileDelete,
   uploading = false,
   uploadProgress = {},
   searchMode = false,
   searchQuery = '',
-  disabled = false 
+  disabled = false,
+  // New workflow props
+  onAssessQuality,
+  onIndexFile,
+  qualityAssessments = {},
+  indexingStates = {},
+  assessmentLoading = {},
+  indexingLoading = {},
+  deleteLoading = {},
+  getFileWorkflowStatus,
+  isFileReadyForAssessment,
+  isFileReadyForIndexing
 }) => {
+  const navigate = useNavigate();
   const [showUpload, setShowUpload] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState({ open: false, file: null });
 
@@ -56,11 +71,28 @@ const KBFileList = ({
     setDeleteDialog({ open: true, file });
   };
 
-  const handleDeleteConfirm = () => {
-    if (deleteDialog.file && onFileDelete) {
-      onFileDelete(deleteDialog.file.id, deleteDialog.file.filename || deleteDialog.file.name);
+  const handleFileClick = (file) => {
+    // Navigate to existing file detail page using the correct route
+    if (agentId) {
+      navigate(`/knowledge-base/${agentId}/file/${file.id}`, {
+        state: { file }
+      });
+    } else {
+      console.error('Agent ID not provided for navigation');
     }
-    setDeleteDialog({ open: false, file: null });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (deleteDialog.file && onFileDelete) {
+      try {
+        await onFileDelete(deleteDialog.file.id, deleteDialog.file.filename || deleteDialog.file.name);
+        // Close dialog only after successful deletion
+        setDeleteDialog({ open: false, file: null });
+      } catch (error) {
+        // Keep dialog open on error so user can retry
+        console.error('Delete failed, keeping dialog open');
+      }
+    }
   };
 
   const handleDeleteCancel = () => {
@@ -232,12 +264,32 @@ const KBFileList = ({
         <TableBody>
           {files.map((file, index) => (
             <Fade in={true} key={file.id || index} timeout={300 + index * 100}>
-              <TableRow hover>
+              <TableRow 
+                hover={!deleteLoading[file.id]}
+                onClick={() => !deleteLoading[file.id] && handleFileClick(file)}
+                sx={{ 
+                  cursor: deleteLoading[file.id] ? 'not-allowed' : 'pointer',
+                  opacity: deleteLoading[file.id] ? 0.6 : 1,
+                  backgroundColor: deleteLoading[file.id] ? 'action.hover' : 'transparent',
+                  '&:hover': {
+                    backgroundColor: deleteLoading[file.id] ? 'action.hover' : 'action.hover'
+                  }
+                }}
+              >
                 <TableCell>
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <FileIcon filename={file.filename || file.name} sx={{ mr: 2, color: 'text.secondary' }} />
+                    {deleteLoading[file.id] ? (
+                      <CircularProgress size={20} sx={{ mr: 2 }} />
+                    ) : (
+                      <FileIcon filename={file.filename || file.name} sx={{ mr: 2, color: 'text.secondary' }} />
+                    )}
                     <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
                       {file.filename || file.name || 'Unknown File'}
+                      {deleteLoading[file.id] && (
+                        <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                          (Deleting...)
+                        </Typography>
+                      )}
                     </Typography>
                   </Box>
                 </TableCell>
@@ -265,14 +317,71 @@ const KBFileList = ({
                 </TableCell>
                 
                 <TableCell align="right">
-                  <IconButton
-                    onClick={() => handleDeleteClick(file)}
-                    size="small"
-                    color="error"
-                    disabled={disabled}
-                  >
-                    <DeleteIcon />
-                  </IconButton>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                    {/* New Workflow Buttons */}
+                    {isFileReadyForAssessment && isFileReadyForAssessment(file) && (
+                      <Tooltip title={assessmentLoading[file.id] ? "Analyzing content..." : "Assess Content Quality"}>
+                        <IconButton
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onAssessQuality && onAssessQuality(file);
+                          }}
+                          size="small"
+                          disabled={disabled || assessmentLoading[file.id] || deleteLoading[file.id]}
+                          sx={{ mr: 0.5 }}
+                          color="primary"
+                        >
+                          {assessmentLoading[file.id] ? <CircularProgress size={20} /> : <AssessmentIcon />}
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                    
+                    {isFileReadyForIndexing && isFileReadyForIndexing(file) && (
+                      <Tooltip title={indexingLoading[file.id] ? "Indexing..." : "Index Without Cleaning"}>
+                        <IconButton
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onIndexFile && onIndexFile(file.id, false);
+                          }}
+                          size="small"
+                          disabled={disabled || indexingStates[file.id] === 'processing' || indexingLoading[file.id] || deleteLoading[file.id]}
+                          sx={{ mr: 0.5 }}
+                          color="success"
+                        >
+                          {indexingLoading[file.id] ? <CircularProgress size={20} /> : <IndexIcon />}
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                    
+                    {isFileReadyForIndexing && isFileReadyForIndexing(file) && (
+                      <Tooltip title={indexingLoading[file.id] ? "Cleaning & Indexing..." : "Clean Content & Index"}>
+                        <IconButton
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onIndexFile && onIndexFile(file.id, true);
+                          }}
+                          size="small"
+                          disabled={disabled || indexingStates[file.id] === 'processing' || indexingLoading[file.id] || deleteLoading[file.id]}
+                          sx={{ mr: 0.5 }}
+                          color="warning"
+                        >
+                          {indexingLoading[file.id] ? <CircularProgress size={20} /> : <CleanAndIndexIcon />}
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                    
+                    <IconButton
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        !deleteLoading[file.id] && handleDeleteClick(file);
+                      }}
+                      size="small"
+                      color="error"
+                      disabled={disabled || deleteLoading[file.id]}
+                    >
+                      {deleteLoading[file.id] ? <CircularProgress size={20} /> : <DeleteIcon />}
+                    </IconButton>
+                  </Box>
                 </TableCell>
               </TableRow>
             </Fade>
@@ -282,24 +391,6 @@ const KBFileList = ({
     </TableContainer>
   );
 
-  const CardView = () => (
-    <Grid container spacing={2}>
-      {files.map((file, index) => (
-        <Grid item xs={12} sm={6} md={4} key={file.id || index}>
-          <Fade in={true} timeout={300 + index * 100}>
-            <div>
-              <KBFileCard
-                file={file}
-                onDelete={() => handleDeleteClick(file)}
-                disabled={disabled}
-                renderStatus={() => renderFileStatus(file)}
-              />
-            </div>
-          </Fade>
-        </Grid>
-      ))}
-    </Grid>
-  );
 
   return (
     <Box>
@@ -321,7 +412,7 @@ const KBFileList = ({
       {files.length === 0 ? (
         <EmptyState />
       ) : (
-        viewMode === 'table' ? <TableView /> : <CardView />
+        <TableView />
       )}
 
       {/* Upload Dialog */}
@@ -361,9 +452,20 @@ const KBFileList = ({
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleDeleteCancel}>Cancel</Button>
-          <Button onClick={handleDeleteConfirm} color="error" variant="contained">
-            Delete
+          <Button 
+            onClick={handleDeleteCancel}
+            disabled={deleteLoading[deleteDialog.file?.id]}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleDeleteConfirm} 
+            color="error" 
+            variant="contained"
+            disabled={deleteLoading[deleteDialog.file?.id]}
+            startIcon={deleteLoading[deleteDialog.file?.id] ? <CircularProgress size={16} /> : null}
+          >
+            {deleteLoading[deleteDialog.file?.id] ? 'Deleting...' : 'Delete'}
           </Button>
         </DialogActions>
       </Dialog>

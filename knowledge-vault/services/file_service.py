@@ -2,7 +2,7 @@ import os
 import uuid
 import tempfile
 from typing import Dict, List, Any
-from fastapi import UploadFile
+from fastapi import UploadFile, HTTPException
 from datetime import datetime
 from firebase_admin import firestore
 from services.firebase_service import FirebaseService
@@ -20,8 +20,8 @@ class FileService:
         self.firebase_service = FirebaseService()
         self.indexing_service = IndexingService()
     
-    async def upload_file(self, file: UploadFile, agent_id: str) -> Dict[str, Any]:
-        """Upload a file and index its content"""
+    async def upload_file(self, file: UploadFile, agent_id: str, auto_index: bool = False) -> Dict[str, Any]:
+        """Upload a file to storage and optionally index its content"""
         try:
             # Generate unique ID for the file
             file_id = str(uuid.uuid4())
@@ -62,7 +62,7 @@ class FileService:
                 "indexed": False,
                 "purpose": "knowledge base",
                 "chunk_count": 0,
-                "indexing_status": "pending",
+                "indexing_status": "uploaded" if not auto_index else "pending",
                 "indexing_error": None,
                 "last_updated": SERVER_TIMESTAMP
             }
@@ -70,20 +70,176 @@ class FileService:
             # Add file metadata to Firestore
             file_id = self.firebase_service.add_file(file_data)
             
-            # Process and index the file synchronously (wait until indexing is complete)
-            await self._index_file(file_id, file_content, file.content_type, agent_id, file.filename)
-            
-            
-            # Get the updated file data with indexing information
-            updated_file_data = self.firebase_service.get_file(file_id)
-            
-            # Return the updated file metadata that includes indexing status
-            return updated_file_data if updated_file_data else file_data
+            # Only index if auto_index is True (for backward compatibility)
+            if auto_index:
+                await self._index_file(file_id, file_content, file.content_type, agent_id, file.filename)
+                # Get the updated file data with indexing information
+                updated_file_data = self.firebase_service.get_file(file_id)
+                return updated_file_data if updated_file_data else file_data
+            else:
+                # Get the file data from Firestore to get converted timestamps
+                stored_file_data = self.firebase_service.get_file(file_id)
+                return stored_file_data if stored_file_data else file_data
             
         except Exception as e:
             raise Exception(f"Error uploading file: {str(e)}")
     
-    async def _index_file(self, file_id: str, content: bytes, content_type: str, agent_id: str, filename: str) -> None:
+    async def assess_file_quality(self, file_id: str) -> Dict[str, Any]:
+        """Assess content quality and relevance for an uploaded file without indexing"""
+        try:
+            # Get file metadata
+            file_data = self.firebase_service.get_file(file_id)
+            
+            if not file_data:
+                raise HTTPException(status_code=404, detail=f"File with ID {file_id} not found")
+            
+            # Check if assessment already exists and is still valid
+            existing_assessment = file_data.get("quality_assessment")
+            if existing_assessment and existing_assessment.get("assessment"):
+                print(f"Returning cached quality assessment for file {file_id}")
+                return existing_assessment
+            
+            agent_id = file_data.get("agent_id")
+            storage_path = file_data.get("storage_path")
+            content_type = file_data.get("content_type")
+            filename = file_data.get("filename")
+            
+            # Download file content from storage
+            file_content = self.firebase_service.download_file_from_storage(storage_path)
+            
+            # Create temporary file for processing
+            import tempfile
+            with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+                temp_file.write(file_content)
+                temp_file_path = temp_file.name
+            
+            try:
+                # Extract text without processing
+                raw_text = self.indexing_service._extract_text(temp_file_path, content_type)
+                
+                # Import content processor
+                from services.content_processor import ContentProcessor
+                from services.agent_relevance_service import AgentRelevanceService
+                
+                content_processor = ContentProcessor()
+                agent_relevance_service = AgentRelevanceService()
+                
+                # Process content without cleaning to get quality metrics
+                original_result = content_processor.process_content(
+                    text=raw_text,
+                    content_type=content_type,
+                    filename=filename,
+                    agent_id=agent_id,
+                    enable_cleaning=False
+                )
+                
+                # Process content with cleaning to compare
+                cleaned_result = content_processor.process_content(
+                    text=raw_text,
+                    content_type=content_type,
+                    filename=filename,
+                    agent_id=agent_id,
+                    enable_cleaning=True
+                )
+                
+                # Assess agent-specific relevance
+                relevance_assessment = agent_relevance_service.assess_content_relevance(
+                    content=raw_text,
+                    agent_id=agent_id,
+                    content_type=content_type,
+                    filename=filename
+                )
+                
+                # Calculate quality improvement potential
+                quality_improvement = cleaned_result["quality_score"] - original_result["quality_score"]
+                
+                assessment_result = {
+                    "file_id": file_id,
+                    "filename": filename,
+                    "content_type": content_type,
+                    "assessment": {
+                        "original_quality": {
+                            "score": original_result["quality_score"],
+                            "stats": original_result["processing_stats"],
+                            "content_preview": original_result["processed_text"][:1000] + "..." if len(original_result["processed_text"]) > 1000 else original_result["processed_text"]
+                        },
+                        "cleaned_quality": {
+                            "score": cleaned_result["quality_score"],
+                            "stats": cleaned_result["processing_stats"],
+                            "content_preview": cleaned_result["processed_text"][:1000] + "..." if len(cleaned_result["processed_text"]) > 1000 else cleaned_result["processed_text"]
+                        },
+                        "quality_improvement": {
+                            "score_difference": quality_improvement,
+                            "improvement_percentage": round((quality_improvement / max(original_result["quality_score"], 1)) * 100, 2) if original_result["quality_score"] > 0 else 0,
+                            "recommendation": "clean" if quality_improvement > 1 else "index_as_is"
+                        },
+                        "relevance": relevance_assessment,
+                        "content_metadata": original_result.get("content_metadata", {})
+                    }
+                }
+                
+                # Cache the assessment result in the file document for future use
+                self.firebase_service.update_file(file_id, {
+                    "quality_assessment": assessment_result,
+                    "quality_assessment_timestamp": SERVER_TIMESTAMP,
+                    "last_updated": SERVER_TIMESTAMP
+                })
+                
+                print(f"Cached quality assessment for file {file_id}")
+                return assessment_result
+                
+            finally:
+                # Clean up temp file
+                import os
+                try:
+                    os.remove(temp_file_path)
+                except:
+                    pass
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise Exception(f"Error assessing file quality: {str(e)}")
+    
+    async def index_file_with_options(self, file_id: str, enable_cleaning: bool = False) -> Dict[str, Any]:
+        """Index a previously uploaded file with user-specified cleaning options"""
+        try:
+            # Get file metadata
+            file_data = self.firebase_service.get_file(file_id)
+            
+            if not file_data:
+                raise HTTPException(status_code=404, detail=f"File with ID {file_id} not found")
+            
+            # Check if file is already indexed
+            if file_data.get("indexed", False):
+                raise HTTPException(status_code=400, detail="File is already indexed. Use reprocess endpoint to reindex.")
+            
+            agent_id = file_data.get("agent_id")
+            storage_path = file_data.get("storage_path")
+            content_type = file_data.get("content_type")
+            filename = file_data.get("filename")
+            
+            # Download file content from storage
+            file_content = self.firebase_service.download_file_from_storage(storage_path)
+            
+            # Index the file with specified cleaning options
+            await self._index_file(file_id, file_content, content_type, agent_id, filename, enable_cleaning)
+            
+            # Get updated file data
+            updated_file_data = self.firebase_service.get_file(file_id)
+            
+            return {
+                "status": "success",
+                "message": f"File {filename} indexed successfully with cleaning {'enabled' if enable_cleaning else 'disabled'}",
+                "file_data": updated_file_data
+            }
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise Exception(f"Error indexing file: {str(e)}")
+    
+    async def _index_file(self, file_id: str, content: bytes, content_type: str, agent_id: str, filename: str, enable_cleaning: bool = False) -> None:
         """Process and index a file with enhanced phase tracking"""
         # First update to show indexing is in progress
         self.firebase_service.update_file(file_id, {
@@ -106,9 +262,9 @@ class FileService:
                 "last_updated": SERVER_TIMESTAMP
             })
             
-            # Update phase - cleaning content
+            # Update phase - processing content (cleaning optional)
             self.firebase_service.update_file(file_id, {
-                "indexing_phase": "cleaning_content",
+                "indexing_phase": "processing_content",
                 "progress_percent": 40,
                 "last_updated": SERVER_TIMESTAMP
             })
@@ -126,7 +282,8 @@ class FileService:
                 file_id=file_id,
                 content_type=content_type,
                 agent_id=agent_id,
-                filename=filename
+                filename=filename,
+                enable_cleaning=enable_cleaning
             )
             
             # Extract data from the new return structure
@@ -234,28 +391,31 @@ class FileService:
             # Publish story event asynchronously (required)
             story_publisher = get_story_event_publisher()
             
-            # Create async task to publish knowledge acquisition event
-            import asyncio
-            asyncio.create_task(
-                story_publisher.publish_knowledge_event(
-                    agent_id=agent_id,
-                    filename=filename,
-                    action="acquired",
-                    source_service="knowledge-vault",
-                    narrative_content=narrative,
-                    metadata={
-                        "file_id": file_id,
-                        "content_type": content_type,
-                        "chunk_count": len(chunks),
-                        "quality_score": quality_score,
-                        "word_count": content_metadata.get("word_count", 0),
-                        "document_type": content_metadata.get("document_type", "unknown"),
-                        "processing_stats": processing_stats,
-                        "local_reference": file_id  # Reference to local file storage
-                    }
+            if story_publisher:
+                # Create async task to publish knowledge acquisition event
+                import asyncio
+                asyncio.create_task(
+                    story_publisher.publish_knowledge_event(
+                        agent_id=agent_id,
+                        filename=filename,
+                        action="acquired",
+                        source_service="knowledge-vault",
+                        narrative_content=narrative,
+                        metadata={
+                            "file_id": file_id,
+                            "content_type": content_type,
+                            "chunk_count": len(chunks),
+                            "quality_score": quality_score,
+                            "word_count": content_metadata.get("word_count", 0),
+                            "document_type": content_metadata.get("document_type", "unknown"),
+                            "processing_stats": processing_stats,
+                            "local_reference": file_id  # Reference to local file storage
+                        }
+                    )
                 )
-            )
-            logging.info(f"Published knowledge acquisition story event for agent {agent_id}: {filename}")
+                logging.info(f"Published knowledge acquisition story event for agent {agent_id}: {filename}")
+            else:
+                logging.warning("Story event publisher not available, skipping event publication")
             
             # Clean up temporary file
             os.unlink(temp_file_path)
@@ -281,7 +441,7 @@ class FileService:
             file_data = self.firebase_service.get_file(file_id)
             
             if not file_data:
-                raise Exception(f"File with ID {file_id} not found")
+                raise HTTPException(status_code=404, detail=f"File with ID {file_id} not found")
             
             agent_id = file_data.get("agent_id")
             
@@ -318,31 +478,36 @@ class FileService:
                 # Publish story event asynchronously (required)
                 story_publisher = get_story_event_publisher()
                 
-                # Create removal narrative
-                removal_narrative = f"I have removed {file_data.get('filename', 'a knowledge file')} from my knowledge base. This reduction in my available knowledge resources may affect my capabilities in related areas, but ensures my information remains current and relevant."
-                
-                # Create async task to publish knowledge removal event
-                import asyncio
-                asyncio.create_task(
-                    story_publisher.publish_knowledge_event(
-                        agent_id=agent_id,
-                        filename=file_data.get('filename', 'unknown'),
-                        action="removed",
-                        source_service="knowledge-vault",
-                        narrative_content=removal_narrative,
-                        metadata={
-                            "file_id": file_id,
-                            "original_filename": file_data.get("filename", "unknown"),
-                            "content_type": file_data.get("content_type", "unknown"),
-                            "chunk_count": file_data.get("chunk_count", 0),
-                            "local_reference": file_id  # Reference to local file storage
-                        }
+                if story_publisher:
+                    # Create removal narrative
+                    removal_narrative = f"I have removed {file_data.get('filename', 'a knowledge file')} from my knowledge base. This reduction in my available knowledge resources may affect my capabilities in related areas, but ensures my information remains current and relevant."
+                    
+                    # Create async task to publish knowledge removal event
+                    import asyncio
+                    asyncio.create_task(
+                        story_publisher.publish_knowledge_event(
+                            agent_id=agent_id,
+                            filename=file_data.get('filename', 'unknown'),
+                            action="removed",
+                            source_service="knowledge-vault",
+                            narrative_content=removal_narrative,
+                            metadata={
+                                "file_id": file_id,
+                                "original_filename": file_data.get("filename", "unknown"),
+                                "content_type": file_data.get("content_type", "unknown"),
+                                "chunk_count": file_data.get("chunk_count", 0),
+                                "local_reference": file_id  # Reference to local file storage
+                            }
+                        )
                     )
-                )
-                logging.info(f"Published knowledge removal story event for agent {agent_id}: {file_data.get('filename')}")
+                    logging.info(f"Published knowledge removal story event for agent {agent_id}: {file_data.get('filename')}")
+                else:
+                    logging.warning("Story event publisher not available, skipping event publication")
             
             return {"status": "success", "message": f"File {file_data['filename']} deleted successfully"}
             
+        except HTTPException:
+            raise
         except Exception as e:
             raise Exception(f"Error deleting file: {str(e)}")
     
@@ -410,7 +575,7 @@ class FileService:
         except Exception as e:
             raise Exception(f"Error getting agent embedding stats: {str(e)}")
     
-    def reprocess_file(self, file_id: str) -> Dict[str, Any]:
+    async def reprocess_file(self, file_id: str, enable_cleaning: bool = False) -> Dict[str, Any]:
         """Reprocess an existing file with enhanced cleaning pipeline"""
         try:
             # Get file metadata
@@ -431,7 +596,7 @@ class FileService:
             self.indexing_service.delete_file_vectors(file_id)
             
             # Reprocess the file
-            self._index_file(file_id, file_content, content_type, agent_id, filename)
+            await self._index_file(file_id, file_content, content_type, agent_id, filename, enable_cleaning)
             
             # Get updated file data
             updated_file_data = self.firebase_service.get_file(file_id)
@@ -629,29 +794,32 @@ Generate a narrative response that the agent might give when reflecting on acqui
             if agent_id:
                 story_publisher = get_story_event_publisher()
                 
-                # Create update narrative
-                update_narrative = f"I have updated the content of {filename} in my knowledge base. This revision ensures my knowledge remains current and accurate, allowing me to provide better assistance based on the most up-to-date information."
-                
-                # Create async task to publish knowledge update event
-                import asyncio
-                asyncio.create_task(
-                    story_publisher.publish_knowledge_event(
-                        agent_id=agent_id,
-                        filename=filename,
-                        action="updated",
-                        source_service="knowledge-vault",
-                        narrative_content=update_narrative,
-                        metadata={
-                            "file_id": file_id,
-                            "original_filename": filename,
-                            "content_type": file_data.get("content_type", "unknown"),
-                            "new_size": len(content_bytes),
-                            "operation": "content_update",
-                            "local_reference": file_id
-                        }
+                if story_publisher:
+                    # Create update narrative
+                    update_narrative = f"I have updated the content of {filename} in my knowledge base. This revision ensures my knowledge remains current and accurate, allowing me to provide better assistance based on the most up-to-date information."
+                    
+                    # Create async task to publish knowledge update event
+                    import asyncio
+                    asyncio.create_task(
+                        story_publisher.publish_knowledge_event(
+                            agent_id=agent_id,
+                            filename=filename,
+                            action="updated",
+                            source_service="knowledge-vault",
+                            narrative_content=update_narrative,
+                            metadata={
+                                "file_id": file_id,
+                                "original_filename": filename,
+                                "content_type": file_data.get("content_type", "unknown"),
+                                "new_size": len(content_bytes),
+                                "operation": "content_update",
+                                "local_reference": file_id
+                            }
+                        )
                     )
-                )
-                logging.info(f"Published knowledge update story event for agent {agent_id}: {filename}")
+                    logging.info(f"Published knowledge update story event for agent {agent_id}: {filename}")
+                else:
+                    logging.warning("Story event publisher not available, skipping event publication")
             
             return {
                 "status": "success",

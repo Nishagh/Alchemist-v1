@@ -17,7 +17,8 @@ import {
   LinearProgress,
   Chip,
   Collapse,
-  Stack
+  Stack,
+  CircularProgress
 } from '@mui/material';
 import {
   Delete as DeleteIcon,
@@ -26,7 +27,10 @@ import {
   Refresh as RefreshIcon,
   AutoFixHigh as CleanIcon,
   Speed as QualityIcon,
-  Preview as PreviewIcon
+  Preview as PreviewIcon,
+  Assessment as AssessmentIcon,
+  PlayArrow as IndexIcon,
+  CleaningServices as CleanAndIndexIcon
 } from '@mui/icons-material';
 import { formatDate, formatFileSize } from '../../../utils/agentEditorHelpers';
 import { getFileTypeFromName } from '../../shared/FileIcon';
@@ -43,7 +47,17 @@ const KBFileCard = ({
   disabled = false,
   renderStatus,
   showDetails = false,
-  onToggleDetails
+  onToggleDetails,
+  // New workflow props
+  onAssessQuality,
+  onIndexFile,
+  qualityAssessments = {},
+  indexingStates = {},
+  assessmentLoading = {},
+  indexingLoading = {},
+  getFileWorkflowStatus,
+  isFileReadyForAssessment,
+  isFileReadyForIndexing
 }) => {
   const theme = useTheme();
   const [showPreview, setShowPreview] = useState(false);
@@ -92,6 +106,7 @@ const KBFileCard = ({
       case 'processing': return 'info';
       case 'failed': return 'error';
       case 'pending': return 'default';
+      case 'uploaded': return 'warning'; // New status for uploaded but not indexed
       default: return 'default';
     }
   };
@@ -222,7 +237,7 @@ const KBFileCard = ({
         {indexingStatus !== 'unknown' && (
           <Box sx={{ mb: 2 }}>
             <Chip
-              label={indexingStatus.charAt(0).toUpperCase() + indexingStatus.slice(1)}
+              label={getFileWorkflowStatus ? getFileWorkflowStatus(file) : indexingStatus.charAt(0).toUpperCase() + indexingStatus.slice(1)}
               size="small"
               color={getStatusColor(indexingStatus)}
               variant="filled"
@@ -395,6 +410,49 @@ const KBFileCard = ({
                 sx={{ mr: 1 }}
               >
                 <InfoIcon />
+              </IconButton>
+            </Tooltip>
+          )}
+          
+          {/* New Workflow Buttons */}
+          {isFileReadyForAssessment && isFileReadyForAssessment(file) && (
+            <Tooltip title={assessmentLoading[file.id] ? "Analyzing content..." : "Assess Content Quality"}>
+              <IconButton
+                onClick={() => onAssessQuality && onAssessQuality(file)}
+                size="small"
+                disabled={disabled || assessmentLoading[file.id]}
+                sx={{ mr: 1 }}
+                color="primary"
+              >
+                {assessmentLoading[file.id] ? <CircularProgress size={20} /> : <AssessmentIcon />}
+              </IconButton>
+            </Tooltip>
+          )}
+          
+          {isFileReadyForIndexing && isFileReadyForIndexing(file) && (
+            <Tooltip title={indexingLoading[file.id] ? "Indexing..." : "Index Without Cleaning"}>
+              <IconButton
+                onClick={() => onIndexFile && onIndexFile(file.id, false)}
+                size="small"
+                disabled={disabled || indexingStates[file.id] === 'processing' || indexingLoading[file.id]}
+                sx={{ mr: 1 }}
+                color="success"
+              >
+                {indexingLoading[file.id] ? <CircularProgress size={20} /> : <IndexIcon />}
+              </IconButton>
+            </Tooltip>
+          )}
+          
+          {isFileReadyForIndexing && isFileReadyForIndexing(file) && (
+            <Tooltip title={indexingLoading[file.id] ? "Cleaning & Indexing..." : "Clean Content & Index"}>
+              <IconButton
+                onClick={() => onIndexFile && onIndexFile(file.id, true)}
+                size="small"
+                disabled={disabled || indexingStates[file.id] === 'processing' || indexingLoading[file.id]}
+                sx={{ mr: 1 }}
+                color="warning"
+              >
+                {indexingLoading[file.id] ? <CircularProgress size={20} /> : <CleanAndIndexIcon />}
               </IconButton>
             </Tooltip>
           )}

@@ -35,7 +35,7 @@ class IndexingService:
                       "Indexing configuration: Enhanced with content processing",
                       {"chunk_size": self.chunk_size, "chunk_overlap": self.chunk_overlap})
         
-    def process_file(self, file_path: str, file_id: str, content_type: str, agent_id: str, filename: str) -> List[Dict[str, Any]]:
+    def process_file(self, file_path: str, file_id: str, content_type: str, agent_id: str, filename: str, enable_cleaning: bool = False) -> List[Dict[str, Any]]:
         """Process a file with enhanced cleaning and smart chunking"""
         log_with_data(self.logger, "INFO", "Starting enhanced file processing", {
             "file_id": file_id,
@@ -51,7 +51,8 @@ class IndexingService:
             text=raw_text,
             content_type=content_type,
             filename=filename,
-            agent_id=agent_id
+            agent_id=agent_id,
+            enable_cleaning=enable_cleaning
         )
         
         processed_text = processing_result["processed_text"]

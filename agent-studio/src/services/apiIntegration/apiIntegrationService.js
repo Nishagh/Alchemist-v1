@@ -7,7 +7,7 @@
 import axios from 'axios';
 import { auth } from '../../utils/firebase';
 import { getAuthToken } from '../auth/authService';
-import { AGENT_ENGINE_URL, ENDPOINTS } from '../config/apiConfig';
+import { AGENT_ENGINE_URL, TOOL_FORGE_URL, ENDPOINTS } from '../config/apiConfig';
 
 /**
  * Upload an OpenAPI specification or MCP config for an agent
@@ -47,10 +47,10 @@ export const uploadApiSpecification = async (agentId, file) => {
     const formEntries = [...formData.entries()];
     console.log('Form data fields:', formEntries.map(entry => `${entry[0]}: ${entry[1] instanceof File ? entry[1].name : entry[1]}`));
     
-    // Use axios directly with proper authentication
+    // Use axios directly with proper authentication (now calling tool-forge)
     const response = await axios({
       method: 'post',
-      url: `${AGENT_ENGINE_URL}/api/agents/${agentId}/config`,
+      url: `${TOOL_FORGE_URL}/api/agents/${agentId}/config`,
       data: formData,
       headers: {
         'Authorization': `Bearer ${token}`

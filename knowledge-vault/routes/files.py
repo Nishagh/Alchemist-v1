@@ -19,15 +19,26 @@ class BatchReprocessRequest(BaseModel):
 class ContentUpdateRequest(BaseModel):
     content: str
 
+class ContentCleaningRequest(BaseModel):
+    enable_cleaning: bool = False
+    
+class BatchContentCleaningRequest(BaseModel):
+    file_ids: List[str]
+    enable_cleaning: bool = False
+
 @router.post("/upload-knowledge-base", response_model=FileResponse, tags=["knowledge-base"])
 async def upload_file(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    agent_id: str = Form(...)
+    agent_id: str = Form(...),
+    auto_index: bool = Form(False)
 ):
     """
     Upload a file to the knowledge base for a specific agent.
-    The file will be stored and indexed for semantic search.
+    
+    New workflow:
+    - auto_index=False (default): File is uploaded but not indexed. Use /assess-quality and /index endpoints.
+    - auto_index=True: File is uploaded and automatically indexed (legacy behavior).
     """
     try:
         # Validate file size (limit to 10MB)
@@ -39,9 +50,9 @@ async def upload_file(
         if file_size > 10 * 1024 * 1024:  # 10MB
             raise HTTPException(status_code=400, detail="File too large (max 10MB)")
 
-        # Upload file and index in background
-        result = await file_service.upload_file(file, agent_id)
-        print("File uploaded and indexed successfully", result)
+        # Upload file and optionally index
+        result = await file_service.upload_file(file, agent_id, auto_index)
+        print("File uploaded successfully", result)
 
         return FileResponse(
             id=result["id"],
@@ -60,6 +71,48 @@ async def upload_file(
             last_updated=result.get("last_updated", result["upload_date"]),
             chunk_analysis_available=bool(result.get("chunk_analysis") and not result.get("chunk_analysis", {}).get("error"))
         )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/knowledge-base/files/{file_id}/assess-quality", tags=["knowledge-base"])
+async def assess_file_quality(file_id: str):
+    """
+    Assess content quality and relevance for an uploaded file without indexing.
+    
+    This endpoint provides:
+    - Original content quality score and preview
+    - Cleaned content quality score and preview  
+    - Quality improvement potential
+    - Agent-specific relevance assessment
+    - Recommendation (clean vs index_as_is)
+    """
+    try:
+        result = await file_service.assess_file_quality(file_id)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class IndexingRequest(BaseModel):
+    enable_cleaning: bool = False
+
+@router.post("/knowledge-base/files/{file_id}/index", tags=["knowledge-base"])
+async def index_uploaded_file(file_id: str, request: IndexingRequest):
+    """
+    Index a previously uploaded file with user-specified cleaning options.
+    
+    Args:
+        file_id: ID of the uploaded file to index
+        enable_cleaning: Whether to apply AI-powered content cleaning before indexing
+        
+    The file must be in 'uploaded' status (not already indexed).
+    """
+    try:
+        result = await file_service.index_file_with_options(file_id, request.enable_cleaning)
+        return result
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -105,6 +158,8 @@ async def delete_file(file_id: str):
     try:
         result = await file_service.delete_file(file_id)
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -168,12 +223,161 @@ async def get_agent_embedding_stats(agent_id: str):
 @router.post("/knowledge-base/files/{file_id}/reprocess", tags=["knowledge-base"])
 async def reprocess_file(file_id: str):
     """
-    Reprocess a file with enhanced cleaning pipeline.
-    This will delete existing embeddings and recreate them with improved content processing.
+    Reprocess a file without content cleaning.
+    This will delete existing embeddings and recreate them with the original content.
+    For content cleaning, use the /clean-and-reindex endpoint instead.
     """
     try:
-        result = file_service.reprocess_file(file_id)
+        result = await file_service.reprocess_file(file_id)
         return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/knowledge-base/files/{file_id}/clean-and-reindex", tags=["knowledge-base"])
+async def clean_and_reindex_file(file_id: str, request: ContentCleaningRequest):
+    """
+    Clean content and re-index a file with user-controlled content cleaning.
+    This allows users to control whether content cleaning is applied during reprocessing.
+    
+    Args:
+        file_id: ID of the file to process
+        enable_cleaning: Whether to apply AI-powered content cleaning (default: False)
+    
+    Returns:
+        Processing result with quality scores and metadata
+    """
+    try:
+        result = await file_service.reprocess_file(file_id, enable_cleaning=request.enable_cleaning)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/knowledge-base/files/batch-clean-and-reindex", tags=["knowledge-base"])
+async def batch_clean_and_reindex_files(request: BatchContentCleaningRequest):
+    """
+    Clean content and re-index multiple files with user-controlled content cleaning.
+    This allows bulk processing with controlled cleaning settings.
+    
+    Args:
+        file_ids: List of file IDs to process
+        enable_cleaning: Whether to apply content cleaning to all files (default: False)
+    
+    Returns:
+        Batch processing results with individual file outcomes
+    """
+    try:
+        results = []
+        errors = []
+        
+        for file_id in request.file_ids:
+            try:
+                result = await file_service.reprocess_file(file_id, enable_cleaning=request.enable_cleaning)
+                results.append({"file_id": file_id, "status": "success", "result": result})
+            except Exception as e:
+                errors.append({"file_id": file_id, "status": "error", "error": str(e)})
+        
+        return {
+            "processed": len(results),
+            "errors": len(errors),
+            "results": results,
+            "error_details": errors,
+            "cleaning_enabled": request.enable_cleaning
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/knowledge-base/files/{file_id}/preview-cleaning", tags=["knowledge-base"])
+async def preview_content_cleaning(file_id: str, request: ContentCleaningRequest):
+    """
+    Preview what content cleaning would do to a file without applying changes.
+    This allows users to see the difference between original and cleaned content
+    before deciding whether to apply cleaning.
+    
+    Works with both uploaded (unindexed) and indexed files.
+    
+    Args:
+        file_id: ID of the file to preview
+        enable_cleaning: Whether to show cleaned version (True) or original (False, default)
+    
+    Returns:
+        Content preview with quality scores and processing statistics
+    """
+    try:
+        # Get file metadata
+        file_data = file_service.firebase_service.get_file(file_id)
+        
+        if not file_data:
+            raise HTTPException(status_code=404, detail=f"File with ID {file_id} not found")
+        
+        # Get file content from storage
+        agent_id = file_data.get("agent_id")
+        storage_path = file_data.get("storage_path")
+        content_type = file_data.get("content_type")
+        filename = file_data.get("filename")
+        
+        # Download file content
+        file_content = file_service.firebase_service.download_file_from_storage(storage_path)
+        
+        # Create temporary file for processing
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+            temp_file.write(file_content)
+            temp_file_path = temp_file.name
+        
+        try:
+            # Extract text
+            raw_text = file_service.indexing_service._extract_text(temp_file_path, content_type)
+            
+            # Process content with user's cleaning preference
+            processing_result = content_processor.process_content(
+                text=raw_text,
+                content_type=content_type,
+                filename=filename,
+                agent_id=agent_id,
+                enable_cleaning=request.enable_cleaning
+            )
+            
+            # Also process without cleaning for comparison
+            comparison_result = content_processor.process_content(
+                text=raw_text,
+                content_type=content_type,
+                filename=filename,
+                agent_id=agent_id,
+                enable_cleaning=not request.enable_cleaning
+            )
+            
+            return {
+                "file_id": file_id,
+                "filename": filename,
+                "content_type": content_type,
+                "cleaning_enabled": request.enable_cleaning,
+                "preview": {
+                    "original_text": raw_text[:2000] + "..." if len(raw_text) > 2000 else raw_text,
+                    "processed_text": processing_result["processed_text"][:2000] + "..." if len(processing_result["processed_text"]) > 2000 else processing_result["processed_text"],
+                    "quality_score": processing_result["quality_score"],
+                    "processing_stats": processing_result["processing_stats"],
+                    "relevance_score": processing_result.get("relevance_score"),
+                    "agent_specific_quality": processing_result.get("agent_specific_quality")
+                },
+                "comparison": {
+                    "alternative_text": comparison_result["processed_text"][:2000] + "..." if len(comparison_result["processed_text"]) > 2000 else comparison_result["processed_text"],
+                    "alternative_quality_score": comparison_result["quality_score"],
+                    "alternative_processing_stats": comparison_result["processing_stats"],
+                    "alternative_relevance_score": comparison_result.get("relevance_score"),
+                    "alternative_agent_specific_quality": comparison_result.get("agent_specific_quality")
+                }
+            }
+            
+        finally:
+            # Clean up temp file
+            import os
+            try:
+                os.remove(temp_file_path)
+            except:
+                pass
+        
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

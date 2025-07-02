@@ -230,32 +230,20 @@ class SpannerGraphService:
         ]
         
         # Execute DDL
-        try:
-            operation = self.database.update_ddl(create_tables_ddl + create_indexes_ddl)
-            operation.result(timeout=300)  # Wait up to 5 minutes
-            logger.info("Spanner Graph database initialized for agent life-stories")
-        except Exception as e:
-            error_str = str(e)
-            if any(phrase in error_str for phrase in ["Duplicate name", "already exists", "FailedPrecondition"]):
-                logger.info("Spanner Graph database tables already exist, skipping initialization")
-            else:
-                logger.error(f"Failed to initialize Spanner database: {e}")
-                raise
+        operation = self.database.update_ddl(create_tables_ddl + create_indexes_ddl)
+        operation.result(timeout=300)  # Wait up to 5 minutes
+        logger.info("Spanner Graph database initialized for agent life-stories")
 
     async def _tables_exist(self) -> bool:
         """Check if the required tables already exist in the database"""
-        try:
-            # Query the information schema to check for our main table
-            with self.database.snapshot() as snapshot:
-                results = snapshot.execute_sql(
-                    "SELECT table_name FROM information_schema.tables "
-                    "WHERE table_schema = '' AND table_name = 'StoryEvents'"
-                )
-                tables = list(results)
-                return len(tables) > 0
-        except Exception as e:
-            logger.warning(f"Error checking if tables exist: {e}")
-            return False
+        # Query the information schema to check for our main table
+        with self.database.snapshot() as snapshot:
+            results = snapshot.execute_sql(
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_schema = '' AND table_name = 'StoryEvents'"
+            )
+            tables = list(results)
+            return len(tables) > 0
 
     async def create_agent_story(self, agent_id: str, core_objective: str, story_title: str = None) -> bool:
         """

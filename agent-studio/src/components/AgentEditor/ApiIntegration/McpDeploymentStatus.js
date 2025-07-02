@@ -3,7 +3,7 @@
  * 
  * Component for displaying and managing MCP server deployment status
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Paper,
@@ -42,6 +42,7 @@ import {
 } from '@mui/icons-material';
 import { formatDeploymentStatus, convertTimestamp } from '../../../utils/agentEditorHelpers';
 import StatusBadge from '../../shared/StatusBadge';
+import { subscribeToDeploymentStatus } from '../../../services/mcpServer/mcpServerService';
 
 const McpDeploymentStatus = ({ 
   agentId,
@@ -51,11 +52,80 @@ const McpDeploymentStatus = ({
   onDeploy,
   onStop,
   deploying = false,
-  disabled = false 
+  disabled = false,
+  currentDeploymentId = null // New prop for tracking current deployment
 }) => {
   const [expandedAccordion, setExpandedAccordion] = useState(false);
+  const [realtimeDeploymentStatus, setRealtimeDeploymentStatus] = useState(null);
+  const [deploymentError, setDeploymentError] = useState(null);
+
+  // Set up real-time listener for deployment status
+  useEffect(() => {
+    let unsubscribe = null;
+    
+    if (currentDeploymentId) {
+      console.log('Setting up real-time listener for deployment:', currentDeploymentId);
+      
+      try {
+        unsubscribe = subscribeToDeploymentStatus(
+          currentDeploymentId,
+          (deploymentData, error) => {
+            if (error) {
+              console.error('Real-time deployment listener error:', error);
+              setDeploymentError(error.message);
+              return;
+            }
+            
+            if (deploymentData) {
+              console.log('Real-time deployment update:', deploymentData);
+              setRealtimeDeploymentStatus(deploymentData);
+              setDeploymentError(null);
+            } else {
+              console.log('Deployment document not found');
+              setRealtimeDeploymentStatus(null);
+            }
+          }
+        );
+      } catch (error) {
+        console.error('Error setting up deployment listener:', error);
+        setDeploymentError(error.message);
+      }
+    }
+    
+    return () => {
+      if (unsubscribe) {
+        console.log('Cleaning up real-time deployment listener');
+        unsubscribe();
+      }
+    };
+  }, [currentDeploymentId]);
 
   const getDeploymentSteps = () => {
+    // Use real-time status if available, otherwise fall back to prop
+    const currentStatus = realtimeDeploymentStatus || deploymentStatus;
+    const progressSteps = realtimeDeploymentStatus?.progress_steps || [];
+    
+    // If we have progress steps from real-time data, use them
+    if (progressSteps.length > 0) {
+      return progressSteps.map(step => {
+        // Normalize step names to be more user-friendly
+        const stepNames = {
+          'queued': 'Queued',
+          'validating': 'Validating Specifications',
+          'building': 'Building MCP Server',
+          'deploying': 'Deploying to Cloud',
+          'testing': 'Testing Integration'
+        };
+        
+        return {
+          label: stepNames[step.step] || step.step.charAt(0).toUpperCase() + step.step.slice(1),
+          description: step.message || `${stepNames[step.step] || step.step} in progress`,
+          status: step.status
+        };
+      });
+    }
+    
+    // Fallback to static steps based on status
     const steps = [
       {
         label: 'Preparing Deployment',
@@ -65,19 +135,19 @@ const McpDeploymentStatus = ({
       {
         label: 'Building MCP Server',
         description: 'Creating containerized MCP server with your API integrations',
-        status: deploymentStatus?.status === 'pending' ? 'active' : 
-                deploymentStatus?.status === 'deploying' ? 'completed' : 'pending'
+        status: currentStatus?.status === 'pending' ? 'active' : 
+                currentStatus?.status === 'deploying' ? 'completed' : 'pending'
       },
       {
         label: 'Deploying to Cloud',
         description: 'Deploying server to cloud infrastructure and configuring endpoints',
-        status: deploymentStatus?.status === 'deploying' ? 'active' :
-                deploymentStatus?.status === 'deployed' ? 'completed' : 'pending'
+        status: currentStatus?.status === 'deploying' ? 'active' :
+                currentStatus?.status === 'deployed' ? 'completed' : 'pending'
       },
       {
         label: 'Testing Integration',
         description: 'Verifying server health and testing API connectivity',
-        status: deploymentStatus?.status === 'deployed' ? 'completed' : 'pending'
+        status: currentStatus?.status === 'deployed' ? 'completed' : 'pending'
       }
     ];
 
@@ -85,13 +155,49 @@ const McpDeploymentStatus = ({
   };
 
   const getActiveStep = () => {
-    if (!deploymentStatus) return -1;
+    const currentStatus = realtimeDeploymentStatus || deploymentStatus;
+    if (!currentStatus) return -1;
     
-    switch (deploymentStatus.status) {
+    // If we have progress steps, find the active one
+    const progressSteps = realtimeDeploymentStatus?.progress_steps || [];
+    if (progressSteps.length > 0) {
+      // Find the last completed step and the first active/in_progress step
+      let lastCompletedIndex = -1;
+      let activeStepIndex = -1;
+      
+      progressSteps.forEach((step, index) => {
+        if (step.status === 'completed') {
+          lastCompletedIndex = index;
+        } else if ((step.status === 'active' || step.status === 'in_progress') && activeStepIndex === -1) {
+          activeStepIndex = index;
+        }
+      });
+      
+      // If there's an active step, return its index
+      if (activeStepIndex >= 0) {
+        return activeStepIndex;
+      }
+      
+      // If there are completed steps but no active step, return the next step after the last completed
+      if (lastCompletedIndex >= 0) {
+        return Math.min(lastCompletedIndex + 1, progressSteps.length - 1);
+      }
+      
+      // If no steps are completed, return 0
+      return 0;
+    }
+    
+    // Fallback to status-based logic
+    switch (currentStatus.status) {
+      case 'queued':
+        return 0;
+      case 'validating':
       case 'pending':
         return 1;
-      case 'deploying':
+      case 'building':
         return 2;
+      case 'deploying':
+        return 3;
       case 'deployed':
         return 4;
       case 'failed':
@@ -132,10 +238,19 @@ const McpDeploymentStatus = ({
   );
 
   const renderDeploymentProgress = () => {
-    if (!deploymentStatus) return null;
+    const currentStatus = realtimeDeploymentStatus || deploymentStatus;
+    if (!currentStatus) return null;
 
     const activeStep = getActiveStep();
     const steps = getDeploymentSteps();
+
+    // Debug logging
+    console.log('Rendering deployment progress:', {
+      activeStep,
+      steps: steps.map((s, i) => ({ index: i, label: s.label, status: s.status })),
+      progressSteps: realtimeDeploymentStatus?.progress_steps,
+      currentStatus: currentStatus.status
+    });
 
     return (
       <Box sx={{ mt: 3 }}>
@@ -143,20 +258,47 @@ const McpDeploymentStatus = ({
           Deployment Progress
         </Typography>
         
+        {/* Real-time progress information */}
+        {realtimeDeploymentStatus && (
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              Current Step: {realtimeDeploymentStatus.current_step}
+            </Typography>
+            {realtimeDeploymentStatus.progress !== undefined && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
+                <LinearProgress 
+                  variant="determinate" 
+                  value={realtimeDeploymentStatus.progress} 
+                  sx={{ flex: 1 }}
+                />
+                <Typography variant="body2" color="text.secondary">
+                  {realtimeDeploymentStatus.progress}%
+                </Typography>
+              </Box>
+            )}
+          </Box>
+        )}
+        
         <Stepper activeStep={activeStep} orientation="vertical">
           {steps.map((step, index) => (
-            <Step key={step.label}>
+            <Step key={step.label} completed={step.status === 'completed'}>
               <StepLabel
                 StepIconComponent={({ active, completed, error }) => {
-                  if (deploymentStatus.status === 'failed' && index === activeStep) {
+                  // Check for error state first
+                  if (currentStatus.status === 'failed' && index === activeStep) {
                     return <ErrorIcon color="error" />;
                   }
-                  if (completed) {
+                  
+                  // Use step status for icon rendering
+                  if (step.status === 'completed') {
                     return <CheckCircleIcon color="success" />;
                   }
-                  if (active) {
-                    return <ScheduleIcon color="primary" />;
+                  
+                  if (step.status === 'active' || step.status === 'in_progress') {
+                    return <PendingIcon color="primary" sx={{ animation: 'pulse 2s infinite' }} />;
                   }
+                  
+                  // Default pending state
                   return <ScheduleIcon color="disabled" />;
                 }}
               >
@@ -168,7 +310,7 @@ const McpDeploymentStatus = ({
                 <Typography variant="body2" color="text.secondary">
                   {step.description}
                 </Typography>
-                {index === activeStep && deploymentStatus.status === 'deploying' && (
+                {(step.status === 'active' || step.status === 'in_progress') && (
                   <Box sx={{ mt: 1 }}>
                     <LinearProgress size="small" />
                   </Box>
@@ -177,6 +319,18 @@ const McpDeploymentStatus = ({
             </Step>
           ))}
         </Stepper>
+        
+        {/* Error display */}
+        {(currentStatus.error_message || deploymentError) && (
+          <Alert severity="error" sx={{ mt: 2 }}>
+            <Typography variant="body2" sx={{ fontWeight: 'medium', mb: 1 }}>
+              Deployment Error:
+            </Typography>
+            <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+              {currentStatus.error_message || deploymentError}
+            </Typography>
+          </Alert>
+        )}
       </Box>
     );
   };

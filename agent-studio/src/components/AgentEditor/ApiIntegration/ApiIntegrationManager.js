@@ -17,15 +17,17 @@ import {
 } from '@mui/icons-material';
 import { 
   uploadApiSpecification,
-  deleteApiIntegration,
-  deployMcpServer,
-  checkDeploymentStatus
+  deleteApiIntegration
 } from '../../../services';
+import { 
+  deployMcpServer,
+  subscribeToDeploymentStatus
+} from '../../../services/mcpServer/mcpServerService';
 import { createNotification } from '../../shared/NotificationSystem';
 import ApiUploadPanel from './ApiUploadPanel';
 import McpDeploymentStatus from './McpDeploymentStatus';
 import { useAgentState } from '../../../hooks/useAgentState';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../../../utils/firebase';
 import { useAuth } from '../../../utils/AuthContext';
 
@@ -43,6 +45,8 @@ const ApiIntegrationManager = ({
   const [deploymentStatus, setDeploymentStatus] = useState(null);
   const [integrationSummary, setIntegrationSummary] = useState(null);
   const [deploymentHistory, setDeploymentHistory] = useState([]);
+  const [currentDeploymentId, setCurrentDeploymentId] = useState(null);
+  const [deploymentUnsubscribe, setDeploymentUnsubscribe] = useState(null);
 
   // Load API integrations from Firestore agent document
   useEffect(() => {
@@ -116,68 +120,77 @@ const ApiIntegrationManager = ({
     }
   }, [agent, agentId]);
 
-  // Listen to deployment history from Firestore
+  // Listen to MCP deployment requests from the new mcp_deployments collection
   useEffect(() => {
     if (agentId && currentUser) {
-      console.log('Setting up deployment history listener for agent:', agentId);
+      console.log('Setting up MCP deployment listener for agent:', agentId);
       
-      // Create a reference to the deployments subcollection
-      const deploymentsRef = collection(db, 'agents', agentId, 'deployments');
-      const deploymentsQuery = query(deploymentsRef, orderBy('created_at', 'desc'));
+      // Listen to mcp_deployments collection for this specific agent
+      const deploymentsRef = collection(db, 'mcp_deployments');
+      const deploymentsQuery = query(
+        deploymentsRef,
+        where('agent_id', '==', agentId),
+        orderBy('created_at', 'desc')
+      );
       
       const unsubscribe = onSnapshot(deploymentsQuery, (snapshot) => {
-        const deployments = [];
+        const agentDeployments = [];
+        
         snapshot.forEach((doc) => {
-          deployments.push({
-            id: doc.id,
-            ...doc.data()
-          });
+          const deploymentData = { id: doc.id, ...doc.data() };
+          agentDeployments.push(deploymentData);
         });
         
-        console.log('Deployment history updated:', deployments);
-        setDeploymentHistory(deployments);
+        console.log('MCP deployment history updated for agent:', agentId, agentDeployments);
+        setDeploymentHistory(agentDeployments);
         
-        // Update deployment status based on latest deployment
-        if (deployments.length > 0) {
-          const latestDeployment = deployments[0];
-          console.log('Latest deployment:', latestDeployment);
+        // Update deployment status based on latest deployment for this agent
+        if (agentDeployments.length > 0) {
+          const latestDeployment = agentDeployments[0];
+          console.log('Latest MCP deployment:', latestDeployment);
           
-          if (latestDeployment.status === 'in_progress' || latestDeployment.status === 'pending') {
+          // Set current deployment ID for real-time tracking
+          if (latestDeployment.status === 'queued' || latestDeployment.status === 'processing') {
+            setCurrentDeploymentId(latestDeployment.id);
             setDeploying(true);
-            setDeploymentStatus({
-              status: latestDeployment.status,
-              deployment_id: latestDeployment.deployment_id || latestDeployment.id,
-              progress: latestDeployment.progress || 0,
-              current_step: latestDeployment.current_step
-            });
           } else {
             setDeploying(false);
-            if (latestDeployment.status === 'completed' || latestDeployment.status === 'deployed') {
-              setDeploymentStatus({
-                status: 'deployed',
-                deployment_id: latestDeployment.deployment_id || latestDeployment.id,
-                url: latestDeployment.service_url || latestDeployment.url
-              });
-            } else if (latestDeployment.status === 'failed') {
-              setDeploymentStatus({
-                status: 'failed',
-                deployment_id: latestDeployment.deployment_id || latestDeployment.id,
-                error: latestDeployment.error_message
-              });
+            // Keep the deployment ID if recently completed for status display
+            if (latestDeployment.status === 'deployed' || latestDeployment.status === 'failed') {
+              setCurrentDeploymentId(latestDeployment.id);
             }
           }
+          
+          setDeploymentStatus({
+            status: latestDeployment.status,
+            deployment_id: latestDeployment.id,
+            progress: latestDeployment.progress || 0,
+            current_step: latestDeployment.current_step,
+            error_message: latestDeployment.error_message,
+            service_url: latestDeployment.service_url
+          });
         }
       }, (error) => {
-        console.error('Error listening to deployment history:', error);
+        console.error('Error listening to MCP deployment history:', error);
       });
       
       // Return cleanup function
       return () => {
-        console.log('Cleaning up deployment history listener');
+        console.log('Cleaning up MCP deployment listener');
         unsubscribe();
       };
     }
   }, [agentId, currentUser]);
+
+  // Cleanup deployment listeners on unmount
+  useEffect(() => {
+    return () => {
+      if (deploymentUnsubscribe) {
+        console.log('Cleaning up deployment status listener on unmount');
+        deploymentUnsubscribe();
+      }
+    };
+  }, [deploymentUnsubscribe]);
 
   const handleApiUpload = async (file, apiName) => {
     if (!file) return;
@@ -234,63 +247,40 @@ const ApiIntegrationManager = ({
     setDeploying(true);
 
     try {
-      console.log(`Deploying MCP server for agent ${agentId}`);
+      console.log(`Creating MCP deployment request for agent ${agentId}`);
+      
+      // Use the new Firestore-based deployment service
       const response = await deployMcpServer(agentId);
       
-      if (response) {
-        setDeploymentStatus(response);
+      if (response && response.deployment_id) {
+        // Set the current deployment ID for real-time tracking
+        setCurrentDeploymentId(response.deployment_id);
+        
+        // Initial status will be updated by the Firestore listener
+        setDeploymentStatus({
+          status: 'queued',
+          deployment_id: response.deployment_id,
+          progress: 0,
+          current_step: 'Deployment request created'
+        });
         
         onNotification?.(createNotification(
-          'MCP server deployment started',
-          'info'
+          'MCP deployment request created successfully',
+          'success'
         ));
-
-        // Start polling for deployment status
-        pollDeploymentStatus(response.deployment_id);
+        
+        // Note: No polling needed - real-time updates via Firestore listeners
+        console.log('MCP deployment request created, listening for real-time updates...');
       }
 
     } catch (error) {
-      console.error('Error deploying MCP server:', error);
+      console.error('Error creating MCP deployment request:', error);
       onNotification?.(createNotification(
-        'Failed to start deployment. Please try again.',
+        'Failed to create deployment request. Please try again.',
         'error'
       ));
-    } finally {
       setDeploying(false);
     }
-  };
-
-  const pollDeploymentStatus = async (deploymentId) => {
-    const maxAttempts = 30; // 5 minutes with 10-second intervals
-    let attempts = 0;
-
-    const poll = async () => {
-      try {
-        const status = await checkDeploymentStatus(agentId, deploymentId);
-        setDeploymentStatus(status);
-
-        if (status.status === 'deployed' || status.status === 'failed') {
-          // Deployment finished, integration summary will update via Firestore listener
-          
-          onNotification?.(createNotification(
-            status.status === 'deployed' 
-              ? 'MCP server deployed successfully'
-              : 'MCP server deployment failed',
-            status.status === 'deployed' ? 'success' : 'error'
-          ));
-          return;
-        }
-
-        attempts++;
-        if (attempts < maxAttempts && (status.status === 'pending' || status.status === 'deploying')) {
-          setTimeout(poll, 10000); // Poll every 10 seconds
-        }
-      } catch (error) {
-        console.error('Error polling deployment status:', error);
-      }
-    };
-
-    setTimeout(poll, 5000); // Start polling after 5 seconds
   };
 
   if (loading) {
@@ -375,6 +365,7 @@ const ApiIntegrationManager = ({
             deploymentStatus={deploymentStatus}
             integrationSummary={integrationSummary}
             deploymentHistory={deploymentHistory}
+            currentDeploymentId={currentDeploymentId}
             onDeploy={handleDeploy}
             deploying={deploying}
             disabled={disabled}

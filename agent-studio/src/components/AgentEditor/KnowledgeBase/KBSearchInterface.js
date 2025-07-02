@@ -8,8 +8,6 @@ import {
   Box,
   TextField,
   IconButton,
-  ToggleButtonGroup,
-  ToggleButton,
   Chip,
   InputAdornment,
   Typography,
@@ -17,10 +15,7 @@ import {
 } from '@mui/material';
 import {
   Search as SearchIcon,
-  Clear as ClearIcon,
-  TableChart as TableChartIcon,
-  GridView as GridViewIcon,
-  Refresh as RefreshIcon
+  Clear as ClearIcon
 } from '@mui/icons-material';
 import { debounce } from '../../../utils/agentEditorHelpers';
 
@@ -29,8 +24,6 @@ const KBSearchInterface = ({
   onSearch,
   onClear,
   searching = false,
-  viewMode = 'table',
-  onViewModeChange,
   filesCount = 0,
   disabled = false 
 }) => {
@@ -60,12 +53,6 @@ const KBSearchInterface = ({
   const handleClear = () => {
     setInputValue('');
     onClear();
-  };
-
-  const handleViewModeChange = (event, newViewMode) => {
-    if (newViewMode !== null) {
-      onViewModeChange(newViewMode);
-    }
   };
 
   return (
@@ -107,29 +94,6 @@ const KBSearchInterface = ({
             />
           </form>
         </Box>
-
-        {/* View Mode Toggle */}
-        <ToggleButtonGroup
-          value={viewMode}
-          exclusive
-          onChange={handleViewModeChange}
-          disabled={disabled}
-          sx={{
-            '& .MuiToggleButton-root': {
-              px: 2,
-              py: 1
-            }
-          }}
-        >
-          <ToggleButton value="table" aria-label="table view">
-            <TableChartIcon sx={{ mr: 1 }} />
-            Table
-          </ToggleButton>
-          <ToggleButton value="card" aria-label="card view">
-            <GridViewIcon sx={{ mr: 1 }} />
-            Cards
-          </ToggleButton>
-        </ToggleButtonGroup>
       </Box>
 
       <Divider sx={{ my: 2 }} />

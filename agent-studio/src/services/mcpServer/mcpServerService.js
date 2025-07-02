@@ -5,14 +5,15 @@
  * status monitoring, tools management, and testing
  */
 import axios from 'axios';
-import { auth } from '../../utils/firebase';
+import { auth, db } from '../../utils/firebase';
 import { getAuthToken } from '../auth/authService';
 import { TOOL_FORGE_URL } from '../config/apiConfig';
+import { collection, addDoc, serverTimestamp, doc, onSnapshot } from 'firebase/firestore';
 
 /**
- * Deploy MCP server for an agent
+ * Deploy MCP server for an agent - Creates deployment request in Firestore
  */
-export const deployMcpServer = async (agentId) => {
+export const deployMcpServer = async (agentId, deploymentConfig = {}) => {
   try {
     // Get current user ID
     const currentUser = auth.currentUser;
@@ -22,41 +23,94 @@ export const deployMcpServer = async (agentId) => {
       throw new Error('User not authenticated');
     }
     
-    // Force token refresh to ensure we have a valid token
-    const token = await getAuthToken();
-    if (!token) {
-      throw new Error('Authentication token is missing or invalid');
-    }
+    console.log(`Creating MCP deployment request for agent ${agentId}`);
     
-    console.log(`Deploying MCP server for agent ${agentId}`);
+    // Create deployment document in Firestore
+    const deploymentData = {
+      agent_id: agentId,
+      user_id: userId,
+      status: 'queued',
+      progress: 0,
+      current_step: 'Queued for deployment',
+      deployment_config: deploymentConfig,
+      progress_steps: [
+        { step: 'queued', status: 'completed', message: 'Deployment request created' },
+        { step: 'validating', status: 'pending', message: 'Validating API specifications' },
+        { step: 'building', status: 'pending', message: 'Building MCP server container' },
+        { step: 'deploying', status: 'pending', message: 'Deploying to cloud infrastructure' },
+        { step: 'testing', status: 'pending', message: 'Testing server connectivity' }
+      ],
+      created_at: serverTimestamp(),
+      updated_at: serverTimestamp()
+    };
     
-    const response = await axios({
-      method: 'post',
-      url: `${TOOL_FORGE_URL}/deploy`,
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'userId': userId
-      },
-      data: {
-        agent_id: agentId
-      }
-    });
+    const deploymentRef = await addDoc(collection(db, 'mcp_deployments'), deploymentData);
     
-    console.log('MCP deployment response:', response.data);
-    return response.data;
+    console.log('MCP deployment request created:', deploymentRef.id);
+    
+    return {
+      deployment_id: deploymentRef.id,
+      status: 'queued',
+      message: 'Deployment request created successfully'
+    };
   } catch (error) {
-    console.error('Error deploying MCP server:', error);
-    if (error.response) {
-      console.error('Response status:', error.response.status);
-      console.error('Response data:', error.response.data);
-    }
+    console.error('Error creating MCP deployment request:', error);
     throw error;
   }
 };
 
 /**
- * Check deployment status using MCP manager
+ * Subscribe to deployment status updates in real-time
+ */
+export const subscribeToDeploymentStatus = (deploymentId, callback) => {
+  try {
+    console.log(`Subscribing to deployment status for: ${deploymentId}`);
+    
+    const deploymentRef = doc(db, 'mcp_deployments', deploymentId);
+    
+    const unsubscribe = onSnapshot(deploymentRef, (doc) => {
+      if (doc.exists()) {
+        const data = doc.data();
+        console.log('Deployment status update:', data);
+        callback({ id: doc.id, ...data });
+      } else {
+        console.log('Deployment document not found');
+        callback(null);
+      }
+    }, (error) => {
+      console.error('Error listening to deployment status:', error);
+      callback(null, error);
+    });
+    
+    return unsubscribe;
+  } catch (error) {
+    console.error('Error setting up deployment status subscription:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get deployment status by deployment ID
+ */
+export const getDeploymentStatus = async (deploymentId) => {
+  try {
+    const { doc: getDoc } = await import('firebase/firestore');
+    const deploymentRef = doc(db, 'mcp_deployments', deploymentId);
+    const deploymentDoc = await getDoc(deploymentRef);
+    
+    if (deploymentDoc.exists()) {
+      return { id: deploymentDoc.id, ...deploymentDoc.data() };
+    } else {
+      throw new Error('Deployment not found');
+    }
+  } catch (error) {
+    console.error('Error getting deployment status:', error);
+    throw error;
+  }
+};
+
+/**
+ * Check deployment status using MCP manager (Legacy function - kept for compatibility)
  */
 export const checkDeploymentStatus = async (agentId, deploymentId) => {
   try {

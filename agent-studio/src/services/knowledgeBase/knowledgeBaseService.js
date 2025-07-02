@@ -40,14 +40,15 @@ export const getAgentKnowledgeBase = async (agentId) => {
 };
 
 /**
- * Upload a file to the knowledge base
+ * Upload a file to the knowledge base with new workflow support
  */
-export const uploadKnowledgeBaseFile = async (agentId, file) => {
+export const uploadKnowledgeBaseFile = async (agentId, file, autoIndex = false) => {
   try {
     // Create FormData for the file upload
     const formData = new FormData();
     formData.append('agent_id', agentId); // Backend expects agent_id as a form field
     formData.append('file', file);
+    formData.append('auto_index', autoIndex); // New parameter for workflow control
     
     // Use the correct knowledge base upload endpoint
     const response = await kbApi.post(
@@ -297,6 +298,58 @@ export const updateFileContent = async (fileId, content) => {
 };
 
 /**
+ * Clean and re-index a file with user-controlled content cleaning
+ */
+export const cleanAndReindexFile = async (fileId, enableCleaning = false) => {
+  try {
+    const response = await kbApi.post(`${ENDPOINTS.KB_FILES}/${fileId}/clean-and-reindex`, {
+      enable_cleaning: enableCleaning
+    });
+    
+    console.log('Clean and reindex response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error(`Error cleaning and reindexing file ${fileId}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Batch clean and re-index multiple files with user-controlled content cleaning
+ */
+export const batchCleanAndReindexFiles = async (fileIds, enableCleaning = false) => {
+  try {
+    const response = await kbApi.post(`${ENDPOINTS.KB_FILES}/batch-clean-and-reindex`, {
+      file_ids: fileIds,
+      enable_cleaning: enableCleaning
+    });
+    
+    console.log('Batch clean and reindex response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error(`Error batch cleaning and reindexing files:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Preview content cleaning for a file without applying changes
+ */
+export const previewContentCleaning = async (fileId, enableCleaning = false) => {
+  try {
+    const response = await kbApi.post(`${ENDPOINTS.KB_FILES}/${fileId}/preview-cleaning`, {
+      enable_cleaning: enableCleaning
+    });
+    
+    console.log('Preview content cleaning response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error(`Error previewing content cleaning for file ${fileId}:`, error);
+    throw error;
+  }
+};
+
+/**
  * Get detailed chunk analysis for a file
  */
 export const getFileChunkAnalysis = async (fileId) => {
@@ -318,5 +371,106 @@ export const getFileChunkAnalysis = async (fileId) => {
       url: error.config?.url
     });
     throw error;
+  }
+};
+
+// === NEW WORKFLOW API METHODS ===
+
+/**
+ * Assess content quality and relevance for an uploaded file without indexing
+ * This provides original vs cleaned content comparison and recommendations
+ */
+export const assessFileQuality = async (fileId) => {
+  try {
+    console.log('Assessing quality for file:', fileId);
+    
+    const response = await kbApi.post(`${ENDPOINTS.KB_FILES}/${fileId}/assess-quality`);
+    
+    console.log('File quality assessment response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error(`Error assessing quality for file ${fileId}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Index a previously uploaded file with user-specified cleaning options
+ * This allows users to control whether content cleaning is applied before indexing
+ */
+export const indexUploadedFile = async (fileId, enableCleaning = false) => {
+  try {
+    console.log(`Indexing file ${fileId} with cleaning ${enableCleaning ? 'enabled' : 'disabled'}`);
+    
+    const response = await kbApi.post(`${ENDPOINTS.KB_FILES}/${fileId}/index`, {
+      enable_cleaning: enableCleaning
+    });
+    
+    console.log('File indexing response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error(`Error indexing file ${fileId}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Get agent-specific relevance analysis for a file
+ * Provides comprehensive relevance assessment for the agent's domain and purpose
+ */
+export const getFileRelevanceAnalysis = async (fileId) => {
+  try {
+    console.log('Getting relevance analysis for file:', fileId);
+    
+    const response = await kbApi.get(`${ENDPOINTS.KB_FILES}/${fileId}/relevance-analysis`);
+    
+    console.log('File relevance analysis response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error(`Error getting relevance analysis for file ${fileId}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Check if a file is ready for quality assessment
+ * Returns true if file is uploaded but not indexed
+ */
+export const isFileReadyForAssessment = (file) => {
+  return file && 
+         file.indexing_status === 'uploaded' && 
+         !file.indexed;
+};
+
+/**
+ * Check if a file is ready for indexing
+ * Returns true if file is uploaded but not indexed
+ */
+export const isFileReadyForIndexing = (file) => {
+  return file && 
+         file.indexing_status === 'uploaded' && 
+         !file.indexed;
+};
+
+/**
+ * Get the workflow status display for a file
+ * Returns user-friendly status message for the new workflow
+ */
+export const getFileWorkflowStatus = (file) => {
+  if (!file) return 'Unknown';
+  
+  switch (file.indexing_status) {
+    case 'uploaded':
+      return file.indexed ? 'Indexed' : 'Ready for Quality Assessment';
+    case 'processing':
+      return 'Indexing in Progress';
+    case 'complete':
+      return 'Indexed and Ready';
+    case 'failed':
+      return 'Processing Failed';
+    case 'uploading':
+      return 'Uploading...';
+    default:
+      return file.indexing_status || 'Unknown';
   }
 };

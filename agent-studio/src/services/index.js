@@ -42,7 +42,17 @@ export {
   getFileContentPreview,
   reprocessKnowledgeBaseFile,
   updateFileContent,
-  getFileChunkAnalysis
+  getFileChunkAnalysis,
+  cleanAndReindexFile,
+  batchCleanAndReindexFiles,
+  previewContentCleaning,
+  // New workflow methods
+  assessFileQuality,
+  indexUploadedFile,
+  getFileRelevanceAnalysis,
+  isFileReadyForAssessment,
+  isFileReadyForIndexing,
+  getFileWorkflowStatus
 } from './knowledgeBase/knowledgeBaseService';
 
 // Artifact services

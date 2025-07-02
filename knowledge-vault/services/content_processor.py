@@ -38,7 +38,7 @@ class ContentProcessor:
         self.max_repetition_ratio = 0.3
         self.min_word_count = 5
         
-    def process_content(self, text: str, content_type: str = None, filename: str = None, agent_id: str = None) -> Dict[str, Any]:
+    def process_content(self, text: str, content_type: str = None, filename: str = None, agent_id: str = None, enable_cleaning: bool = False) -> Dict[str, Any]:
         """
         Main content processing pipeline that cleans and enhances text with agent-specific relevance assessment
         
@@ -47,6 +47,7 @@ class ContentProcessor:
             content_type: MIME type of original file
             filename: Original filename
             agent_id: ID of the agent for relevance assessment
+            enable_cleaning: Whether to apply content cleaning (default: False)
             
         Returns:
             Dictionary with processed content, metadata, and relevance assessment
@@ -64,45 +65,61 @@ class ContentProcessor:
         # Step 1: Basic text cleaning (minimal preprocessing)
         cleaned_text = self._basic_text_cleaning(text)
         
-        # Step 1.5: Check if content already has perfect quality - skip cleaning if so
-        original_quality = self._calculate_quality_score(cleaned_text)
-        
-        if original_quality >= 100.0:
-            self.logger.info(f"Content already has perfect quality ({original_quality}%), skipping cleaning")
+        # Step 2: Apply cleaning based on user preference
+        if not enable_cleaning:
+            self.logger.info("Content cleaning disabled by user - using original content")
             quality_filtered_text = cleaned_text
             quality_stats = {
                 "ai_cleaning_used": False,
                 "cleaning_skipped": True,
-                "reason": "perfect_quality",
+                "reason": "user_disabled",
                 "removed_sentences": 0,
-                "quality_issues": []
+                "quality_issues": [],
+                "user_controlled": True
             }
         else:
-            # Step 2: AI-powered intelligent cleaning (if available)
-            if self.openai_available:
-                ai_cleaned_text = self._ai_powered_content_cleaning(cleaned_text, content_type)
-                
-                # Use AI cleaned version as the final result
-                quality_filtered_text = ai_cleaned_text
+            # Step 2.5: Check if content already has perfect quality - skip cleaning if so
+            original_quality = self._calculate_quality_score(cleaned_text)
+            
+            if original_quality >= 100.0:
+                self.logger.info(f"Content already has perfect quality ({original_quality}%), skipping cleaning")
+                quality_filtered_text = cleaned_text
                 quality_stats = {
-                    "ai_cleaning_used": True,
-                    "cleaning_skipped": False,
+                    "ai_cleaning_used": False,
+                    "cleaning_skipped": True,
+                    "reason": "perfect_quality",
                     "removed_sentences": 0,
-                    "quality_issues": ["ai_cleaned"]
+                    "quality_issues": [],
+                    "user_controlled": False
                 }
             else:
-                # Fallback to rule-based cleaning (much less aggressive)
-                # Step 2: Remove structural artifacts
-                cleaned_text = self._remove_structural_artifacts(cleaned_text, content_type)
-                
-                # Step 3: Content deduplication
-                cleaned_text = self._remove_duplicate_content(cleaned_text)
-                
-                # Step 4: Light quality filtering (less aggressive than before)
-                quality_filtered_text, quality_stats = self._light_quality_filtering(cleaned_text)
-                quality_stats["cleaning_skipped"] = False
+                # Step 3: AI-powered intelligent cleaning (if available)
+                if self.openai_available:
+                    ai_cleaned_text = self._ai_powered_content_cleaning(cleaned_text, content_type)
+                    
+                    # Use AI cleaned version as the final result
+                    quality_filtered_text = ai_cleaned_text
+                    quality_stats = {
+                        "ai_cleaning_used": True,
+                        "cleaning_skipped": False,
+                        "removed_sentences": 0,
+                        "quality_issues": ["ai_cleaned"],
+                        "user_controlled": False
+                    }
+                else:
+                    # Fallback to rule-based cleaning (much less aggressive)
+                    # Step 3: Remove structural artifacts
+                    cleaned_text = self._remove_structural_artifacts(cleaned_text, content_type)
+                    
+                    # Step 4: Content deduplication
+                    cleaned_text = self._remove_duplicate_content(cleaned_text)
+                    
+                    # Step 5: Light quality filtering (less aggressive than before)
+                    quality_filtered_text, quality_stats = self._light_quality_filtering(cleaned_text)
+                    quality_stats["cleaning_skipped"] = False
+                    quality_stats["user_controlled"] = False
         
-        # Step 5: Agent-specific relevance assessment
+        # Step 6: Agent-specific relevance assessment
         relevance_assessment = None
         if agent_id and self.openai_available:
             try:
@@ -114,7 +131,7 @@ class ContentProcessor:
                 self.logger.error(f"Relevance assessment failed for agent {agent_id}: {e}")
                 relevance_assessment = {"error": str(e), "relevance_score": 50}
         
-        # Step 6: Extract metadata
+        # Step 7: Extract metadata
         metadata = self._extract_content_metadata(quality_filtered_text, filename)
         
         # Calculate processing statistics

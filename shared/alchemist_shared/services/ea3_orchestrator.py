@@ -102,39 +102,34 @@ class EA3Orchestrator:
         enable_event_processing: bool = True
     ):
         """Initialize the eA³ orchestrator with Spanner Graph backend and story event system"""
-        try:
-            # Initialize Spanner Graph service
-            from .spanner_graph_service import init_spanner_graph_service
-            self.graph_service = await init_spanner_graph_service(project_id, instance_id, database_id)
-            logger.info("eA³ Orchestrator initialized with Spanner Graph backend")
+        # Initialize Spanner Graph service
+        from .spanner_graph_service import init_spanner_graph_service
+        self.graph_service = await init_spanner_graph_service(project_id, instance_id, database_id)
+        logger.info("eA³ Orchestrator initialized with Spanner Graph backend")
+        
+        # Initialize story event system if available
+        if enable_event_processing and STORY_EVENTS_AVAILABLE:
+            # Initialize story context cache
+            from ..events import init_story_context_cache
+            self.story_cache = init_story_context_cache(redis_url)
             
-            # Initialize story event system if available
-            if enable_event_processing and STORY_EVENTS_AVAILABLE:
-                # Initialize story context cache
-                from ..events import init_story_context_cache
-                self.story_cache = init_story_context_cache(redis_url)
-                
-                # Initialize story event subscriber
-                self.story_subscriber = StoryEventSubscriber(
-                    project_id=project_id,
-                    subscription_name="ea3-orchestrator-events",
-                    topic_name="agent-story-events"
-                )
-                
-                # Register event handlers
-                self._setup_event_handlers()
-                
-                # Start listening for events
-                self.event_processing_enabled = True
-                asyncio.create_task(self._start_event_processing())
-                
-                logger.info("eA³ story event processing enabled")
-            else:
-                logger.info("eA³ story event processing disabled or unavailable")
-                
-        except Exception as e:
-            logger.error(f"Failed to initialize eA³ Orchestrator: {e}")
-            raise
+            # Initialize story event subscriber
+            self.story_subscriber = StoryEventSubscriber(
+                project_id=project_id,
+                subscription_name="ea3-orchestrator-events",
+                topic_name="agent-story-events"
+            )
+            
+            # Register event handlers
+            self._setup_event_handlers()
+            
+            # Start listening for events
+            self.event_processing_enabled = True
+            asyncio.create_task(self._start_event_processing())
+            
+            logger.info("eA³ story event processing enabled")
+        else:
+            logger.info("eA³ story event processing disabled or unavailable")
 
     async def create_agent_life_story(
         self, 
@@ -151,28 +146,23 @@ class EA3Orchestrator:
             logger.error("Graph service not initialized")
             return False
         
-        try:
-            # Extract story title from agent config
-            story_title = f"The Journey of {agent_config.get('name', agent_id)}"
+        # Extract story title from agent config
+        story_title = f"The Journey of {agent_config.get('name', agent_id)}"
+        
+        # Create the foundational life-story
+        success = await self.graph_service.create_agent_story(
+            agent_id=agent_id,
+            core_objective=core_objective,
+            story_title=story_title
+        )
+        
+        if success:
+            logger.info(f"Created life-story for agent {agent_id}: '{story_title}'")
             
-            # Create the foundational life-story
-            success = await self.graph_service.create_agent_story(
-                agent_id=agent_id,
-                core_objective=core_objective,
-                story_title=story_title
-            )
+            # Add initial context events from agent configuration
+            await self._add_configuration_events(agent_id, agent_config)
             
-            if success:
-                logger.info(f"Created life-story for agent {agent_id}: '{story_title}'")
-                
-                # Add initial context events from agent configuration
-                await self._add_configuration_events(agent_id, agent_config)
-                
-            return success
-            
-        except Exception as e:
-            logger.error(f"Failed to create life-story for agent {agent_id}: {e}")
-            return False
+        return success
 
     async def process_conversation(self, context: ConversationContext) -> Tuple[bool, EA3Assessment]:
         """
@@ -185,44 +175,39 @@ class EA3Orchestrator:
             logger.error("Graph service not initialized")
             return False, None
         
-        try:
-            # Analyze the conversation for story-worthy events
-            story_events = await self._extract_story_events_from_conversation(context)
-            
-            coherence_maintained = True
-            revision_triggered = False
-            
-            # Add each story event to the agent's narrative
-            for event_data in story_events:
-                event_id, event_coherence = await self.graph_service.add_story_event(
-                    agent_id=context.agent_id,
-                    event_type=event_data["event_type"],
-                    content=event_data["content"],
-                    context=event_data["context"],
-                    evidence_source=f"conversation_{context.conversation_id}",
-                    confidence=event_data.get("confidence", context.confidence),
-                    causal_parents=event_data.get("causal_parents", [])
-                )
-                
-                if not event_coherence:
-                    coherence_maintained = False
-                    revision_triggered = True
-                    logger.warning(f"Agent {context.agent_id}: Conversation triggered belief revision")
-            
-            # Assess the agent's current eA³ status
-            ea3_assessment = await self._assess_agent_ea3(context.agent_id)
-            
-            # Log the conversation integration
-            logger.info(
-                f"Agent {context.agent_id}: Processed conversation with {len(story_events)} events. "
-                f"Coherence maintained: {coherence_maintained}, Revision triggered: {revision_triggered}"
+        # Analyze the conversation for story-worthy events
+        story_events = await self._extract_story_events_from_conversation(context)
+        
+        coherence_maintained = True
+        revision_triggered = False
+        
+        # Add each story event to the agent's narrative
+        for event_data in story_events:
+            event_id, event_coherence = await self.graph_service.add_story_event(
+                agent_id=context.agent_id,
+                event_type=event_data["event_type"],
+                content=event_data["content"],
+                context=event_data["context"],
+                evidence_source=f"conversation_{context.conversation_id}",
+                confidence=event_data.get("confidence", context.confidence),
+                causal_parents=event_data.get("causal_parents", [])
             )
             
-            return coherence_maintained, ea3_assessment
-            
-        except Exception as e:
-            logger.error(f"Failed to process conversation for agent {context.agent_id}: {e}")
-            return False, None
+            if not event_coherence:
+                coherence_maintained = False
+                revision_triggered = True
+                logger.warning(f"Agent {context.agent_id}: Conversation triggered belief revision")
+        
+        # Assess the agent's current eA³ status
+        ea3_assessment = await self._assess_agent_ea3(context.agent_id)
+        
+        # Log the conversation integration
+        logger.info(
+            f"Agent {context.agent_id}: Processed conversation with {len(story_events)} events. "
+            f"Coherence maintained: {coherence_maintained}, Revision triggered: {revision_triggered}"
+        )
+        
+        return coherence_maintained, ea3_assessment
 
     async def trigger_autonomous_reflection(self, agent_id: str, trigger_reason: str) -> bool:
         """
