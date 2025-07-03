@@ -16,12 +16,10 @@ import { ArrowBack as ArrowBackIcon } from '@mui/icons-material';
 
 // Import components
 import AgentIntegrationManager from '../components/AgentEditor/AgentIntegration/AgentIntegrationManager';
-import WorkflowProgressIndicator from '../components/AgentEditor/WorkflowProgress/WorkflowProgressIndicator';
 import NotificationSystem, { createNotification } from '../components/shared/NotificationSystem';
 
 // Import hooks and services
 import useAgentState from '../hooks/useAgentState';
-import { useAgentWorkflow } from '../hooks/useAgentWorkflow';
 import { listDeployments } from '../services';
 
 const AgentIntegration = () => {
@@ -32,8 +30,6 @@ const AgentIntegration = () => {
   // Core state management
   const { agent, loading, error } = useAgentState(agentId);
   
-  // Workflow management
-  const workflow = useAgentWorkflow(agentId);
   
   // UI state
   const [notification, setNotification] = useState(null);
@@ -94,24 +90,6 @@ const AgentIntegration = () => {
     navigate(`/agent-editor/${agentId}`);
   };
 
-  // Handle workflow stage clicks from progress indicator
-  const handleWorkflowStageClick = (stage) => {
-    const stageToRouteMap = {
-      'definition': `/agent-editor/${agentId}`,
-      'knowledge': `/knowledge-base/${agentId}`,
-      'api-integration': `/api-integration/${agentId}`,
-      'pre-testing': `/agent-testing/${agentId}`,
-      'deployment': `/agent-deployment/${agentId}`,
-      'post-testing': `/agent-testing/${agentId}`,
-      'integration': `/agent-integration/${agentId}`,
-      'analytics': `/agent-analytics/${agentId}`
-    };
-
-    const route = stageToRouteMap[stage.id];
-    if (route) {
-      navigate(route);
-    }
-  };
 
   // Show loading spinner while agent data is loading
   if (loading || loadingDeployments) {
@@ -182,15 +160,6 @@ const AgentIntegration = () => {
         </Box>
       </Box>
 
-      {/* Workflow Progress Indicator */}
-      <Box sx={{ px: 3, pt: 2, flexShrink: 0, bgcolor: 'background.default' }}>
-        <WorkflowProgressIndicator 
-          workflow={workflow}
-          agentId={agentId}
-          compact={true}
-          onStageClick={handleWorkflowStageClick}
-        />
-      </Box>
 
       {/* Main Content */}
       <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>

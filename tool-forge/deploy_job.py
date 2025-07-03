@@ -800,19 +800,48 @@ if __name__ == "__main__":
                 
                 # Update the appropriate step based on progress
                 step_mapping = {
+                    0: 'queued',
+                    10: 'queued',
                     20: 'validating',
                     60: 'building', 
                     80: 'deploying',
+                    95: 'testing',
                     100: 'testing'
                 }
                 
                 current_step_name = step_mapping.get(progress)
                 if current_step_name:
+                    # Mark previous steps as completed and current step as running
+                    step_order = ['queued', 'validating', 'building', 'deploying', 'testing']
+                    current_step_index = step_order.index(current_step_name)
+                    
                     for step in progress_steps:
-                        if step.get('step') == current_step_name:
-                            step['status'] = 'completed' if status == 'deployed' or progress >= 100 else 'running'
-                            step['message'] = current_step
-                            break
+                        step_name = step.get('step')
+                        if step_name in step_order:
+                            step_index = step_order.index(step_name)
+                            
+                            if step_index < current_step_index:
+                                # Previous steps should be completed
+                                step['status'] = 'completed'
+                            elif step_index == current_step_index:
+                                # Current step is running (or completed if progress is 100 and this is the last step)
+                                if progress == 100 and step_name == 'testing':
+                                    step['status'] = 'completed'
+                                else:
+                                    step['status'] = 'running'
+                                step['message'] = current_step
+                            else:
+                                # Future steps remain queued
+                                if step.get('status') != 'completed':
+                                    step['status'] = 'queued'
+                    
+                    # Handle failure case
+                    if status == 'failed':
+                        for step in progress_steps:
+                            if step.get('step') == current_step_name:
+                                step['status'] = 'failed'
+                                step['message'] = current_step
+                                break
                     
                     deployment_ref.update({'progress_steps': progress_steps})
             

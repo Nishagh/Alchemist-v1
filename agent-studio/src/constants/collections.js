@@ -29,6 +29,9 @@ export const Collections = {
   AGENT_DEPLOYMENTS: 'agent_deployments',
   AGENT_USAGE_SUMMARY: 'agent_usage_summary',
   
+  // MCP Server management
+  MCP_DEPLOYMENTS: 'mcp_deployments',
+  
   // Conversation and messaging
   CONVERSATIONS: 'conversations',
   COMMUNICATION_LOGS: 'communication_logs',
@@ -299,6 +302,7 @@ export const getAllCollections = () => {
     Collections.AGENTS,
     Collections.AGENT_DEPLOYMENTS,
     Collections.AGENT_USAGE_SUMMARY,
+    Collections.MCP_DEPLOYMENTS,
     Collections.CONVERSATIONS,
     Collections.COMMUNICATION_LOGS,
     Collections.USER_ACCOUNTS,

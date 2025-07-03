@@ -79,6 +79,7 @@ const McpDeploymentStatus = ({
             
             if (deploymentData) {
               console.log('Real-time deployment update:', deploymentData);
+              console.log('Progress steps from Firestore:', deploymentData.progress_steps);
               setRealtimeDeploymentStatus(deploymentData);
               setDeploymentError(null);
             } else {
@@ -282,11 +283,15 @@ const McpDeploymentStatus = ({
     const steps = getDeploymentSteps();
 
     // Debug logging
+    const firestoreProgressSteps = realtimeDeploymentStatus?.progress_steps || [];
     console.log('Rendering deployment progress:', {
       activeStep,
       steps: steps.map((s, i) => ({ index: i, label: s.label, status: s.status })),
       progressSteps: realtimeDeploymentStatus?.progress_steps,
-      currentStatus: currentStatus.status
+      currentStatus: currentStatus.status,
+      realtimeDeploymentStatus: realtimeDeploymentStatus,
+      hasProgressSteps: firestoreProgressSteps.length > 0,
+      firestoreProgressSteps: firestoreProgressSteps.map(step => ({ step: step.step, status: step.status, message: step.message }))
     });
 
     return (
@@ -318,21 +323,32 @@ const McpDeploymentStatus = ({
         
         <Stepper activeStep={activeStep} orientation="vertical">
           {steps.map((step, index) => (
-            <Step key={step.label} completed={step.status === 'completed'}>
+            <Step key={step.label} completed={step.status === 'completed' || step.status === 'success'}>
               <StepLabel
                 StepIconComponent={({ active, completed, error }) => {
+                  // Debug log for each step icon
+                  console.log(`Step ${index} (${step.label}) icon rendering:`, {
+                    stepStatus: step.status,
+                    currentStatusFailed: currentStatus.status === 'failed',
+                    isActiveStep: index === activeStep
+                  });
+                  
                   // Check for error state first
                   if (currentStatus.status === 'failed' && index === activeStep) {
                     return <ErrorIcon color="error" />;
                   }
                   
-                  // Use step status for icon rendering
-                  if (step.status === 'completed') {
+                  // Use step status for icon rendering with more status options
+                  if (step.status === 'completed' || step.status === 'success') {
                     return <CheckCircleIcon color="success" />;
                   }
                   
-                  if (step.status === 'active' || step.status === 'in_progress') {
+                  if (step.status === 'active' || step.status === 'in_progress' || step.status === 'running') {
                     return <PendingIcon color="primary" sx={{ animation: 'pulse 2s infinite' }} />;
+                  }
+                  
+                  if (step.status === 'failed' || step.status === 'error') {
+                    return <ErrorIcon color="error" />;
                   }
                   
                   // Default pending state
@@ -347,7 +363,7 @@ const McpDeploymentStatus = ({
                 <Typography variant="body2" color="text.secondary">
                   {step.description}
                 </Typography>
-                {(step.status === 'active' || step.status === 'in_progress') && (
+                {(step.status === 'active' || step.status === 'in_progress' || step.status === 'running') && (
                   <Box sx={{ mt: 1 }}>
                     <LinearProgress size="small" />
                   </Box>

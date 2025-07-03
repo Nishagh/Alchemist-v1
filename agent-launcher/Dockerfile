@@ -18,20 +18,26 @@ RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.
     apt-get update && apt-get install -y google-cloud-cli && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy shared libraries first (for better caching)
-COPY shared/ /app/shared/
-
-# Install shared libraries
+# Copy and install shared libraries first
+COPY ../../shared/ /app/shared/
 RUN cd /app/shared && pip install -e .
 
 # Copy requirements first for better caching
-COPY agent-launcher/universal-deployment-service/requirements.txt .
+COPY requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy deployment service application code
-COPY agent-launcher/universal-deployment-service/ .
+COPY main.py .
+COPY agent_deployer.py .
+COPY config_loader.py .
+COPY mcp_tool.py .
+COPY embedded_vector_search.py .
+COPY knowledge_service.py .
+
+# Copy the entire universal-agent template directory
+COPY universal-agent-template ./universal-agent
 
 # Set environment variables
 ENV PYTHONPATH=/app
@@ -42,7 +48,7 @@ EXPOSE 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
+    CMD curl -f http://localhost:8080/healthz || exit 1
 
 # Run the application
 CMD ["python", "main.py"]

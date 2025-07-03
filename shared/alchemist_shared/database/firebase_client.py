@@ -44,16 +44,10 @@ class FirebaseClient:
     
     def _initialize(self):
         """Initialize Firebase app with appropriate credentials."""
-        # Check if app already exists
-        try:
-            app = firebase_admin.get_app()
-            logger.info("Firebase app already initialized")
-        except ValueError:
-            # Initialize new app
-            if self._is_cloud_environment():
+        if self._is_cloud_environment():
                 logger.info("Initializing Firebase with Application Default Credentials")
                 app = firebase_admin.initialize_app()
-            else:
+        else:
                 logger.info("Initializing Firebase with credentials file")
                 cred_path = self._get_credentials_path()
                 cred = credentials.Certificate(cred_path)
@@ -76,46 +70,26 @@ class FirebaseClient:
         )
     
     def _get_credentials_path(self) -> str:
-        """Get path to Firebase credentials file with centralized priority logic."""
+        """Get path to Firebase credentials file with environment detection."""
         # Priority 1: Explicit environment variable for credentials path
         cred_path = os.environ.get("FIREBASE_CREDENTIALS_PATH")
         if cred_path and os.path.exists(cred_path):
-            logger.info(f"Using Firebase credentials from FIREBASE_CREDENTIALS_PATH: {cred_path}")
             return cred_path
+                
+        # Priority 3: Docker environment path
+        docker_path = '/app/shared/firebase-credentials.json'
+        if os.path.exists(docker_path):
+            return docker_path
         
-        # Priority 2: Standard GOOGLE_APPLICATION_CREDENTIALS
-        cred_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
-        if cred_path and os.path.exists(cred_path):
-            logger.info(f"Using Firebase credentials from GOOGLE_APPLICATION_CREDENTIALS: {cred_path}")
-            return cred_path
-        
-        # Priority 3: Shared folder credentials (for local development)
+        # Priority 4: Shared folder credentials (for local development)
         shared_cred_path = self._find_shared_credentials()
         if shared_cred_path:
-            logger.info(f"Using Firebase credentials from shared folder: {shared_cred_path}")
             return shared_cred_path
         
-        # Priority 4: Centralized root directory (enforced for consistency)
+        # Priority 5: Project root directory
         root_cred_path = self._find_project_root_credentials()
         if root_cred_path:
-            logger.info(f"Using centralized Firebase credentials from project root: {root_cred_path}")
             return root_cred_path
-        
-        # Priority 5: Legacy fallback locations (with deprecation warning)
-        legacy_paths = [
-            "firebase-credentials.json",
-            "../firebase-credentials.json", 
-            "../../firebase-credentials.json",
-            "/app/firebase-credentials.json"
-        ]
-        
-        for path in legacy_paths:
-            if os.path.exists(path):
-                logger.warning(
-                    f"Using legacy Firebase credentials location: {path}. "
-                    "Consider moving to shared folder or setting FIREBASE_CREDENTIALS_PATH"
-                )
-                return path
         
         raise FileNotFoundError(
             "Firebase credentials file not found. Please:\n"

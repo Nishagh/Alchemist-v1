@@ -1,4 +1,4 @@
-# Exclude all other services except tool-forge and shared
+# Exclude all other services except agent-launcher and shared
 admin-dashboard/
 agent-bridge/
 agent-studio/
@@ -11,7 +11,7 @@ mcp_config_generator/
 prompt-engine/
 sandbox-console/
 user-deployment-monitor/
-agent-launcher/
+tool-forge/
 billing-service/
 global-narative-framework/
 
@@ -98,10 +98,12 @@ shared/spanner-key.json
 shared/build/
 shared/dist/
 
-# Include what we need for mcp deployment job
-!tool-forge/deploy_job.py
-!tool-forge/requirements.txt
+# Include what we need for agent deployment job
+!agent-launcher/deploy_job.py
+!agent-launcher/requirements.txt
+!agent-launcher/agent-template/
 !shared/
+!deploy-ai-agent.sh
 
 # Exclude deployment configs at root
 cloudbuild*.yaml

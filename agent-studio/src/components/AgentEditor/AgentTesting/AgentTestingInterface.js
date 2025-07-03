@@ -219,23 +219,25 @@ const AgentTestingInterface = ({
           }}
         >
           <Paper
-            elevation={1}
+            elevation={0}
             sx={{
               p: 2,
               maxWidth: '80%',
               bgcolor: isUser 
-                ? 'primary.main' 
+                ? (theme) => theme.palette.mode === 'dark' ? '#000000' : '#ffffff'
                 : isError 
-                  ? 'error.light' 
-                  : 'background.paper',
+                  ? (theme) => theme.palette.mode === 'dark' ? '#444444' : '#f0f0f0'
+                  : (theme) => theme.palette.mode === 'dark' ? '#333333' : '#f8f9fa',
               color: isUser 
-                ? 'primary.contrastText' 
+                ? (theme) => theme.palette.mode === 'dark' ? '#ffffff' : '#000000'
                 : isError 
-                  ? 'error.contrastText' 
-                  : 'text.primary',
+                  ? (theme) => theme.palette.mode === 'dark' ? '#ffffff' : '#000000'
+                  : (theme) => theme.palette.mode === 'dark' ? '#ffffff' : '#000000',
               borderRadius: 2,
-              border: isUser ? 'none' : '1px solid',
-              borderColor: isUser ? 'transparent' : 'divider'
+              border: '1px solid',
+              borderColor: isUser 
+                ? (theme) => theme.palette.mode === 'dark' ? '#555555' : '#dddddd'
+                : (theme) => theme.palette.mode === 'dark' ? '#555555' : '#dddddd'
             }}
           >
             <Typography
@@ -249,26 +251,17 @@ const AgentTestingInterface = ({
               {message.content}
             </Typography>
             
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1 }}>
-              <Typography
-                variant="caption"
-                sx={{
-                  opacity: 0.7,
-                  fontSize: '0.75rem'
-                }}
-              >
-                {new Date(message.timestamp).toLocaleTimeString()}
-              </Typography>
-              
-              {message.metadata && Object.keys(message.metadata).length > 0 && (
-                <Chip 
-                  label="Info" 
-                  size="small" 
-                  variant="outlined"
-                  sx={{ ml: 1, opacity: 0.7 }}
-                />
-              )}
-            </Box>
+            <Typography
+              variant="caption"
+              sx={{
+                mt: 1,
+                display: 'block',
+                opacity: 0.7,
+                fontSize: '0.75rem'
+              }}
+            >
+              {new Date(message.timestamp).toLocaleTimeString()}
+            </Typography>
           </Paper>
         </Box>
       </Fade>
@@ -276,23 +269,113 @@ const AgentTestingInterface = ({
   };
 
   return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Sticky Header */}
+    <Box 
+      sx={{ 
+        height: '100vh',
+        width: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        bgcolor: 'background.default',
+        position: 'relative'
+      }}
+    >
+      {/* Messages Area - Takes full height minus input */}
+      <Box 
+        sx={{ 
+          flex: 1,
+          overflowY: 'auto',
+          px: 3,
+          py: 2,
+          pb: '120px', // Space for fixed input area
+          minHeight: 0,
+          width: '100%'
+        }}
+      >
+        {testMessages.length === 0 ? (
+          <Box 
+            sx={{ 
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: '100%',
+              textAlign: 'center',
+              color: 'text.secondary'
+            }}
+          >
+            <BugReportIcon sx={{ fontSize: 48, mb: 2, opacity: 0.5 }} />
+            <Typography variant="h6" sx={{ mb: 1 }}>
+              Start testing your agent
+            </Typography>
+            <Typography variant="body2">
+              Send test messages to see how your agent responds
+            </Typography>
+          </Box>
+        ) : (
+          <>
+            {testMessages.map(renderMessage)}
+            {loading && (
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <Paper
+                  elevation={1}
+                  sx={{
+                    p: 2,
+                    bgcolor: 'background.paper',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    borderRadius: 2
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <CircularProgress size={16} sx={{ mr: 1 }} />
+                    <Typography variant="body2" color="text.secondary">
+                      Agent is processing...
+                    </Typography>
+                  </Box>
+                </Paper>
+              </Box>
+            )}
+            <div ref={messagesEndRef} />
+          </>
+        )}
+      </Box>
+
+      {/* Error Display - Fixed above input */}
+      {error && (
+        <Box sx={{ 
+          p: 2, 
+          borderTop: 1, 
+          borderColor: 'divider',
+          position: 'fixed',
+          bottom: '80px',
+          left: { xs: 0, md: '420px' },
+          right: 0,
+          bgcolor: 'background.paper',
+          zIndex: 999
+        }}>
+          <Alert severity="error" onClose={() => setError('')}>
+            {error}
+          </Alert>
+        </Box>
+      )}
+
+      {/* Fixed Input Area at Bottom */}
       <Box sx={{ 
-        position: 'sticky',
-        top: 0,
-        zIndex: 100,
         p: 3,
-        borderBottom: 1, 
+        borderTop: 1, 
         borderColor: 'divider',
         bgcolor: 'background.paper',
-        backdropFilter: 'blur(8px)',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+        position: 'fixed',
+        bottom: 0,
+        left: { xs: 0, md: '420px' }, // Account for sidebar width
+        right: 0,
+        zIndex: 1200, // Higher than sticky header (1100)
+        boxSizing: 'border-box'
       }}>
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, justifyContent: 'space-between' }}>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <BugReportIcon sx={{ mr: 1, color: 'primary.main' }} />
-            <Typography variant="h6" component="h3" sx={{ fontWeight: 'bold' }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
               Agent Testing
             </Typography>
             <Chip 
@@ -302,255 +385,73 @@ const AgentTestingInterface = ({
               variant="outlined" 
               sx={{ ml: 2 }}
             />
-          </Box>
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={creatingConversation ? <CircularProgress size={16} /> : <PsychologyIcon />}
-            onClick={createNewConversation}
-            disabled={disabled || creatingConversation || !agentId}
-            sx={{ textTransform: 'none' }}
-          >
-            {creatingConversation ? 'Creating...' : 'New Session'}
-          </Button>
-        </Box>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography variant="body2" color="text.secondary">
-            Test your agent with real-world scenarios using the standalone agent API
-          </Typography>
-          {testConversationId && (
-            <Chip 
-              label={`Session: ${testConversationId.substring(0, 8)}...`}
-              size="small"
-              variant="outlined"
-              sx={{ 
-                fontSize: '0.7rem',
-                height: 20
-              }}
-            />
-          )}
-        </Box>
-      </Box>
-
-      {/* Scrollable Content */}
-      <Box sx={{ flex: 1, overflowY: 'auto', p: 3 }}>
-        {/* Main Testing Interface */}
-        <Grid container spacing={3}>
-        {/* Test Conversation */}
-        <Grid item xs={12} md={8}>
-          <Paper 
-            elevation={0} 
-            sx={{ 
-              height: '100%',
-              display: 'flex',
-              flexDirection: 'column',
-              border: '1px solid',
-              borderColor: 'divider',
-              borderRadius: 2,
-              overflow: 'hidden'
-            }}
-          >
-            {/* Chat Header */}
-            <Box sx={{ p: 3, bgcolor: 'background.default' }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  <PsychologyIcon sx={{ mr: 1, color: 'primary.main' }} />
-                  <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
-                    Test Conversation
-                  </Typography>
-                  <Chip 
-                    label="Testing Mode" 
-                    size="small" 
-                    color="warning" 
-                    variant="outlined" 
-                    sx={{ ml: 2 }}
-                  />
-                </Box>
-                
-                {testMessages.length > 0 && (
-                  <Button
-                    size="small"
-                    onClick={handleClearConversation}
-                    startIcon={<ClearIcon />}
-                    disabled={disabled}
-                  >
-                    Clear
-                  </Button>
-                )}
-              </Box>
-            </Box>
-
-            <Divider />
-
-            {/* Messages Area */}
-            <Box 
-              sx={{ 
-                flex: 1,
-                p: 3,
-                overflowY: 'auto',
-                minHeight: 300,
-                maxHeight: 500
-              }}
-            >
-              {testMessages.length === 0 ? (
-                <Box 
-                  sx={{ 
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    height: '100%',
-                    textAlign: 'center',
-                    color: 'text.secondary'
-                  }}
-                >
-                  <BugReportIcon sx={{ fontSize: 48, mb: 2, opacity: 0.5 }} />
-                  <Typography variant="h6" sx={{ mb: 1 }}>
-                    Start testing your agent
-                  </Typography>
-                  <Typography variant="body2">
-                    Send test messages to see how your agent responds
-                  </Typography>
-                </Box>
-              ) : (
-                <>
-                  {testMessages.map(renderMessage)}
-                  {loading && (
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                      <Paper
-                        elevation={1}
-                        sx={{
-                          p: 2,
-                          bgcolor: 'background.paper',
-                          border: '1px solid',
-                          borderColor: 'divider',
-                          borderRadius: 2
-                        }}
-                      >
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          <CircularProgress size={16} sx={{ mr: 1 }} />
-                          <Typography variant="body2" color="text.secondary">
-                            Agent is processing...
-                          </Typography>
-                        </Box>
-                      </Paper>
-                    </Box>
-                  )}
-                  <div ref={messagesEndRef} />
-                </>
-              )}
-            </Box>
-
-            {/* Error Display */}
-            {error && (
-              <>
-                <Divider />
-                <Box sx={{ p: 2 }}>
-                  <Alert severity="error" onClose={() => setError('')}>
-                    {error}
-                  </Alert>
-                </Box>
-              </>
-            )}
-
-            {/* Input Area */}
-            <Divider />
-            <Box sx={{ p: 3 }}>
-              <TextField
-                fullWidth
-                multiline
-                maxRows={4}
-                value={testInput}
-                onChange={(e) => setTestInput(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="Enter test message for your agent (using standalone agent API)..."
-                disabled={disabled || loading}
-                InputProps={{
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton
-                        onClick={handleSendTestMessage}
-                        disabled={disabled || loading || !testInput.trim()}
-                        color="primary"
-                        size="small"
-                      >
-                        {loading ? <CircularProgress size={20} /> : <SendIcon />}
-                      </IconButton>
-                    </InputAdornment>
-                  )
-                }}
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    borderRadius: 2
-                  }
+            {testConversationId && (
+              <Chip 
+                label={`Session: ${testConversationId.substring(0, 8)}...`}
+                size="small"
+                variant="outlined"
+                sx={{ 
+                  ml: 2,
+                  fontSize: '0.7rem',
+                  height: 20
                 }}
               />
-            </Box>
-          </Paper>
-        </Grid>
-
-        {/* Test Controls and Info */}
-        <Grid item xs={12} md={4}>
-          <Paper 
-            elevation={0} 
-            sx={{ 
-              p: 3,
-              border: '1px solid',
-              borderColor: 'divider',
+            )}
+          </Box>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            {testMessages.length > 0 && (
+              <Button
+                size="small"
+                onClick={handleClearConversation}
+                startIcon={<ClearIcon />}
+                disabled={disabled}
+                sx={{ textTransform: 'none' }}
+              >
+                Clear
+              </Button>
+            )}
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={creatingConversation ? <CircularProgress size={16} /> : <PsychologyIcon />}
+              onClick={createNewConversation}
+              disabled={disabled || creatingConversation || !agentId}
+              sx={{ textTransform: 'none' }}
+            >
+              {creatingConversation ? 'Creating...' : 'New Session'}
+            </Button>
+          </Box>
+        </Box>
+        <TextField
+          fullWidth
+          multiline
+          maxRows={4}
+          value={testInput}
+          onChange={(e) => setTestInput(e.target.value)}
+          onKeyPress={handleKeyPress}
+          placeholder="Test your agent..."
+          disabled={disabled || loading}
+          InputProps={{
+            endAdornment: (
+              <InputAdornment position="end">
+                <IconButton
+                  onClick={handleSendTestMessage}
+                  disabled={disabled || loading || !testInput.trim()}
+                  color="primary"
+                  size="small"
+                >
+                  {loading ? <CircularProgress size={20} /> : <SendIcon />}
+                </IconButton>
+              </InputAdornment>
+            )
+          }}
+          sx={{
+            '& .MuiOutlinedInput-root': {
               borderRadius: 2,
-              height: 'fit-content'
-            }}
-          >
-            <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 'bold' }}>
-              Testing Information
-            </Typography>
-            
-            <Alert severity="info" sx={{ mb: 3 }}>
-              Testing uses the standalone agent API ({SANDBOX_CONSOLE_URL}). Test interactions are isolated and won't affect production data.
-            </Alert>
-
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <Box>
-                <Typography variant="body2" sx={{ fontWeight: 'medium', mb: 1 }}>
-                  Test Statistics
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Messages sent: {testMessages.filter(m => m.role === 'user').length}
-                </Typography>
-                <br />
-                <Typography variant="caption" color="text.secondary">
-                  Responses received: {testMessages.filter(m => m.role === 'assistant' && !m.isError).length}
-                </Typography>
-              </Box>
-
-              <Divider />
-
-              <Box>
-                <Typography variant="body2" sx={{ fontWeight: 'medium', mb: 1 }}>
-                  Quick Test Actions
-                </Typography>
-                <Button
-                  fullWidth
-                  variant="outlined"
-                  onClick={() => setTestInput('Hello! Can you help me with a task?')}
-                  disabled={disabled || loading}
-                  sx={{ mb: 1 }}
-                >
-                  Test Basic Response
-                </Button>
-                <Button
-                  fullWidth
-                  variant="outlined"
-                  onClick={() => setTestInput('What tools and capabilities do you have available?')}
-                  disabled={disabled || loading}
-                >
-                  Test Capabilities
-                </Button>
-              </Box>
-            </Box>
-          </Paper>
-        </Grid>
-        </Grid>
+              bgcolor: 'background.default'
+            }
+          }}
+        />
       </Box>
     </Box>
   );

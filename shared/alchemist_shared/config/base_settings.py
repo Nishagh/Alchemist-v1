@@ -60,7 +60,7 @@ class BaseSettings(PydanticBaseSettings):
     cors_origins: list[str] = Field(default=["http://localhost:3000"], description="CORS allowed origins")
     
     model_config = {
-        "env_file": [".env", "../shared/.env"],
+        "env_file": [".env", "../shared/.env", "/app/shared/.env"],
         "env_file_encoding": "utf-8",
         "case_sensitive": False,
         "extra": "ignore"

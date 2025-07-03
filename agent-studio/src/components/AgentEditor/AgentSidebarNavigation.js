@@ -76,7 +76,6 @@ const AgentSidebarNavigation = ({
   onSectionChange, 
   children,
   disabled = false,
-  workflow = null,
   onBackClick = null
 }) => {
   const theme = useTheme();
@@ -186,50 +185,6 @@ const AgentSidebarNavigation = ({
         )}
       </Box>
 
-      {/* Workflow Status - Compact overview when not on definition page */}
-      {!isCollapsed && activeSection !== 'definition' && workflow && (
-        <Box sx={{ 
-          p: 2, 
-          borderBottom: `1px solid ${theme.palette.divider}`,
-          bgcolor: alpha(theme.palette.primary.main, 0.02)
-        }}>
-          <Typography 
-            variant="subtitle2" 
-            sx={{ 
-              fontWeight: 600,
-              mb: 1,
-              color: 'text.primary'
-            }}
-          >
-            Workflow Status
-          </Typography>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-            {workflow.stages.map(stage => (
-              <Box
-                key={stage.id}
-                sx={{
-                  px: 1,
-                  py: 0.5,
-                  borderRadius: 1,
-                  fontSize: '0.75rem',
-                  bgcolor: stage.completed 
-                    ? alpha(theme.palette.success.main, 0.1)
-                    : stage.current 
-                      ? alpha(theme.palette.primary.main, 0.1)
-                      : alpha(theme.palette.grey[500], 0.1),
-                  color: stage.completed 
-                    ? 'success.main'
-                    : stage.current 
-                      ? 'primary.main'
-                      : 'text.secondary'
-                }}
-              >
-                {stage.name}
-              </Box>
-            ))}
-          </Box>
-        </Box>
-      )}
 
       {/* Navigation Items */}
       <List sx={{ flex: 1, py: 1 }}>

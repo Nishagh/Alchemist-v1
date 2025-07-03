@@ -1,0 +1,9 @@
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['build', '-t', 'gcr.io/alchemist-e69bb/agent-deployment-job:latest', '/tmp/agent-job-build']
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['push', 'gcr.io/alchemist-e69bb/agent-deployment-job:latest']
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['tag', 'gcr.io/alchemist-e69bb/agent-deployment-job:latest', 'gcr.io/alchemist-e69bb/agent-deployment-job:20250704-030008']
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['push', 'gcr.io/alchemist-e69bb/agent-deployment-job:20250704-030008']

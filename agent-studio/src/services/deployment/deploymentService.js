@@ -7,7 +7,8 @@
 
 import { apiConfig } from '../config/apiConfig';
 import { db, Collections, DocumentFields, StatusValues, serverTimestamp } from '../../utils/firebase';
-import { collection, query, where, orderBy, getDocs, doc, getDoc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { collection, query, where, orderBy, getDocs, doc, getDoc, onSnapshot, updateDoc, addDoc } from 'firebase/firestore';
+import { auth } from '../../utils/firebase';
 
 const AGENT_LAUNCHER_URL = process.env.REACT_APP_AGENT_LAUNCHER_URL || 'http://0.0.0.0:8080';
 
@@ -21,8 +22,12 @@ class DeploymentService {
    */
   async deployAgent(agentId, options = {}) {
     try {
+      // First, create the deployment document in Firestore following deploy-job.py structure
+      const deploymentId = await this.createDeploymentDocument(agentId, options);
+      
       const deploymentRequest = {
         agent_id: agentId,
+        deployment_id: deploymentId, // Pass the deployment ID
         project_id: 'alchemist-e69bb',
         region: options.region || 'us-central1',
         webhook_url: options.webhookUrl,
@@ -39,13 +44,142 @@ class DeploymentService {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        
+        // Update deployment document with failure
+        await this.updateDeploymentDocument(deploymentId, {
+          status: 'failed',
+          error_message: errorData.detail || `Deployment failed: ${response.status}`,
+          progress: 0,
+          current_step: 'Failed to initiate deployment',
+          completed_at: serverTimestamp()
+        });
+        
         throw new Error(errorData.detail || `Deployment failed: ${response.status}`);
       }
 
       const result = await response.json();
-      return result;
+      
+      // Update deployment document with successful initiation
+      await this.updateDeploymentDocument(deploymentId, {
+        status: 'queued',
+        progress: 10,
+        current_step: 'Deployment queued successfully'
+      });
+      
+      return {
+        ...result,
+        deployment_id: deploymentId
+      };
     } catch (error) {
       console.error('Error deploying agent:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create deployment document in Firestore following deploy-job.py structure
+   */
+  async createDeploymentDocument(agentId, options = {}) {
+    try {
+      const currentUser = auth.currentUser;
+      const userId = currentUser?.uid;
+      
+      if (!userId) {
+        throw new Error('User not authenticated');
+      }
+
+      const deploymentData = {
+        agent_id: agentId,
+        user_id: userId,
+        status: 'queued',
+        progress: 0,
+        current_step: 'Deployment request created',
+        deployment_config: {
+          region: options.region || 'us-central1',
+          priority: options.priority || 5,
+          webhook_url: options.webhookUrl || null
+        },
+        progress_steps: [
+          { step: 'queued', status: 'completed', message: 'Deployment request created' },
+          { step: 'validating', status: 'pending', message: 'Validating deployment configuration' },
+          { step: 'building', status: 'pending', message: 'Building agent container' },
+          { step: 'deploying', status: 'pending', message: 'Deploying to cloud infrastructure' },
+          { step: 'testing', status: 'pending', message: 'Testing deployment connectivity' }
+        ],
+        created_at: serverTimestamp(),
+        updated_at: serverTimestamp()
+      };
+
+      const deploymentsRef = collection(db, Collections.AGENT_DEPLOYMENTS);
+      const deploymentRef = await addDoc(deploymentsRef, deploymentData);
+      
+      console.log('Created deployment document:', deploymentRef.id);
+      return deploymentRef.id;
+    } catch (error) {
+      console.error('Error creating deployment document:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update deployment document in Firestore
+   */
+  async updateDeploymentDocument(deploymentId, updateData) {
+    try {
+      const deploymentRef = doc(db, Collections.AGENT_DEPLOYMENTS, deploymentId);
+      const updates = {
+        ...updateData,
+        updated_at: serverTimestamp()
+      };
+      
+      await updateDoc(deploymentRef, updates);
+      console.log('Updated deployment document:', deploymentId, updates);
+    } catch (error) {
+      console.error('Error updating deployment document:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update specific progress step in deployment document
+   */
+  async updateProgressStep(deploymentId, stepName, stepStatus, stepMessage = null) {
+    try {
+      const deploymentRef = doc(db, Collections.AGENT_DEPLOYMENTS, deploymentId);
+      const deploymentDoc = await getDoc(deploymentRef);
+      
+      if (!deploymentDoc.exists()) {
+        throw new Error('Deployment document not found');
+      }
+      
+      const data = deploymentDoc.data();
+      const progressSteps = [...(data.progress_steps || [])];
+      
+      // Find and update the specific step
+      const stepIndex = progressSteps.findIndex(step => step.step === stepName);
+      if (stepIndex >= 0) {
+        progressSteps[stepIndex] = {
+          ...progressSteps[stepIndex],
+          status: stepStatus,
+          message: stepMessage || progressSteps[stepIndex].message,
+          updated_at: new Date().toISOString()
+        };
+        
+        // Calculate overall progress based on completed steps
+        const completedSteps = progressSteps.filter(step => step.status === 'completed').length;
+        const progress = Math.round((completedSteps / progressSteps.length) * 100);
+        
+        await updateDoc(deploymentRef, {
+          progress_steps: progressSteps,
+          progress: progress,
+          current_step: stepMessage || progressSteps[stepIndex].message,
+          updated_at: serverTimestamp()
+        });
+        
+        console.log(`Updated progress step ${stepName} to ${stepStatus}:`, progressSteps[stepIndex]);
+      }
+    } catch (error) {
+      console.error('Error updating progress step:', error);
       throw error;
     }
   }
@@ -413,3 +547,6 @@ export const pollDeploymentStatus = deploymentService.pollDeploymentStatus.bind(
 export const subscribeToDeploymentUpdates = deploymentService.subscribeToDeploymentUpdates.bind(deploymentService);
 export const getDeployment = deploymentService.getDeployment.bind(deploymentService);
 export const updateAgentDeploymentStatus = deploymentService.updateAgentDeploymentStatus.bind(deploymentService);
+export const createDeploymentDocument = deploymentService.createDeploymentDocument.bind(deploymentService);
+export const updateDeploymentDocument = deploymentService.updateDeploymentDocument.bind(deploymentService);
+export const updateProgressStep = deploymentService.updateProgressStep.bind(deploymentService);
