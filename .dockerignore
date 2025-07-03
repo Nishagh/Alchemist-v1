@@ -104,14 +104,9 @@ shared/dist/
 !agent-launcher/agent-template/
 !shared/
 !deploy-ai-agent.sh
-!Dockerfile.agent-template
-!cloudbuild.agent-template.yaml
-!.dockerignore.agent-template
 
-# Exclude deployment configs at root (but not deploy-ai-agent.sh and cloudbuild.agent-template.yaml)
-cloudbuild-temp.yaml
-cloudbuild-job-temp.yaml
-deploy-agent-job.sh
-deploy-to-cloud-run.sh
+# Exclude deployment configs at root
+cloudbuild*.yaml
+deploy*.sh
 docker-compose*.yml
 Makefile
