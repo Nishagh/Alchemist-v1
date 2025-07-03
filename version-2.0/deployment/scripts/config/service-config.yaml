@@ -1,0 +1,529 @@
+# Service Configuration for Alchemist Smart Deployment
+# This file defines metadata, dependencies, and deployment settings for all services
+
+version: "1.0"
+metadata:
+  created: "2025-01-03"
+  description: "Alchemist AI Platform Service Configuration"
+
+# Service definitions organized by tier
+services:
+  # Tier 1: Core Infrastructure Services
+  core:
+    agent-engine:
+      description: "Main API orchestration service for AI agent operations"
+      tier: 1
+      priority: 1
+      path: "packages/core/agent-engine"
+      cloud_run_name: "alchemist-agent-engine"
+      dockerfile: "Dockerfile"
+      build_context: "."
+      port: 8080
+      dependencies:
+        - knowledge-vault
+        - shared-library
+      resource_config:
+        memory: "1Gi"
+        cpu: 1
+        max_instances: 10
+        min_instances: 0
+        concurrency: 80
+        timeout: 900
+      environment_variables:
+        - ENVIRONMENT
+        - FIREBASE_PROJECT_ID
+        - OPENAI_API_KEY
+        - KNOWLEDGE_VAULT_URL
+        - AGENT_BRIDGE_URL
+        - TOOL_FORGE_URL
+      health_check:
+        path: "/health"
+        timeout: 30
+        retries: 3
+      scaling:
+        auto_scale: true
+        scale_down_delay: 600
+
+    knowledge-vault:
+      description: "Advanced document processing and semantic search engine"
+      tier: 1
+      priority: 2
+      path: "packages/core/knowledge-vault"
+      cloud_run_name: "alchemist-knowledge-vault"
+      dockerfile: "Dockerfile"
+      build_context: "."
+      port: 8080
+      dependencies:
+        - shared-library
+      resource_config:
+        memory: "2Gi"
+        cpu: 2
+        max_instances: 5
+        min_instances: 0
+        concurrency: 40
+        timeout: 1200
+      environment_variables:
+        - ENVIRONMENT
+        - FIREBASE_PROJECT_ID
+        - OPENAI_API_KEY
+      health_check:
+        path: "/health"
+        timeout: 45
+        retries: 3
+      scaling:
+        auto_scale: true
+        scale_down_delay: 300
+
+    prompt-engine:
+      description: "Intelligent prompt optimization and management service"
+      tier: 1
+      priority: 3
+      path: "packages/core/prompt-engine"
+      cloud_run_name: "alchemist-prompt-engine"
+      dockerfile: "Dockerfile"
+      build_context: "."
+      port: 8080
+      dependencies:
+        - shared-library
+      resource_config:
+        memory: "512Mi"
+        cpu: 1
+        max_instances: 3
+        min_instances: 0
+        concurrency: 50
+        timeout: 900
+      environment_variables:
+        - ENVIRONMENT
+        - FIREBASE_PROJECT_ID
+        - OPENAI_API_KEY
+      health_check:
+        path: "/health"
+        timeout: 30
+        retries: 3
+
+  # Tier 2: Integration Services
+  integrations:
+    agent-bridge:
+      description: "WhatsApp Business API integration service"
+      tier: 2
+      priority: 1
+      path: "packages/integrations/agent-bridge"
+      cloud_run_name: "alchemist-agent-bridge"
+      dockerfile: "Dockerfile"
+      build_context: "."
+      port: 8080
+      dependencies:
+        - agent-engine
+        - shared-library
+      resource_config:
+        memory: "512Mi"
+        cpu: 1
+        max_instances: 3
+        min_instances: 0
+        concurrency: 100
+        timeout: 600
+      environment_variables:
+        - ENVIRONMENT
+        - FIREBASE_PROJECT_ID
+        - WHATSAPP_ACCESS_TOKEN
+        - AGENT_ENGINE_URL
+      health_check:
+        path: "/health"
+        timeout: 30
+        retries: 3
+
+    banking-api-service:
+      description: "Example financial services integration"
+      tier: 2
+      priority: 3
+      path: "packages/integrations/banking-api-service"
+      cloud_run_name: "alchemist-banking-api-service"
+      dockerfile: "Dockerfile"
+      build_context: "."
+      port: 8080
+      dependencies: []
+      resource_config:
+        memory: "512Mi"
+        cpu: 1
+        max_instances: 3
+        min_instances: 0
+        concurrency: 50
+        timeout: 600
+      environment_variables:
+        - ENVIRONMENT
+        - BANKING_API_KEY
+      health_check:
+        path: "/health"
+        timeout: 30
+        retries: 3
+
+  # Tier 3: Infrastructure Services
+  infrastructure:
+    billing-service:
+      description: "Comprehensive usage tracking and payment processing"
+      tier: 3
+      priority: 1
+      path: "packages/infrastructure/billing-service"
+      cloud_run_name: "alchemist-billing-service"
+      dockerfile: "Dockerfile"
+      build_context: "."
+      port: 8080
+      dependencies:
+        - shared-library
+      resource_config:
+        memory: "1Gi"
+        cpu: 1
+        max_instances: 5
+        min_instances: 0
+        concurrency: 80
+        timeout: 900
+      environment_variables:
+        - ENVIRONMENT
+        - FIREBASE_PROJECT_ID
+        - STRIPE_SECRET_KEY
+      health_check:
+        path: "/health"
+        timeout: 30
+        retries: 3
+
+    alchemist-monitor-service:
+      description: "Platform-wide monitoring and alerting system"
+      tier: 3
+      priority: 2
+      path: "packages/infrastructure/alchemist-monitor-service"
+      cloud_run_name: "alchemist-monitor-service"
+      dockerfile: "Dockerfile"
+      build_context: "."
+      port: 8080
+      dependencies:
+        - shared-library
+      resource_config:
+        memory: "1Gi"
+        cpu: 1
+        max_instances: 10
+        min_instances: 1
+        concurrency: 100
+        timeout: 600
+      environment_variables:
+        - ENVIRONMENT
+        - FIREBASE_PROJECT_ID
+      health_check:
+        path: "/health"
+        timeout: 30
+        retries: 3
+
+    global-narrative-framework:
+      description: "Advanced agent behavior tracking and narrative coherence"
+      tier: 3
+      priority: 3
+      path: "packages/infrastructure/global-narative-framework"
+      cloud_run_name: "alchemist-global-narrative-framework"
+      dockerfile: "Dockerfile"
+      build_context: "."
+      port: 8080
+      dependencies:
+        - shared-library
+      resource_config:
+        memory: "1Gi"
+        cpu: 1
+        max_instances: 3
+        min_instances: 0
+        concurrency: 50
+        timeout: 900
+      environment_variables:
+        - ENVIRONMENT
+        - FIREBASE_PROJECT_ID
+        - OPENAI_API_KEY
+      health_check:
+        path: "/health"
+        timeout: 30
+        retries: 3
+
+  # Tier 4: Tool Services
+  tools:
+    tool-forge:
+      description: "MCP configuration generator and manager"
+      tier: 4
+      priority: 1
+      path: "packages/tools/tool-forge"
+      cloud_run_name: "alchemist-tool-forge"
+      dockerfile: "Dockerfile"
+      build_context: "."
+      port: 8080
+      dependencies: []
+      resource_config:
+        memory: "512Mi"
+        cpu: 1
+        max_instances: 3
+        min_instances: 0
+        concurrency: 50
+        timeout: 600
+      environment_variables:
+        - ENVIRONMENT
+      health_check:
+        path: "/health"
+        timeout: 30
+        retries: 3
+
+    sandbox-console:
+      description: "Safe testing environment for agent development"
+      tier: 4
+      priority: 2
+      path: "packages/tools/sandbox-console"
+      cloud_run_name: "alchemist-sandbox-console"
+      dockerfile: "Dockerfile"
+      build_context: "."
+      port: 8080
+      dependencies:
+        - agent-engine
+        - knowledge-vault
+      resource_config:
+        memory: "1Gi"
+        cpu: 1
+        max_instances: 5
+        min_instances: 0
+        concurrency: 20
+        timeout: 900
+      environment_variables:
+        - ENVIRONMENT
+        - FIREBASE_PROJECT_ID
+        - OPENAI_API_KEY
+        - AGENT_ENGINE_URL
+        - KNOWLEDGE_VAULT_URL
+      health_check:
+        path: "/health"
+        timeout: 30
+        retries: 3
+
+    agent-launcher:
+      description: "Automated agent deployment and lifecycle management"
+      tier: 4
+      priority: 3
+      path: "packages/tools/agent-launcher"
+      cloud_run_name: "alchemist-agent-launcher"
+      dockerfile: "Dockerfile"
+      build_context: "."
+      port: 8080
+      dependencies:
+        - agent-engine
+        - shared-library
+      resource_config:
+        memory: "1Gi"
+        cpu: 1
+        max_instances: 3
+        min_instances: 0
+        concurrency: 10
+        timeout: 1800
+      environment_variables:
+        - ENVIRONMENT
+        - FIREBASE_PROJECT_ID
+        - AGENT_ENGINE_URL
+      health_check:
+        path: "/health"
+        timeout: 30
+        retries: 3
+
+    mcp-config-generator:
+      description: "Model Context Protocol configuration management"
+      tier: 4
+      priority: 4
+      path: "packages/tools/mcp_config_generator"
+      cloud_run_name: "alchemist-mcp-config-generator"
+      dockerfile: "Dockerfile"
+      build_context: "."
+      port: 8080
+      dependencies: []
+      resource_config:
+        memory: "512Mi"
+        cpu: 1
+        max_instances: 2
+        min_instances: 0
+        concurrency: 30
+        timeout: 600
+      environment_variables:
+        - ENVIRONMENT
+      health_check:
+        path: "/health"
+        timeout: 30
+        retries: 3
+
+    agent-tuning-service:
+      description: "AI model fine-tuning and optimization service"
+      tier: 4
+      priority: 5
+      path: "packages/tools/agent-tuning-service"
+      cloud_run_name: "alchemist-agent-tuning-service"
+      dockerfile: "Dockerfile"
+      build_context: "."
+      port: 8080
+      dependencies:
+        - shared-library
+      resource_config:
+        memory: "2Gi"
+        cpu: 2
+        max_instances: 2
+        min_instances: 0
+        concurrency: 5
+        timeout: 3600
+      environment_variables:
+        - ENVIRONMENT
+        - FIREBASE_PROJECT_ID
+        - OPENAI_API_KEY
+      health_check:
+        path: "/health"
+        timeout: 60
+        retries: 2
+
+  # Tier 5: Frontend Services
+  frontend:
+    agent-studio:
+      description: "Comprehensive web application for agent creation and management"
+      tier: 5
+      priority: 1
+      path: "packages/frontend/agent-studio"
+      cloud_run_name: "alchemist-agent-studio"
+      dockerfile: "Dockerfile"
+      build_context: "."
+      port: 8080
+      dependencies:
+        - agent-engine
+        - knowledge-vault
+        - agent-bridge
+      resource_config:
+        memory: "512Mi"
+        cpu: 1
+        max_instances: 5
+        min_instances: 0
+        concurrency: 100
+        timeout: 300
+      environment_variables:
+        - ENVIRONMENT
+        - REACT_APP_FIREBASE_PROJECT_ID
+        - REACT_APP_AGENT_ENGINE_URL
+        - REACT_APP_KNOWLEDGE_VAULT_URL
+      health_check:
+        path: "/"
+        timeout: 30
+        retries: 3
+
+    admin-dashboard:
+      description: "Administrative interface for platform management"
+      tier: 5
+      priority: 2
+      path: "packages/frontend/admin-dashboard"
+      cloud_run_name: "alchemist-admin-dashboard"
+      dockerfile: "Dockerfile"
+      build_context: "."
+      port: 8080
+      dependencies:
+        - alchemist-monitor-service
+        - billing-service
+      resource_config:
+        memory: "512Mi"
+        cpu: 1
+        max_instances: 5
+        min_instances: 0
+        concurrency: 100
+        timeout: 300
+      environment_variables:
+        - ENVIRONMENT
+        - REACT_APP_FIREBASE_PROJECT_ID
+        - REACT_APP_MONITOR_SERVICE_URL
+      health_check:
+        path: "/"
+        timeout: 30
+        retries: 3
+
+# Deployment groups for batch operations
+deployment_groups:
+  core:
+    description: "Essential core services"
+    services:
+      - agent-engine
+      - knowledge-vault
+      - prompt-engine
+    parallel: false
+
+  integrations:
+    description: "External integration services"
+    services:
+      - agent-bridge
+      - banking-api-service
+    parallel: true
+
+  infrastructure:
+    description: "Platform infrastructure services"
+    services:
+      - billing-service
+      - alchemist-monitor-service
+      - global-narrative-framework
+    parallel: true
+
+  tools:
+    description: "Development and management tools"
+    services:
+      - tool-forge
+      - sandbox-console
+      - agent-launcher
+      - mcp-config-generator
+      - agent-tuning-service
+    parallel: true
+
+  frontend:
+    description: "User interface applications"
+    services:
+      - agent-studio
+      - admin-dashboard
+    parallel: true
+
+  all:
+    description: "All services in dependency order"
+    services:
+      - knowledge-vault
+      - prompt-engine
+      - agent-engine
+      - agent-bridge
+      - banking-api-service
+      - billing-service
+      - alchemist-monitor-service
+      - global-narrative-framework
+      - tool-forge
+      - sandbox-console
+      - agent-launcher
+      - mcp-config-generator
+      - agent-tuning-service
+      - agent-studio
+      - admin-dashboard
+    parallel: false
+
+# Global deployment settings
+global_settings:
+  default_timeout: 900
+  health_check_timeout: 30
+  health_check_retries: 3
+  deployment_timeout: 3600
+  parallel_deployment_limit: 5
+  rollback_on_failure: true
+  create_backup_before_deployment: true
+  cleanup_old_revisions: true
+  max_revisions_to_keep: 5
+
+# Environment-specific overrides
+environments:
+  development:
+    global_overrides:
+      min_instances: 0
+      max_instances: 2
+      concurrency: 10
+    
+  staging:
+    global_overrides:
+      min_instances: 0
+      max_instances: 3
+      concurrency: 50
+    
+  production:
+    global_overrides:
+      min_instances: 1
+      max_instances: 10
+      concurrency: 100

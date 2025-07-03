@@ -1,0 +1,22 @@
+fastapi>=0.115.3
+uvicorn[standard]
+gunicorn
+pydantic>=2.8.0
+PyYAML==6.0.1
+aiohttp==3.9.1
+mcp>=1.0.0
+python-multipart>=0.0.6
+openapi-spec-validator>=0.7.1
+prance>=23.6.21.0
+requests>=2.31.0
+openai>=1.0.0
+redis>=5.0.0,<6.0.0
+firebase-admin>=6.0.0,<7.0.0
+langchain
+langchain-openai
+tiktoken>=0.5.2,<1.0.0
+httpx>=0.24.0
+PyJWT>=2.0.0,<3.0.0
+python-dotenv>=1.0.0
+google-cloud-run>=0.10.0
+# Note: Core Firebase, Google Cloud, and other shared dependencies

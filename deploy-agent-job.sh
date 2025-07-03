@@ -59,16 +59,16 @@ ENV PYTHONDONTWRITEBYTECODE=1 \\
     PYTHONUNBUFFERED=1 \\
     PYTHONPATH=/app
 
-# Install system dependencies including gcloud CLI and Docker (needed for subprocess calls)
+# Install system dependencies including gcloud CLI (using gcloud builds instead of docker)
 RUN apt-get update && apt-get install -y \\
     curl \\
     gcc \\
     apt-transport-https \\
     ca-certificates \\
     gnupg \\
-    docker.io \\
+    lsb-release \\
+    && curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg \\
     && echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list \\
-    && curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg add - \\
     && apt-get update && apt-get install -y google-cloud-cli \\
     && rm -rf /var/lib/apt/lists/*
 
@@ -86,12 +86,17 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY shared /app/shared
 RUN cd /app/shared && pip install -e .
 
-# Copy agent-launcher directory (needed by deploy-ai-agent.sh)
+# Copy agent-launcher directory (includes deploy_job.py and deploy_agent_with_progress.py)
 COPY agent-launcher /app/agent-launcher
 
 # Copy deployment script to root (deploy-ai-agent.sh expects to run from root)
 COPY deploy-ai-agent.sh /app/
 RUN chmod +x /app/deploy-ai-agent.sh
+
+# Copy Dockerfile.agent-template, cloudbuild config, and dockerignore for agent deployments
+COPY Dockerfile.agent-template /app/Dockerfile.agent-template
+COPY cloudbuild.agent-template.yaml /app/cloudbuild.agent-template.yaml
+COPY .dockerignore.agent-template /app/.dockerignore.agent-template
 
 # Copy the job script to the working directory
 COPY agent-launcher/deploy_job.py /app/
@@ -224,9 +229,13 @@ shared/dist/
 !agent-launcher/agent-template/
 !shared/
 !deploy-ai-agent.sh
+!Dockerfile.agent-template
+!cloudbuild.agent-template.yaml
+!.dockerignore.agent-template
 
-# Exclude deployment configs at root (but not deploy-ai-agent.sh)
-cloudbuild*.yaml
+# Exclude deployment configs at root (but not deploy-ai-agent.sh and cloudbuild.agent-template.yaml)
+cloudbuild-temp.yaml
+cloudbuild-job-temp.yaml
 deploy-agent-job.sh
 deploy-to-cloud-run.sh
 docker-compose*.yml
@@ -264,6 +273,9 @@ fi
 cp -r agent-launcher ${BUILD_DIR}/
 cp -r shared ${BUILD_DIR}/
 cp deploy-ai-agent.sh ${BUILD_DIR}/
+cp Dockerfile.agent-template ${BUILD_DIR}/
+cp cloudbuild.agent-template.yaml ${BUILD_DIR}/
+cp .dockerignore.agent-template ${BUILD_DIR}/
 cp Dockerfile.agent-job ${BUILD_DIR}/Dockerfile
 cp .dockerignore.agent-job ${BUILD_DIR}/.dockerignore
 
@@ -271,17 +283,23 @@ cp .dockerignore.agent-job ${BUILD_DIR}/.dockerignore
 echo -e "${BLUE}📋 Build directory contents:${NC}"
 ls -la ${BUILD_DIR}/
 
-# Create cloudbuild.yaml in the build directory
+# Create cloudbuild.yaml in the build directory using gcloud builds
 cat > ${BUILD_DIR}/cloudbuild.yaml << EOF
 steps:
 - name: 'gcr.io/cloud-builders/docker'
-  args: ['build', '-t', '${IMAGE_NAME}:latest', '.']
+  args: ['build', '-t', '${IMAGE_NAME}:latest', '-t', '${IMAGE_NAME}:${TIMESTAMP}', '.']
 - name: 'gcr.io/cloud-builders/docker'
   args: ['push', '${IMAGE_NAME}:latest']
 - name: 'gcr.io/cloud-builders/docker'
-  args: ['tag', '${IMAGE_NAME}:latest', '${IMAGE_NAME}:${TIMESTAMP}']
-- name: 'gcr.io/cloud-builders/docker'
   args: ['push', '${IMAGE_NAME}:${TIMESTAMP}']
+
+options:
+  machineType: 'E2_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY
+
+images:
+- '${IMAGE_NAME}:latest'
+- '${IMAGE_NAME}:${TIMESTAMP}'
 EOF
 
 if ! gcloud builds submit --config=${BUILD_DIR}/cloudbuild.yaml ${BUILD_DIR}; then

@@ -1,0 +1,21 @@
+# Shared Alchemist libraries are installed separately in Dockerfile
+
+# Core dependencies
+firebase-admin>=6.5.0
+google-cloud-firestore>=2.13.0
+google-cloud-storage>=2.10.0
+langchain
+langchain-core
+langchain-openai
+langchain-community
+openai>=1.0.0
+requests>=2.28.0
+python-dotenv>=1.0.0
+pydantic>=2.0.0
+
+# MCP (Model Context Protocol) integration
+mcp
+httpx>=0.24.0
+
+uvicorn
+fastapi

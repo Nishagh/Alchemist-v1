@@ -1,0 +1,13 @@
+# Google Cloud Spanner Graph Requirements for eA³ (Epistemic Autonomy)
+# Add these to your existing requirements.txt files
+
+# Google Cloud Spanner client for graph operations
+google-cloud-spanner>=3.47.0
+
+# Additional dependencies for graph operations
+networkx>=3.1
+dataclasses-json>=0.6.0
+
+# For advanced NLP (optional - for production belief revision)
+# sentence-transformers>=2.2.0
+# transformers>=4.30.0

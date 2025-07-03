@@ -1,0 +1,335 @@
+# Alchemist Firebase/Firestore Database Structure
+# This file documents the complete database schema for the Alchemist AI Agent Platform
+
+firebase_project:
+  project_id: "alchemist-e69bb"
+  auth_domain: "alchemist-e69bb.firebaseapp.com"
+  storage_bucket: "alchemist-e69bb.appspot.com"
+  messaging_sender_id: "103214520240448237488"
+  app_id: "1:851487020021:web:527efbdbe1ded9aa2686bc"
+
+collections:
+  # ============================================================================
+  # CORE AGENT MANAGEMENT
+  # ============================================================================
+  
+  alchemist_agents:
+    description: "Primary collection for AI agent definitions and metadata"
+    document_id: "agent_id (string)"
+    fields:
+      name: "string - Agent display name"
+      description: "string - Agent description and purpose"
+      type: "string - Agent type (general, code, research, etc.)"
+      owner_id: "string - Firebase Auth UID of agent owner"
+      userId: "string - Alternative user ID field"
+      deployment_status: "string - current deployment state (pending, completed, failed)"
+      active_deployment_id: "string - Reference to current deployment"
+      service_url: "string - URL of deployed agent service"
+      last_deployment_at: "timestamp - Last successful deployment time"
+      created_at: "timestamp - Agent creation time"
+      updated_at: "timestamp - Last modification time"
+    
+    subcollections:
+      conversations:
+        description: "Nested conversations for agent (legacy structure)"
+        document_id: "conversation_id (string)"
+        fields:
+          created_at: "timestamp"
+          updated_at: "timestamp"
+          message_count: "number"
+          last_message: "string - Preview of last message (100 chars)"
+        
+        subcollections:
+          messages:
+            description: "Individual messages in conversation"
+            document_id: "message_id (auto-generated)"
+            fields:
+              content: "string - Message content"
+              role: "string - user/assistant"
+              timestamp: "timestamp"
+
+  # ============================================================================
+  # DEPLOYMENT MANAGEMENT
+  # ============================================================================
+  
+  agent_deployments:
+    description: "Deployment tracking and history for agents"
+    document_id: "deployment_id (auto-generated)"
+    fields:
+      agent_id: "string - Reference to alchemist_agents document"
+      project_id: "string - Google Cloud Project ID (alchemist-e69bb)"
+      region: "string - Deployment region (us-central1)"
+      status: "string - pending|building|completed|deployed|failed|cancelled"
+      service_url: "string - Deployed service endpoint URL"
+      webhook_url: "string - Optional webhook URL for notifications"
+      error_message: "string - Error details if deployment failed"
+      priority: "number - Deployment priority (1-10)"
+      created_at: "timestamp - Deployment initiation time"
+      updated_at: "timestamp - Last status update time"
+    
+    indexes:
+      - fields: ["agent_id", "created_at"]
+        order: "desc"
+      - fields: ["status", "created_at"]
+        order: "desc"
+      - fields: ["agent_id", "status", "created_at"]
+        order: "desc"
+
+  # ============================================================================
+  # CONVERSATION & BILLING MANAGEMENT
+  # ============================================================================
+  
+  conversations:
+    description: "Production conversation logs with billing tracking"
+    document_id: "auto-generated"
+    fields:
+      agentId: "string - Reference to agent"
+      conversationId: "string - External conversation identifier"
+      userMessage: "string - User input message"
+      agentResponse: "string - Agent response message"
+      tokens:
+        type: "object"
+        fields:
+          prompt: "number - Input tokens used"
+          completion: "number - Output tokens generated"
+          total: "number - Total tokens (prompt + completion)"
+      cost: "number - Calculated cost in USD"
+      timestamp: "string - ISO timestamp of interaction"
+      createdAt: "serverTimestamp - Firestore server timestamp"
+      isProduction: "boolean - true for production, false for development"
+      deploymentType: "string - 'deployed' for production agents"
+    
+    indexes:
+      - fields: ["agentId", "createdAt"]
+        order: "desc"
+      - fields: ["isProduction", "createdAt"]
+        order: "desc"
+
+  dev_conversations:
+    description: "Pre-deployment testing conversations (free, no billing)"
+    document_id: "auto-generated"
+    fields:
+      agentId: "string - Reference to agent"
+      conversationId: "string - Test conversation identifier"
+      userMessage: "string - User test message"
+      agentResponse: "string - Agent test response"
+      timestamp: "string - ISO timestamp"
+      createdAt: "serverTimestamp"
+      isProduction: "boolean - always false"
+      deploymentType: "string - 'pre-deployment'"
+      cost: "number - always 0"
+      tokens:
+        type: "object"
+        fields:
+          prompt: "number - always 0"
+          completion: "number - always 0"
+          total: "number - always 0"
+
+  conversation_sessions:
+    description: "Session summaries for billing analytics"
+    document_id: "auto-generated"
+    fields:
+      agentId: "string - Reference to agent"
+      conversationId: "string - Session conversation ID"
+      messageCount: "number - Total messages in session"
+      totalTokens: "number - Total tokens consumed"
+      totalCost: "number - Total session cost"
+      isProduction: "boolean - Production vs development session"
+      deploymentType: "string - 'deployed'"
+      endedAt: "string - ISO timestamp when session ended"
+      createdAt: "serverTimestamp"
+
+  agent_billing_summary:
+    description: "Aggregate billing data per agent for quick lookups"
+    document_id: "agent_id (string)"
+    fields:
+      agentId: "string - Agent identifier"
+      totalMessages: "number - Cumulative message count"
+      totalTokens: "number - Cumulative token usage"
+      totalCost: "number - Cumulative cost in USD"
+      lastActivity: "serverTimestamp - Last billable interaction"
+      createdAt: "serverTimestamp - First billing entry"
+      updatedAt: "serverTimestamp - Last update"
+
+  # ============================================================================
+  # KNOWLEDGE BASE & EMBEDDINGS
+  # ============================================================================
+  
+  knowledge_base_files:
+    description: "File metadata for agent knowledge bases"
+    document_id: "file_id (string)"
+    fields:
+      id: "string - File identifier"
+      agent_id: "string - Owner agent reference"
+      filename: "string - Original filename"
+      upload_date: "timestamp - File upload time"
+      file_size: "number - File size in bytes"
+      storage_path: "string - Firebase Storage path"
+      status: "string - processing status"
+    
+    indexes:
+      - fields: ["agent_id", "upload_date"]
+        order: "desc"
+
+  knowledge_base_embeddings:
+    description: "Base collection for agent-specific embedding subcollections"
+    document_id: "agent_id (string)"
+    
+    subcollections:
+      embeddings:
+        description: "Vector embeddings for agent knowledge"
+        document_id: "chunk_id (auto-generated)"
+        fields:
+          id: "string - Chunk identifier"
+          file_id: "string - Reference to knowledge_base_files"
+          agent_id: "string - Owner agent"
+          filename: "string - Source filename"
+          content: "string - Text content of chunk"
+          page_number: "number - Page number in source document"
+          embedding: "array - Vector embedding (1536 dimensions)"
+          created_at: "timestamp - Chunk creation time"
+          updated_at: "timestamp - Last modification"
+        
+        indexes:
+          - fields: ["file_id", "created_at"]
+            order: "asc"
+
+  # ============================================================================
+  # WHATSAPP & COMMUNICATION MANAGEMENT
+  # ============================================================================
+  
+  managed_accounts:
+    description: "WhatsApp Business Service Provider managed accounts"
+    document_id: "account_id (auto-generated)"
+    fields:
+      deployment_id: "string - Reference to agent deployment"
+      phone_number: "string - WhatsApp phone number"
+      status: "string - account status (pending, active, verification_failed)"
+      verified_at: "timestamp - Verification completion time"
+      created_at: "timestamp - Account creation time"
+      updated_at: "timestamp - Last modification time"
+    
+    indexes:
+      - fields: ["deployment_id", "created_at"]
+        order: "desc"
+      - fields: ["status", "created_at"]
+        order: "desc"
+
+  webhook_logs:
+    description: "WhatsApp webhook processing logs and message tracking"
+    document_id: "auto-generated"
+    fields:
+      account_id: "string - Reference to managed_accounts"
+      processed_messages: "array - List of processed message IDs"
+      status: "string - processing status (success, error)"
+      created_at: "timestamp - Log entry time"
+    
+    indexes:
+      - fields: ["account_id", "created_at"]
+        order: "desc"
+
+# ============================================================================
+# FIREBASE STORAGE STRUCTURE
+# ============================================================================
+
+storage_buckets:
+  default:
+    name: "alchemist-e69bb.appspot.com"
+    structure:
+      knowledge_base:
+        description: "Uploaded documents for agent knowledge bases"
+        path_pattern: "knowledge_base/{agent_id}/{file_id}/{filename}"
+      
+      agent_assets:
+        description: "Agent configuration and asset files"
+        path_pattern: "agents/{agent_id}/assets/{filename}"
+
+# ============================================================================
+# SECURITY RULES & PERMISSIONS
+# ============================================================================
+
+security_model:
+  authentication:
+    provider: "Firebase Auth"
+    methods: ["email/password", "google", "github"]
+  
+  authorization:
+    agents:
+      read: "owner only (userId field)"
+      write: "owner only"
+      delete: "owner only"
+    
+    conversations:
+      read: "agent owner only"
+      write: "system only (via API)"
+    
+    billing:
+      read: "agent owner only"
+      write: "system only"
+    
+    knowledge_base:
+      read: "agent owner only"
+      write: "agent owner only"
+
+# ============================================================================
+# DATA FLOW & RELATIONSHIPS
+# ============================================================================
+
+relationships:
+  agent_to_deployments: "1:many (alchemist_agents.id -> agent_deployments.agent_id)"
+  agent_to_conversations: "1:many (alchemist_agents.id -> conversations.agentId)"
+  agent_to_billing: "1:1 (alchemist_agents.id -> agent_billing_summary.agentId)"
+  agent_to_knowledge: "1:many (alchemist_agents.id -> knowledge_base_files.agent_id)"
+  file_to_embeddings: "1:many (knowledge_base_files.id -> embeddings.file_id)"
+  deployment_to_whatsapp: "1:many (agent_deployments.id -> managed_accounts.deployment_id)"
+
+data_lifecycle:
+  agent_creation:
+    - "Create document in alchemist_agents"
+    - "Initialize billing_summary document"
+  
+  deployment_process:
+    - "Create agent_deployments document"
+    - "Update status via real-time listeners"
+    - "Update alchemist_agents.active_deployment_id on success"
+  
+  conversation_flow:
+    - "Pre-deployment: save to dev_conversations (free)"
+    - "Production: save to conversations (billable)"
+    - "Update agent_billing_summary aggregates"
+    - "Create conversation_sessions for analytics"
+  
+  knowledge_upload:
+    - "Upload file to Storage"
+    - "Create knowledge_base_files document"
+    - "Process and create embeddings in agent-specific subcollection"
+
+# ============================================================================
+# PERFORMANCE & OPTIMIZATION
+# ============================================================================
+
+performance_patterns:
+  real_time_updates:
+    - "Deployment status via Firestore listeners"
+    - "Billing updates via onSnapshot"
+  
+  aggregation:
+    - "agent_billing_summary for quick billing lookups"
+    - "Incremental updates using FieldValue.increment()"
+  
+  indexing:
+    - "Compound indexes for filtered queries"
+    - "Ordered by timestamp for chronological data"
+  
+  subcollection_strategy:
+    - "Embeddings isolated per agent for performance"
+    - "Messages nested under conversations for hierarchy"
+
+cost_optimization:
+  read_reduction:
+    - "Aggregate collections for frequently accessed data"
+    - "Limit queries with pagination"
+  
+  write_batching:
+    - "Batch operations for embeddings creation"
+    - "Transaction for related updates"

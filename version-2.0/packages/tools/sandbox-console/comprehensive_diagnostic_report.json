@@ -1,0 +1,132 @@
+{
+  "report_metadata": {
+    "agent_id": "9cb4e76c-28bf-45d6-a7c0-e67607675457",
+    "generated_at": "2025-07-02T22:29:53.794716",
+    "test_scope": "Knowledge Base & MCP Server Integration",
+    "environment": "sandbox-console"
+  },
+  "executive_summary": {
+    "knowledge_base_status": "PARTIAL - Service accessible, files found, but search API has method issues",
+    "mcp_server_status": "PARTIAL - Server accessible and healthy, but no tools configured",
+    "overall_readiness": "NEEDS ATTENTION - Core infrastructure working but functionality limited",
+    "critical_issues": 2,
+    "minor_issues": 1,
+    "working_components": 5
+  },
+  "detailed_findings": {
+    "knowledge_base": {
+      "service_connectivity": {
+        "status": "\u2705 WORKING",
+        "details": "alchemist-knowledge-vault service is accessible and healthy"
+      },
+      "file_access": {
+        "status": "\u2705 WORKING",
+        "details": "2 knowledge files found (sbi_faq.pdf), though metadata incomplete"
+      },
+      "search_api": {
+        "status": "\u274c BROKEN",
+        "details": "Search endpoint returning 405 Method Not Allowed - wrong endpoint or method"
+      },
+      "langchain_tools": {
+        "status": "\u2705 WORKING",
+        "details": "Tools created successfully, but search functionality fails due to API issue"
+      }
+    },
+    "mcp_server": {
+      "url_generation": {
+        "status": "\u2705 WORKING",
+        "details": "Correct URL format generated: https://mcp-{agent_id}-851487020021.us-central1.run.app"
+      },
+      "server_connectivity": {
+        "status": "\u2705 WORKING",
+        "details": "Server accessible on /health and /tools endpoints"
+      },
+      "health_check": {
+        "status": "\u2705 WORKING",
+        "details": "Health endpoint returns 200 with correct agent ID"
+      },
+      "tool_discovery": {
+        "status": "\u26a0\ufe0f  EMPTY",
+        "details": "Server responds correctly but reports 0 tools available"
+      },
+      "langchain_integration": {
+        "status": "\u274c LIMITED",
+        "details": "Integration works but no tools to integrate"
+      }
+    }
+  },
+  "recommendations": {
+    "immediate_actions": [
+      {
+        "priority": "HIGH",
+        "component": "Knowledge Base Search API",
+        "issue": "Search endpoint returning 405 Method Not Allowed",
+        "action": "Check if search endpoint should be GET vs POST, or if URL path is incorrect",
+        "technical_detail": "Current: POST /api/search-knowledge-base/storage - May need different method or path"
+      },
+      {
+        "priority": "MEDIUM",
+        "component": "MCP Server Tools",
+        "issue": "No tools configured on MCP server",
+        "action": "Deploy or configure tools on the MCP server for this agent",
+        "technical_detail": "Server is healthy but /tools endpoint returns empty array"
+      }
+    ],
+    "monitoring_setup": [
+      {
+        "component": "Knowledge Base Search",
+        "metric": "Search success rate",
+        "alert_threshold": "< 90% success rate"
+      },
+      {
+        "component": "MCP Tool Count",
+        "metric": "Number of available tools",
+        "alert_threshold": "< 1 tool available"
+      }
+    ],
+    "optimization_opportunities": [
+      "Implement proper error handling for search API failures",
+      "Add retry logic for transient MCP server issues",
+      "Cache knowledge base search results for better performance",
+      "Implement graceful degradation when tools are unavailable"
+    ]
+  },
+  "next_steps": {
+    "short_term": [
+      "1. Fix knowledge base search API endpoint configuration",
+      "2. Verify MCP server tool deployment status",
+      "3. Test search functionality after API fix",
+      "4. Configure basic tools on MCP server for testing"
+    ],
+    "medium_term": [
+      "1. Implement comprehensive error handling and retry logic",
+      "2. Add monitoring and alerting for both services",
+      "3. Optimize agent response time with caching",
+      "4. Add integration tests to CI/CD pipeline"
+    ],
+    "long_term": [
+      "1. Implement advanced search features (semantic search, filtering)",
+      "2. Add more sophisticated MCP tools for the agent's domain",
+      "3. Implement agent performance analytics",
+      "4. Add multi-modal capabilities (if needed)"
+    ]
+  },
+  "readiness_assessment": {
+    "score": 6,
+    "max_score": 10,
+    "percentage": 60.0,
+    "level": "\u26a0\ufe0f  PARTIALLY READY - Significant issues to address",
+    "working_components": [
+      "\u2705 Sandbox console CORS and API integration",
+      "\u2705 Knowledge base service connectivity",
+      "\u2705 Knowledge files are accessible",
+      "\u2705 MCP server URL generation and routing",
+      "\u2705 MCP server health monitoring",
+      "\u2705 LangChain tool integration framework"
+    ],
+    "critical_blockers": [
+      "\u274c Knowledge base search API not functional (405 Method Not Allowed)",
+      "\u274c No MCP tools configured/available for agent testing"
+    ]
+  }
+}

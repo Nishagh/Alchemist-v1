@@ -1,0 +1,51 @@
+# Cloud Build configuration for Alchemist Billing Service
+steps:
+  # Build the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [
+      'build',
+      '--platform', 'linux/amd64',
+      '-t', 'gcr.io/$PROJECT_ID/billing-service:$BUILD_ID',
+      '-t', 'gcr.io/$PROJECT_ID/billing-service:latest',
+      '.'
+    ]
+
+  # Push the image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/billing-service:$BUILD_ID']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/billing-service:latest']
+
+  # Deploy to Cloud Run
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args: [
+      'run', 'deploy', 'billing-service',
+      '--image', 'gcr.io/$PROJECT_ID/billing-service:$BUILD_ID',
+      '--region', 'us-central1',
+      '--platform', 'managed',
+      '--allow-unauthenticated',
+      '--port', '8080',
+      '--memory', '1Gi',
+      '--cpu', '1',
+      '--min-instances', '1',
+      '--max-instances', '10',
+      '--timeout', '300',
+      '--concurrency', '100',
+      '--set-env-vars', 'FIREBASE_PROJECT_ID=$PROJECT_ID',
+      '--set-env-vars', 'DEBUG=false',
+      '--set-env-vars', 'LOG_LEVEL=INFO'
+    ]
+
+# Store images in Container Registry
+images:
+  - 'gcr.io/$PROJECT_ID/billing-service:$BUILD_ID'
+  - 'gcr.io/$PROJECT_ID/billing-service:latest'
+
+# Build options
+options:
+  machineType: 'E2_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY
+
+# Build timeout
+timeout: '1200s'

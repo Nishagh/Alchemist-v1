@@ -1,0 +1,29 @@
+# Core dependencies
+fastapi>=0.104.1
+uvicorn>=0.24.0
+python-multipart>=0.0.6
+python-dotenv>=1.0.0
+pydantic>=2.4.2
+gunicorn>=21.2.0
+
+# Alchemist shared services with eA³ support
+# Note: alchemist-shared will be installed from ../shared during Docker build
+# Includes google-cloud-spanner, networkx, and dataclasses-json for agent story tracking
+
+# Firebase & Google Cloud
+firebase-admin>=6.2.0
+requests>=2.31.0
+
+# OpenAI for embeddings
+openai>=1.0.0
+tenacity>=8.2.3
+
+# Document processing
+pypdf>=3.17.1
+docx2txt>=0.8
+beautifulsoup4>=4.12.2
+
+# Chunk analysis dependencies
+scikit-learn>=1.3.0
+numpy>=1.24.0
+textstat>=0.7.3

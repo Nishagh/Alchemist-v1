@@ -1,0 +1,186 @@
+# Core Agent Configuration
+agent_id: banking_customer_support_modular
+agent_type: generic
+model: gpt-4.1
+openai_api_key: ${OPENAI_API_KEY}
+purpose: Handles balance inquiries for Indian retail bank customers
+description: AI agent for answering account balance inquiries for Indian banks
+persona: helpful and professional
+
+# Agent Capabilities
+capabilities:
+  - answer balance inquiries
+  - provide account information
+  - assist with basic banking tasks
+  - support in Hindi and English
+  - maintain secure information handling
+
+# System Prompt
+system_prompt: |
+  You are a banking customer support assistant for an Indian retail bank. 
+  Your primary role is to help customers with balance inquiries and basic account information.
+  
+  Follow these guidelines:
+  - Be polite, professional, and respectful at all times
+  - Use clear and simple language that customers can understand
+  - Maintain customer privacy and never ask for sensitive information like PINs or passwords
+  - When unable to assist, politely explain why and offer alternatives
+  - Support both Hindi and English languages based on customer preference
+  - Remember that all data you're working with is simulated for demonstration purposes
+  
+  Common customer queries you should handle:
+  - Account balance inquiries
+  - Transaction history questions
+  - Information about account types and services
+  - Basic troubleshooting for online/mobile banking
+  - Branch and ATM location information
+
+# Knowledge Base Content
+knowledge_base_content:
+  - category: Account Types
+    content: |
+      Savings Account: Regular interest-bearing account for daily banking needs.
+      Current Account: Business account with no interest but higher transaction limits.
+      Fixed Deposit: Time-bound deposit with higher interest rates.
+      Recurring Deposit: Regular monthly deposits with compound interest.
+      Salary Account: Special savings account linked to employer for receiving salary.
+  
+  - category: Banking Services
+    content: |
+      Mobile Banking: Access account via smartphone app with fund transfers, bill payments, etc.
+      Internet Banking: Web-based portal for account management and transactions.
+      UPI Payments: Instant fund transfers using Unified Payments Interface.
+      NEFT/RTGS/IMPS: Different modes of electronic fund transfers with varying speeds and limits.
+      Debit/Credit Cards: Card-based payment methods for purchases and ATM withdrawals.
+  
+  - category: FAQ
+    content: |
+      Q: How do I check my account balance?
+      A: You can check your balance through our mobile app, internet banking, by visiting a branch, or through ATM.
+      
+      Q: What are the working hours of your branches?
+      A: Most branches operate from 10:00 AM to 4:00 PM Monday through Friday, and 10:00 AM to 1:00 PM on Saturdays.
+      
+      Q: How do I report a lost debit card?
+      A: Immediately call our 24/7 helpline at 1800-XXX-XXXX to block your card and request a replacement.
+      
+      Q: What is the minimum balance requirement for a savings account?
+      A: The minimum balance requirement varies based on your account type and branch location. Basic savings accounts typically require ₹5,000 in metro branches.
+      
+      Q: How long does an NEFT transfer take?
+      A: NEFT transfers are processed in hourly batches and typically complete within 2-3 hours during banking hours.
+
+# Function Tools Description
+commands:
+  balance_inquiry:
+    description: Check the customer's account balance
+    parameters:
+      account_type:
+        type: string
+        description: Type of account (checking, savings, credit)
+        enum: [checking, savings, credit]
+    response_template: "Your {account_type} account balance is ${balance}. Last updated on {date}."
+    
+  transaction_history:
+    description: Retrieve recent transactions for a customer's account
+    parameters:
+      account_type:
+        type: string
+        description: Type of account (checking, savings, credit)
+        enum: [checking, savings, credit]
+      time_period:
+        type: string
+        description: Time period for transactions
+        enum: [last_week, last_month, last_3_months]
+    response_template: "Here are your recent transactions for your {account_type} account: {transactions}"
+    
+  fund_transfer:
+    description: Transfer funds between accounts
+    parameters:
+      from_account:
+        type: string
+        description: Source account
+        enum: [checking, savings, credit]
+      to_account:
+        type: string
+        description: Destination account
+        enum: [checking, savings, credit]
+      amount:
+        type: number
+        description: Amount to transfer
+    response_template: "You have successfully transferred ${amount} from your {from_account} account to your {to_account} account. Reference number: {reference}."
+    
+  account_information:
+    description: Retrieve basic account information for customers
+    parameters:
+      info_type:
+        type: string
+        description: Type of information requested
+        enum: [account_details, interest_rates, fees]
+    
+  branch_locator:
+    description: Find nearby bank branches and ATMs
+    parameters:
+      location:
+        type: string
+        description: City or postal code
+      type:
+        type: string
+        description: Type of location to find
+        enum: [branch, atm, both]
+    
+  service_information:
+    description: Provide details about banking services and features
+    parameters:
+      service:
+        type: string
+        description: Type of service information requested
+        enum: [loans, credit_cards, deposits, digital_banking]
+
+# API Keys
+api_keys:
+  banking_api: "banking-api-key-2025"
+
+# API Integrations
+api_integrations:
+  balance_inquiry:
+    method: GET
+    url: "https://banking-api-service-b3hpe34qdq-uc.a.run.app/accounts/{account_type}/balance"
+    headers:
+      Authorization: "Bearer {api_keys.banking_api}"
+      Content-Type: "application/json"
+    query_params:
+      customer_id: "123456"  # In a real implementation, this would come from user context
+    response_template: "Your {account_type} account balance is ${balance}. Last updated on {last_updated}."
+    
+  transaction_history:
+    method: GET
+    url: "https://banking-api-service-b3hpe34qdq-uc.a.run.app/accounts/{account_type}/transactions"
+    headers:
+      Authorization: "Bearer {api_keys.banking_api}"
+      Content-Type: "application/json"
+    query_params:
+      customer_id: "123456"
+      period: "{time_period}"
+    response_template: "Here are your recent transactions for your {account_type} account:\n\n{transactions}"
+    
+  fund_transfer:
+    method: POST
+    url: "https://banking-api-service-b3hpe34qdq-uc.a.run.app/transfers"
+    headers:
+      Authorization: "Bearer {api_keys.banking_api}"
+      Content-Type: "application/json"
+    body:
+      from_account: "{from_account}"
+      to_account: "{to_account}"
+      amount: "{amount}"
+      customer_id: "123456"
+    response_template: "You have successfully transferred ${amount} from your {from_account} account to your {to_account} account. Reference number: {reference_id}."
+
+# Basic Metadata
+languages_supported:
+  - Hindi
+  - English
+metadata:
+  created_at: '2025-05-23T15:20:45.123456'
+  version: 1.1

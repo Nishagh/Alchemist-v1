@@ -1,0 +1,50 @@
+# FastAPI and Web Framework
+fastapi==0.104.1
+uvicorn==0.24.0
+python-multipart==0.0.6
+
+# WhatsApp Business API Integration
+requests==2.31.0
+cryptography==41.0.7
+
+# Firebase/Firestore Integration
+firebase-admin==6.3.0
+google-cloud-firestore==2.13.1
+
+# Data Validation and Models
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# Environment and Configuration
+python-dotenv==1.0.0
+
+# Logging and Monitoring
+structlog==23.2.0
+colorlog==6.8.0
+
+# HTTP Client
+httpx==0.25.2
+aiohttp==3.9.1
+
+# Date/Time Handling
+python-dateutil==2.8.2
+
+# Phone Number Validation
+phonenumbers==8.13.26
+
+# Async Support
+asyncio-mqtt==0.16.1
+
+# Development and Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-mock==3.12.0
+
+# CORS Support
+fastapi-cors==0.0.6
+
+# Health Checks
+fastapi-health==0.4.0
+
+# Documentation
+pydantic-extra-types==2.2.0

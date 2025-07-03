@@ -1,0 +1,33 @@
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/alchemist-e69bb/prompt-engineer-service', '.']
+
+  # Push the image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/alchemist-e69bb/prompt-engineer-service']
+    
+  # Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        # Deploy to Cloud Run
+        gcloud run deploy prompt-engineer-service \
+          --image=gcr.io/alchemist-e69bb/prompt-engineer-service \
+          --platform=managed \
+          --region=us-central1 \
+          --allow-unauthenticated \
+          --memory=1Gi \
+          --timeout=300 \
+          --set-env-vars=ENVIRONMENT=production,FIREBASE_CREDENTIALS_BASE64="$FIREBASE_CREDS_BASE64" \
+          --set-secrets=OPENAI_API_KEY=OPENAI_API_KEY:latest
+
+# Store the image in Container Registry
+images:
+  - 'gcr.io/alchemist-e69bb/prompt-engineer-service'
+
+substitutions:
+  _SERVICE_NAME: prompt-engineer-service
+  _REGION: us-central1

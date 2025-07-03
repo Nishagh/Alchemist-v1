@@ -1,0 +1,60 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  annotations:
+    run.googleapis.com/build-enable-automatic-updates: 'false'
+    run.googleapis.com/build-id: ea582a42-c697-410c-9f4d-580bce60d1c3
+    run.googleapis.com/build-image-uri: us-central1-docker.pkg.dev/alchemist-e69bb/cloud-run-source-deploy/alchemist-knowledge-vault
+    run.googleapis.com/build-name: projects/851487020021/locations/us-central1/builds/ea582a42-c697-410c-9f4d-580bce60d1c3
+    run.googleapis.com/build-source-location: gs://run-sources-alchemist-e69bb-us-central1/services/alchemist-knowledge-vault/1748099033.594757-15f4f0a4af1943029c766b68ef01b366.zip#1748099034408611
+    run.googleapis.com/ingress: all
+    run.googleapis.com/ingress-status: all
+    run.googleapis.com/urls: '["https://alchemist-knowledge-vault-851487020021.us-central1.run.app","https://alchemist-knowledge-vault-b3hpe34qdq-uc.a.run.app"]'
+  labels:
+    cloud.googleapis.com/location: us-central1
+  name: alchemist-knowledge-vault
+  namespace: '851487020021'
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/maxScale: '2'
+        run.googleapis.com/client-name: gcloud
+        run.googleapis.com/client-version: 517.0.0
+        run.googleapis.com/startup-cpu-boost: 'true'
+      labels:
+        client.knative.dev/nonce: fhcnfjrjnm
+        run.googleapis.com/startupProbeType: Default
+    spec:
+      containerConcurrency: 80
+      containers:
+      - env:
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: OPENAI_API_KEY
+        - name: ALCHEMIST_MODEL
+          value: gpt-4.1
+        - name: FIREBASE_STORAGE_BUCKET
+          value: alchemist-e69bb.appspot.com
+        image: gcr.io/alchemist-e69bb/alchemist-knowledge-vault
+        name: alchemist-knowledge-vault-1
+        ports:
+        - containerPort: 8080
+          name: http1
+        resources:
+          limits:
+            cpu: '1'
+            memory: 1Gi
+        startupProbe:
+          failureThreshold: 1
+          periodSeconds: 240
+          tcpSocket:
+            port: 8080
+          timeoutSeconds: 240
+      serviceAccountName: alchemist-knowledge-vault@alchemist-e69bb.iam.gserviceaccount.com
+      timeoutSeconds: 300
+  traffic:
+  - latestRevision: true
+    percent: 100

@@ -1,0 +1,136 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "version": "1.0.0",
+    "title": "Security Test API",
+    "description": "API for testing security scheme conversions"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080/v1"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BasicAuth": {
+        "type": "http",
+        "scheme": "basic",
+        "description": "HTTP Basic Authentication"
+      },
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "HTTP Bearer Authentication"
+      },
+      "ApiKeyHeaderAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-KEY",
+        "description": "API Key in Header"
+      },
+      "ApiKeyQueryAuth": {
+        "type": "apiKey",
+        "in": "query",
+        "name": "api_key",
+        "description": "API Key in Query Parameter"
+      }
+    }
+  },
+  "paths": {
+    "/basic_auth_resource": {
+      "get": {
+        "summary": "Resource requiring Basic Auth",
+        "operationId": "getBasicAuthResource",
+        "security": [
+          {
+            "BasicAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/bearer_auth_resource": {
+      "get": {
+        "summary": "Resource requiring Bearer Auth",
+        "operationId": "getBearerAuthResource",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/apikey_header_resource": {
+      "get": {
+        "summary": "Resource requiring API Key in Header",
+        "operationId": "getApiKeyHeaderResource",
+        "security": [
+          {
+            "ApiKeyHeaderAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/apikey_query_resource": {
+      "get": {
+        "summary": "Resource requiring API Key in Query",
+        "operationId": "getApiKeyQueryResource",
+        "security": [
+          {
+            "ApiKeyQueryAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/no_auth_resource": {
+      "get": {
+        "summary": "Resource requiring no authentication",
+        "operationId": "getNoAuthResource",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/multi_auth_resource": {
+      "get": {
+        "summary": "Resource allowing multiple auth types (Bearer OR ApiKeyHeader)",
+        "operationId": "getMultiAuthResource",
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    }
+  }
+}

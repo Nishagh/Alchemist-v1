@@ -1,0 +1,54 @@
+# Dockerfile for deploying individual agents using agent-template
+# This is used by the agent-deployment-job to deploy specific agents with their agent_id
+
+FROM python:3.11-slim
+
+# Build arguments for dynamic configuration
+ARG AGENT_ID
+ARG PROJECT_ID
+
+# Set working directory
+WORKDIR /app
+
+# Set environment variables
+ENV AGENT_ID=${AGENT_ID}
+ENV GOOGLE_CLOUD_PROJECT=${PROJECT_ID}
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy alchemist-shared first for better caching
+COPY shared /app/shared
+
+# Install alchemist-shared
+RUN cd /app/shared && pip install --no-cache-dir -e .
+
+# Copy requirements and install Python dependencies
+COPY agent-launcher/agent-template/requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY agent-launcher/agent-template .
+
+# Create non-root user for security
+RUN useradd --create-home --shell /bin/bash agent && \
+    chown -R agent:agent /app
+USER agent
+
+# Expose port 8080 (Cloud Run will set PORT env var dynamically)
+EXPOSE 8080
+
+# Health check - use PORT env var if set, fallback to 8080
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
+
+# Default command - use PORT environment variable with fallback
+CMD python -m uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080} --workers 1

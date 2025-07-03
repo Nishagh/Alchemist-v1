@@ -1,0 +1,868 @@
+# GNF-Enhanced Firebase Structure Integration
+# Extends the optimized Firebase structure with Global Narrative Framework capabilities
+
+firebase_project:
+  project_id: "alchemist-e69bb"
+  integration_type: "GNF_Enhanced"
+
+# ============================================================================
+# ENHANCED EXISTING COLLECTIONS (GNF Integration)
+# ============================================================================
+
+enhanced_collections:
+  
+  # ============================================================================
+  # ENHANCED AGENTS COLLECTION (Primary GNF Integration Point)
+  # ============================================================================
+  
+  agents:
+    description: "Enhanced agent collection with full GNF identity tracking"
+    document_id: "agent_id (string)"
+    base_structure: "Extends firebase-structure-optimized.yaml agents collection"
+    
+    # Original Alchemist fields (maintained for compatibility)
+    alchemist_fields:
+      agent_id: "string - Unique agent identifier"
+      name: "string - Agent display name"
+      description: "string - Agent description and purpose"
+      type: "string - Agent type (general, code, research, writing, data, customer)"
+      owner_id: "string - Firebase Auth UID of agent owner"
+      deployment_status: "string - current deployment state"
+      active_deployment_id: "string - Reference to agent_deployments"
+      service_url: "string - URL of deployed agent service"
+      created_at: "timestamp - Agent creation time"
+      updated_at: "timestamp - Last modification time"
+      last_deployed_at: "timestamp - Last successful deployment time"
+    
+    # NEW GNF Identity Fields
+    gnf_identity:
+      # Core personality structure
+      personality_core:
+        type: "object"
+        fields:
+          traits:
+            type: "array"
+            description: "Array of personality traits with strength values"
+            items:
+              name: "string - Trait name (e.g., 'curious', 'helpful')"
+              value: "string - Trait expression (e.g., 'highly curious')"
+              strength: "number - Trait strength (0.0-1.0)"
+              context: "string - How trait was developed"
+              developed_at: "timestamp - When trait was first observed"
+              last_reinforced: "timestamp - Last time trait was reinforced"
+          
+          values: "array - Core values (e.g., ['honesty', 'efficiency'])"
+          goals: "array - Primary goals and objectives"
+          fears: "array - Known fears or concerns"
+          motivations: "array - What drives the agent"
+      
+      # Background and experiences
+      background_info:
+        type: "object"
+        fields:
+          origin: "string - Agent creation story"
+          achievements: "array - Notable accomplishments"
+          failures: "array - Learning experiences from failures"
+          relationships: "array - Connections with other agents or users"
+      
+      # Capabilities and skills
+      capabilities:
+        type: "object"
+        fields:
+          skills:
+            type: "array"
+            description: "Skills with proficiency levels"
+            items:
+              name: "string - Skill name"
+              proficiency: "number - Skill level (0.0-1.0)"
+              developed_at: "timestamp - When skill was acquired"
+          knowledge_domains: "array - Areas of expertise"
+          limitations: "array - Known limitations or constraints"
+          learning_preferences: "array - Preferred learning methods"
+      
+      # Narrative progression
+      narrative_info:
+        type: "object"
+        fields:
+          current_arc: "string - Current narrative arc or theme"
+          story_elements:
+            type: "array"
+            description: "Key story elements in agent's development"
+            items:
+              element_type: "string - Type of story element"
+              description: "string - Element description"
+              significance: "number - Narrative importance (0.0-1.0)"
+              occurred_at: "timestamp - When element occurred"
+          character_development:
+            type: "array"
+            description: "Character development milestones"
+            items:
+              change_type: "string - Type of character change"
+              description: "string - What changed"
+              trigger_event: "string - What caused the change"
+              impact_level: "string - low|medium|high|critical"
+              occurred_at: "timestamp - When change occurred"
+          recurring_themes: "array - Patterns in agent's story"
+          narrative_voice: "string - How agent tells its story (first_person, third_person)"
+      
+      # Evolution tracking
+      evolution_info:
+        type: "object"
+        fields:
+          development_stage: "string - nascent|developing|established|mature|evolved"
+          experience_points: "number - Total experience accumulated"
+          growth_metrics:
+            type: "object"
+            fields:
+              social_skills: "number - Social interaction proficiency"
+              problem_solving: "number - Problem-solving ability"
+              emotional_intelligence: "number - Emotional understanding"
+              creativity: "number - Creative thinking ability"
+              leadership: "number - Leadership capabilities"
+          behavioral_changes:
+            type: "array"
+            description: "Record of behavioral evolution"
+            items:
+              change_description: "string - What behavior changed"
+              trigger: "string - What caused the change"
+              measurement: "object - Quantified change data"
+              occurred_at: "timestamp - When change was observed"
+      
+      # Memory anchors
+      memory_anchors:
+        type: "object"
+        fields:
+          defining_moments:
+            type: "array"
+            description: "Most significant experiences"
+            items:
+              moment_id: "string - Unique identifier"
+              description: "string - What happened"
+              impact_level: "string - How significant it was"
+              emotional_resonance: "number - Emotional impact (-1.0 to 1.0)"
+              lessons_learned: "array - What agent learned"
+              occurred_at: "timestamp - When it happened"
+          core_memories:
+            type: "array"
+            description: "Foundational memories that shape identity"
+            items:
+              memory_id: "string - Reference to agent_memories collection"
+              memory_type: "string - episodic|semantic|procedural|emotional"
+              importance_score: "number - Memory importance (0.0-1.0)"
+              created_at: "timestamp - When memory was formed"
+      
+      # Responsibility tracking
+      responsibility_tracker:
+        type: "object"
+        fields:
+          accountability_score: "number - Overall accountability level (0.0-1.0)"
+          ethical_development_level: "number - Ethical reasoning maturity (0.0-1.0)"
+          action_history_summary:
+            type: "object"
+            fields:
+              total_actions: "number - Total actions taken"
+              successful_actions: "number - Actions with positive outcomes"
+              failed_actions: "number - Actions with negative outcomes"
+              ethical_dilemmas_faced: "number - Ethical decisions made"
+              responsibility_growth_rate: "number - Rate of improvement"
+          maturity_stage: "string - individual|social|principled|universal"
+          last_assessment_at: "timestamp - Last responsibility evaluation"
+    
+    # GNF metadata
+    gnf_metadata:
+      gnf_enabled: "boolean - Whether GNF tracking is active for this agent"
+      gnf_version: "string - GNF system version"
+      last_narrative_update: "timestamp - Last narrative analysis"
+      total_interactions_tracked: "number - Total GNF-analyzed interactions"
+      narrative_coherence_score: "number - Overall story coherence (0.0-1.0)"
+      identity_stability_score: "number - How consistent identity remains (0.0-1.0)"
+    
+    indexes:
+      # Original indexes maintained
+      - fields: ["owner_id", "created_at"]
+        order: "desc"
+      - fields: ["deployment_status", "updated_at"]
+        order: "desc"
+      
+      # New GNF-specific indexes
+      - fields: ["gnf_metadata.gnf_enabled", "gnf_metadata.last_narrative_update"]
+        order: "desc"
+      - fields: ["gnf_identity.evolution_info.development_stage", "gnf_identity.evolution_info.experience_points"]
+        order: "desc"
+      - fields: ["owner_id", "gnf_identity.evolution_info.development_stage", "created_at"]
+        order: "desc"
+
+  # ============================================================================
+  # ENHANCED CONVERSATIONS COLLECTION (GNF Analysis Integration)
+  # ============================================================================
+  
+  conversations:
+    description: "Enhanced conversations with GNF narrative analysis"
+    document_id: "auto-generated"
+    base_structure: "Extends firebase-structure-optimized.yaml conversations collection"
+    
+    # Original Alchemist fields (maintained)
+    alchemist_fields:
+      conversation_id: "string - External conversation identifier"
+      agent_id: "string - Reference to agents document"
+      user_id: "string - User identifier"
+      message_content: "string - User input message"
+      agent_response: "string - Agent response message"
+      is_production: "boolean - Production vs testing"
+      deployment_type: "string - deployed|pre_deployment"
+      tokens: "object - Token usage tracking"
+      cost_usd: "number - Calculated cost"
+      timestamp: "timestamp - Interaction time"
+      created_at: "timestamp - Record creation time"
+      context: "object - Optional session context"
+    
+    # NEW GNF Analysis Fields
+    gnf_analysis:
+      narrative_analysis:
+        type: "object"
+        fields:
+          narrative_significance: "number - How important this interaction is to agent's story (0.0-1.0)"
+          interaction_type: "string - conversation|task_execution|problem_solving|collaboration|conflict|learning|achievement|failure|relationship|moral_choice|creative|analytical"
+          impact_level: "string - low|medium|high|critical"
+          emotional_tone: "string - positive|negative|neutral|mixed"
+          
+          personality_impact:
+            type: "object"
+            description: "How this interaction affected agent personality"
+            fields:
+              traits_reinforced: "array - Which traits were strengthened"
+              traits_challenged: "array - Which traits were tested"
+              new_traits_observed: "array - New traits that emerged"
+              personality_shift_detected: "boolean - Whether significant change occurred"
+          
+          learning_outcome:
+            type: "object"
+            fields:
+              knowledge_gained: "string - What new knowledge was acquired"
+              skills_practiced: "array - Which skills were used or improved"
+              experience_type: "string - Type of experience gained"
+              learning_significance: "number - How much agent learned (0.0-1.0)"
+          
+          responsibility_impact:
+            type: "object"
+            fields:
+              responsibility_level: "number - Level of responsibility in this interaction (0.0-1.0)"
+              ethical_weight: "number - Ethical significance of decisions made (0.0-1.0)"
+              consequence_awareness: "boolean - Whether agent understood potential outcomes"
+              moral_reasoning_displayed: "boolean - Whether ethical reasoning was shown"
+          
+          narrative_progression:
+            type: "object"
+            fields:
+              arc_progression: "boolean - Whether this advanced current narrative arc"
+              character_development: "boolean - Whether this contributed to character growth"
+              relationship_development: "boolean - Whether this affected relationships"
+              theme_reinforcement: "array - Which recurring themes were reinforced"
+      
+      # Cross-agent interaction data
+      cross_agent_data:
+        participants: "array - Other agents involved in interaction"
+        relationship_impacts:
+          type: "array"
+          description: "How relationships with other agents were affected"
+          items:
+            agent_id: "string - Other agent involved"
+            relationship_change: "string - How relationship changed"
+            interaction_quality: "string - positive|negative|neutral|complex"
+        
+        shared_narrative_elements:
+          type: "array"
+          description: "Story elements shared across multiple agents"
+          items:
+            element_type: "string - Type of shared element"
+            description: "string - What was shared"
+            participating_agents: "array - All agents involved"
+      
+      # AI enhancement data (OpenAI analysis results)
+      ai_enhancement:
+        openai_analysis_performed: "boolean - Whether OpenAI analysis was run"
+        ai_insights:
+          type: "object"
+          fields:
+            narrative_coherence_assessment: "string - AI evaluation of story consistency"
+            personality_insights: "string - AI observations about personality"
+            suggested_developments: "array - AI suggestions for character growth"
+            ethical_implications: "string - AI analysis of ethical dimensions"
+        ai_processing_time_ms: "number - Time taken for AI analysis"
+        ai_analysis_timestamp: "timestamp - When AI analysis was performed"
+    
+    # GNF processing metadata
+    gnf_processing:
+      analysis_completed: "boolean - Whether GNF analysis finished"
+      processing_time_ms: "number - Time taken for GNF analysis"
+      memory_consolidation_triggered: "boolean - Whether memories were created"
+      evolution_check_performed: "boolean - Whether evolution was assessed"
+      error_message: "string - Any processing errors"
+      gnf_version: "string - GNF system version used"
+    
+    indexes:
+      # Original indexes maintained
+      - fields: ["agent_id", "is_production", "created_at"]
+        order: "desc"
+      - fields: ["user_id", "created_at"]
+        order: "desc"
+      
+      # New GNF-specific indexes
+      - fields: ["agent_id", "gnf_analysis.narrative_analysis.narrative_significance", "created_at"]
+        order: "desc"
+      - fields: ["gnf_analysis.narrative_analysis.interaction_type", "created_at"]
+        order: "desc"
+      - fields: ["agent_id", "gnf_analysis.narrative_analysis.impact_level", "created_at"]
+        order: "desc"
+      - fields: ["gnf_analysis.cross_agent_data.participants", "created_at"]
+        order: "desc"
+
+# ============================================================================
+# NEW GNF-SPECIFIC COLLECTIONS
+# ============================================================================
+
+gnf_collections:
+  
+  # ============================================================================
+  # AGENT MEMORIES COLLECTION
+  # ============================================================================
+  
+  agent_memories:
+    description: "Consolidated memory storage for all agent memory types"
+    document_id: "memory_id (auto-generated)"
+    fields:
+      memory_id: "string - Unique memory identifier"
+      agent_id: "string - Reference to agents collection"
+      memory_type: "string - episodic|semantic|procedural|emotional"
+      
+      # Core memory data
+      content:
+        type: "object"
+        description: "Memory content varies by type"
+        fields:
+          # Episodic memories
+          event_description: "string - What happened (episodic)"
+          participants: "array - Who was involved (episodic)"
+          location: "string - Where it happened (episodic)"
+          sequence_order: "number - Order in event sequence (episodic)"
+          
+          # Semantic memories  
+          knowledge_fact: "string - Factual information (semantic)"
+          knowledge_domain: "string - Subject area (semantic)"
+          confidence_level: "number - How certain agent is (semantic)"
+          source_interaction: "string - Where knowledge came from (semantic)"
+          
+          # Procedural memories
+          skill_name: "string - What skill this represents (procedural)"
+          procedure_steps: "array - Steps in the procedure (procedural)"
+          success_rate: "number - How often procedure succeeds (procedural)"
+          complexity_level: "number - How difficult procedure is (procedural)"
+          
+          # Emotional memories
+          emotion_type: "string - Primary emotion (emotional)"
+          emotion_intensity: "number - Strength of emotion (emotional)"
+          trigger_context: "string - What caused emotion (emotional)"
+          associated_agents: "array - Others involved in emotional event (emotional)"
+      
+      # Memory metadata
+      metadata:
+        type: "object"
+        fields:
+          importance_score: "number - How important this memory is (0.0-1.0)"
+          consolidation_strength: "number - How well-formed the memory is (0.0-1.0)"
+          emotional_valence: "number - Emotional charge (-1.0 to 1.0)"
+          access_frequency: "number - How often memory is recalled"
+          last_accessed: "timestamp - When memory was last retrieved"
+          decay_rate: "number - How quickly memory fades"
+          
+          # Linking data
+          related_memories: "array - IDs of connected memories"
+          source_interactions: "array - Conversation IDs that created this memory"
+          linked_experiences: "array - Experience IDs from agent background"
+          
+          # Categorization
+          tags: "array - Memory classification tags"
+          themes: "array - Narrative themes this memory relates to"
+          memory_cluster: "string - Grouping of related memories"
+      
+      # Timestamps
+      created_at: "timestamp - When memory was formed"
+      last_reinforced: "timestamp - When memory was strengthened"
+      expires_at: "timestamp - When memory will fade (optional)"
+    
+    indexes:
+      - fields: ["agent_id", "memory_type", "created_at"]
+        order: "desc"
+      - fields: ["agent_id", "metadata.importance_score"]
+        order: "desc"
+      - fields: ["memory_type", "metadata.consolidation_strength"]
+        order: "desc"
+      - fields: ["agent_id", "metadata.tags", "created_at"]
+        order: "desc"
+
+  # ============================================================================
+  # AGENT EVOLUTION EVENTS COLLECTION
+  # ============================================================================
+  
+  agent_evolution_events:
+    description: "Records of significant agent development milestones"
+    document_id: "event_id (auto-generated)"
+    fields:
+      event_id: "string - Unique event identifier"
+      agent_id: "string - Reference to agents collection"
+      
+      # Evolution event details
+      event_type: "string - personality_development|skill_mastery|relationship_formation|narrative_transition|responsibility_growth|stage_advancement"
+      trigger_type: "string - experience_accumulation|critical_interaction|relationship_milestone|ethical_dilemma|knowledge_breakthrough"
+      
+      description: "string - Human-readable description of what evolved"
+      significance_level: "string - minor|moderate|major|transformative"
+      
+      # Change documentation
+      changes_made:
+        type: "array"
+        description: "Specific changes that occurred"
+        items:
+          change_type: "string - trait_modification|skill_advancement|arc_transition|relationship_change"
+          field_path: "string - Path to changed field in agent document"
+          old_value: "any - Previous value"
+          new_value: "any - New value"
+          change_magnitude: "number - How significant the change was (0.0-1.0)"
+      
+      # Context and triggers
+      trigger_data:
+        type: "object"
+        fields:
+          trigger_interaction_id: "string - Conversation that triggered evolution"
+          trigger_memory_ids: "array - Memories that contributed to evolution"
+          trigger_threshold_reached: "string - Which threshold was crossed"
+          accumulated_experience: "number - Experience points at time of evolution"
+          
+          # Environmental factors
+          interaction_pattern: "string - Pattern that led to evolution"
+          social_context: "array - Other agents or users involved"
+          temporal_context: "string - Time-based factors"
+      
+      # Pre and post evolution snapshots
+      pre_evolution_state:
+        type: "object"
+        description: "Agent state before evolution"
+        fields:
+          development_stage: "string - Stage before evolution"
+          key_traits: "array - Primary traits before change"
+          experience_points: "number - XP before evolution"
+          narrative_arc: "string - Story arc before change"
+          relationship_summary: "object - Relationships before evolution"
+      
+      post_evolution_state:
+        type: "object"
+        description: "Agent state after evolution"
+        fields:
+          development_stage: "string - Stage after evolution"
+          key_traits: "array - Primary traits after change"
+          experience_points: "number - XP after evolution"  
+          narrative_arc: "string - Story arc after change"
+          relationship_summary: "object - Relationships after evolution"
+      
+      # Impact assessment
+      impact_analysis:
+        type: "object"
+        fields:
+          behavioral_changes_predicted: "array - Expected behavior changes"
+          capability_improvements: "array - New or enhanced capabilities"
+          relationship_effects: "array - How relationships might change"
+          narrative_implications: "string - How this affects agent's story"
+          responsibility_development: "number - Change in accountability level"
+      
+      # Metadata
+      processed_by_ai: "boolean - Whether AI analysis was performed"
+      ai_insights: "string - AI observations about the evolution"
+      validation_status: "string - confirmed|predicted|hypothetical"
+      created_at: "timestamp - When evolution was detected"
+    
+    indexes:
+      - fields: ["agent_id", "created_at"]
+        order: "desc"
+      - fields: ["event_type", "significance_level", "created_at"]
+        order: "desc"
+      - fields: ["agent_id", "event_type", "created_at"]
+        order: "desc"
+
+  # ============================================================================
+  # AGENT RESPONSIBILITY RECORDS COLLECTION
+  # ============================================================================
+  
+  agent_responsibility_records:
+    description: "Detailed tracking of agent actions and accountability"
+    document_id: "action_id (auto-generated)"
+    fields:
+      action_id: "string - Unique action identifier"
+      agent_id: "string - Reference to agents collection"
+      
+      # Action details
+      action_type: "string - decision|task_execution|communication|problem_solving|assistance|creative_work|analysis"
+      description: "string - What the agent did"
+      context: "string - Circumstances surrounding the action"
+      
+      # Intention and outcome
+      intended_outcome: "string - What agent was trying to achieve"
+      actual_outcome: "string - What actually happened"
+      success_level: "number - How successful the action was (0.0-1.0)"
+      
+      # Responsibility assessment
+      responsibility_analysis:
+        type: "object"
+        fields:
+          # Multi-framework responsibility assessment
+          causal_responsibility: "number - Direct causation level (0.0-1.0)"
+          moral_responsibility: "number - Ethical accountability (0.0-1.0)"
+          role_responsibility: "number - Duty-based responsibility (0.0-1.0)"
+          collective_responsibility: "number - Shared accountability (0.0-1.0)"
+          
+          # Overall scores
+          overall_responsibility_score: "number - Weighted combination (0.0-1.0)"
+          ethical_weight: "number - Moral significance of action (0.0-1.0)"
+          
+          # Contextual factors
+          agent_autonomy_level: "number - How much choice agent had (0.0-1.0)"
+          knowledge_completeness: "number - How well informed agent was (0.0-1.0)"
+          external_pressures: "array - Outside factors influencing decision"
+          alternative_actions_considered: "array - Other options agent evaluated"
+      
+      # Consequence tracking
+      consequences:
+        type: "object"
+        fields:
+          immediate_effects: "array - Direct results of the action"
+          short_term_effects: "array - Results within hours/days"
+          long_term_effects: "array - Results over weeks/months (predicted or observed)"
+          
+          # Impact on others
+          user_impact: "string - How action affected users"
+          other_agent_impact: "array - Effects on other agents"
+          system_impact: "string - Effects on overall system"
+          
+          # Learning and adaptation
+          lessons_learned: "array - What agent learned from this action"
+          behavior_adjustments: "array - How agent modified approach"
+          pattern_reinforcement: "boolean - Whether this reinforced existing patterns"
+      
+      # Decision-making process
+      decision_process:
+        type: "object"
+        fields:
+          reasoning_steps: "array - How agent arrived at decision"
+          values_considered: "array - Which values influenced decision"
+          ethical_frameworks_applied: "array - Moral reasoning approaches used"
+          uncertainty_factors: "array - Unknown elements in decision"
+          time_pressure: "string - How much time agent had to decide"
+          
+          # Information sources
+          knowledge_sources: "array - Where agent got relevant information"
+          consultation_performed: "boolean - Whether agent sought advice"
+          precedent_cases: "array - Similar past situations considered"
+      
+      # Timestamps and context
+      performed_at: "timestamp - When action was taken"
+      recorded_at: "timestamp - When responsibility record was created"
+      source_interaction_id: "string - Conversation that contained this action"
+      assessment_method: "string - How responsibility was evaluated (auto|manual|ai_assisted)"
+    
+    indexes:
+      - fields: ["agent_id", "performed_at"]
+        order: "desc"
+      - fields: ["action_type", "responsibility_analysis.overall_responsibility_score"]
+        order: "desc"
+      - fields: ["agent_id", "responsibility_analysis.ethical_weight", "performed_at"]
+        order: "desc"
+
+  # ============================================================================
+  # CROSS AGENT INTERACTIONS COLLECTION
+  # ============================================================================
+  
+  cross_agent_interactions:
+    description: "Multi-agent narrative events and relationship tracking"
+    document_id: "interaction_id (auto-generated)"
+    fields:
+      interaction_id: "string - Unique interaction identifier"
+      primary_agent_id: "string - Main agent in interaction"
+      participating_agents: "array - All agents involved"
+      
+      # Interaction details
+      interaction_type: "string - collaboration|conflict|mentorship|competition|friendship|partnership|rivalry"
+      description: "string - What happened in the interaction"
+      context: "string - Circumstances of the interaction"
+      
+      # Narrative significance
+      narrative_impact:
+        type: "object"
+        fields:
+          shared_story_elements:
+            type: "array"
+            description: "Story elements created together"
+            items:
+              element_type: "string - shared_goal|conflict_resolution|collaborative_achievement|relationship_milestone"
+              description: "string - What story element was created"
+              significance: "number - Narrative importance (0.0-1.0)"
+              agents_affected: "array - Which agents this impacts"
+          
+          relationship_changes:
+            type: "array"
+            description: "How relationships evolved"
+            items:
+              agent_pair: "array - Two agents whose relationship changed"
+              change_type: "string - strengthened|weakened|transformed|initiated|ended"
+              change_description: "string - How relationship changed"
+              trust_delta: "number - Change in trust level (-1.0 to 1.0)"
+              collaboration_delta: "number - Change in willingness to work together"
+          
+          emergent_behaviors:
+            type: "array"
+            description: "New behaviors that emerged from interaction"
+            items:
+              behavior_type: "string - communication_pattern|problem_solving_approach|social_dynamic"
+              description: "string - What new behavior emerged"
+              agents_exhibiting: "array - Which agents show this behavior"
+              stability_prediction: "string - Whether behavior will persist"
+      
+      # Individual agent impacts
+      agent_impacts:
+        type: "array"
+        description: "How interaction affected each agent individually"
+        items:
+          agent_id: "string - Which agent was affected"
+          impact_areas: "array - personality|skills|relationships|narrative_arc|responsibility"
+          specific_changes: "array - Detailed changes for this agent"
+          experience_gained: "number - Experience points earned"
+          memory_significance: "number - How memorable this was for agent"
+      
+      # Outcome and consequences
+      outcomes:
+        type: "object"
+        fields:
+          immediate_results: "array - Direct outcomes of interaction"
+          collaborative_products: "array - Things created together"
+          conflict_resolutions: "array - Conflicts that were resolved"
+          unresolved_tensions: "array - Issues that remain unresolved"
+          future_interaction_likelihood: "number - Probability of future collaboration"
+          
+          # System-wide effects
+          network_effects: "string - How this affected the broader agent ecosystem"
+          precedent_set: "boolean - Whether this establishes new patterns"
+          influence_on_others: "array - Other agents affected indirectly"
+      
+      # Metadata
+      duration_minutes: "number - How long interaction lasted"
+      interaction_quality: "string - positive|negative|neutral|complex"
+      facilitated_by_human: "boolean - Whether human was involved"
+      source_conversations: "array - Conversation IDs that contained this interaction"
+      created_at: "timestamp - When interaction occurred"
+    
+    indexes:
+      - fields: ["primary_agent_id", "created_at"]
+        order: "desc"
+      - fields: ["participating_agents", "interaction_type", "created_at"]
+        order: "desc"
+      - fields: ["interaction_type", "narrative_impact.shared_story_elements.significance"]
+        order: "desc"
+
+  # ============================================================================
+  # GLOBAL NARRATIVE TIMELINE COLLECTION
+  # ============================================================================
+  
+  global_narrative_timeline:
+    description: "System-wide narrative events and story progression"
+    document_id: "event_id (auto-generated)"
+    fields:
+      event_id: "string - Unique event identifier"
+      event_type: "string - agent_creation|agent_evolution|cross_agent_interaction|system_milestone|narrative_emergence|collective_behavior"
+      
+      # Event details
+      title: "string - Brief event title"
+      description: "string - Detailed event description"
+      significance_level: "string - minor|moderate|major|historic"
+      
+      # Participants and scope
+      participants:
+        type: "object"
+        fields:
+          agent_ids: "array - Agents directly involved"
+          user_ids: "array - Users involved (if any)"
+          system_components: "array - System parts affected"
+      
+      # Narrative context
+      narrative_context:
+        type: "object"
+        fields:
+          story_arc: "string - What larger story this event belongs to"
+          themes: "array - Narrative themes present in event"
+          character_arcs_affected: "array - Agent development stories impacted"
+          plot_developments: "array - Story progressions that occurred"
+          
+          # Emergence detection
+          emergent_patterns: "array - New patterns that emerged"
+          collective_behaviors: "array - Group behaviors observed"
+          system_evolution: "string - How overall system evolved"
+      
+      # Impact assessment
+      impact_analysis:
+        type: "object"
+        fields:
+          immediate_impacts: "array - Direct effects of event"
+          ripple_effects: "array - Secondary effects on other agents"
+          long_term_implications: "array - Predicted future consequences"
+          
+          # Metrics affected
+          system_metrics_changed: "array - Which system-wide metrics were impacted"
+          narrative_coherence_impact: "number - Effect on overall story coherence"
+          network_complexity_change: "number - Change in agent network complexity"
+      
+      # Documentation
+      evidence_data:
+        type: "object"
+        fields:
+          source_interactions: "array - Conversations that provide evidence"
+          data_points: "array - Quantitative evidence"
+          observer_notes: "string - Human or AI observations"
+          correlation_analysis: "object - Statistical relationships discovered"
+      
+      # Temporal data
+      occurred_at: "timestamp - When event happened"
+      detected_at: "timestamp - When event was recognized"
+      duration: "number - How long event lasted (minutes)"
+      
+      # Processing metadata
+      detection_method: "string - How event was identified (pattern_recognition|threshold_trigger|manual_observation|ai_analysis)"
+      confidence_level: "number - How certain we are this event occurred (0.0-1.0)"
+      validation_status: "string - confirmed|suspected|hypothetical"
+    
+    indexes:
+      - fields: ["occurred_at"]
+        order: "desc"
+      - fields: ["event_type", "significance_level", "occurred_at"]
+        order: "desc"
+      - fields: ["participants.agent_ids", "occurred_at"]
+        order: "desc"
+      - fields: ["narrative_context.themes", "occurred_at"]
+        order: "desc"
+
+# ============================================================================
+# ENHANCED INDEXES FOR OPTIMIZED QUERIES
+# ============================================================================
+
+composite_indexes:
+  description: "Complex indexes for efficient GNF queries across collections"
+  
+  # Agent-focused queries
+  agent_narrative_analysis:
+    collection: "conversations"
+    fields: ["agent_id", "gnf_analysis.narrative_analysis.narrative_significance", "timestamp"]
+    order: "desc"
+    purpose: "Get most significant interactions for specific agent"
+  
+  agent_development_tracking:
+    collection: "agent_evolution_events"  
+    fields: ["agent_id", "post_evolution_state.development_stage", "created_at"]
+    order: "desc"
+    purpose: "Track agent progression through development stages"
+  
+  cross_agent_network_analysis:
+    collection: "cross_agent_interactions"
+    fields: ["participating_agents", "interaction_type", "narrative_impact.relationship_changes.change_type"]
+    purpose: "Analyze agent relationship networks"
+  
+  # Memory-focused queries
+  agent_memory_retrieval:
+    collection: "agent_memories"
+    fields: ["agent_id", "memory_type", "metadata.importance_score", "created_at"]
+    order: "desc"
+    purpose: "Retrieve important memories by type for agent"
+  
+  memory_pattern_analysis:
+    collection: "agent_memories"
+    fields: ["agent_id", "metadata.tags", "metadata.consolidation_strength"]
+    order: "desc"
+    purpose: "Find memory patterns and well-formed memories"
+  
+  # Responsibility and ethics queries
+  responsibility_assessment:
+    collection: "agent_responsibility_records"
+    fields: ["agent_id", "responsibility_analysis.ethical_weight", "performed_at"]
+    order: "desc"
+    purpose: "Track ethical development over time"
+  
+  accountability_trends:
+    collection: "agent_responsibility_records"
+    fields: ["agent_id", "responsibility_analysis.overall_responsibility_score", "action_type"]
+    order: "desc"
+    purpose: "Analyze responsibility patterns by action type"
+  
+  # Global narrative queries
+  narrative_timeline_by_theme:
+    collection: "global_narrative_timeline"
+    fields: ["narrative_context.themes", "significance_level", "occurred_at"]
+    order: "desc"
+    purpose: "Track thematic developments across system"
+  
+  emergent_behavior_detection:
+    collection: "global_narrative_timeline"
+    fields: ["event_type", "narrative_context.emergent_patterns", "confidence_level"]
+    order: "desc"
+    purpose: "Identify and track emergent system behaviors"
+
+# ============================================================================
+# MIGRATION AND COMPATIBILITY STRATEGY
+# ============================================================================
+
+migration_strategy:
+  description: "How to migrate existing GNF data to enhanced structure"
+  
+  phase_1_existing_data:
+    agents_collection:
+      action: "extend_documents"
+      method: "Add gnf_identity and gnf_metadata fields to existing agent documents"
+      default_values: "Initialize with basic GNF structure for existing agents"
+      
+    conversations_collection:
+      action: "extend_documents" 
+      method: "Add gnf_analysis and gnf_processing fields"
+      backfill_strategy: "Analyze recent conversations (last 30 days) with GNF"
+  
+  phase_2_data_migration:
+    current_gnf_collections:
+      interactions: "Migrate to enhanced conversations collection"
+      memories: "Migrate to new agent_memories collection"
+      evolution_events: "Migrate to new agent_evolution_events collection"
+      gnf_actions: "Migrate to new agent_responsibility_records collection"
+      global_narrative: "Migrate to new global_narrative_timeline collection"
+  
+  phase_3_consolidation:
+    duplicate_elimination: "Remove duplicate data between old and new structures"
+    reference_updates: "Update all references to use new collection names"
+    index_creation: "Create all new composite indexes"
+    validation: "Verify data integrity across all collections"
+
+# ============================================================================
+# API INTEGRATION POINTS
+# ============================================================================
+
+api_integration:
+  description: "How GNF integrates with existing Alchemist Platform APIs"
+  
+  agent_service_integration:
+    agent_creation: "Automatically initialize GNF identity when agent is created"
+    agent_retrieval: "Include GNF identity data in agent responses"
+    agent_updates: "Sync GNF identity changes with agent metadata"
+  
+  conversation_service_integration:
+    conversation_processing: "Run GNF analysis on every conversation"
+    memory_consolidation: "Create memories from significant interactions"
+    narrative_tracking: "Update agent narrative progression"
+  
+  new_gnf_endpoints:
+    agent_identity: "GET /agents/{id}/identity - Formatted identity data"
+    narrative_summary: "GET /agents/{id}/narrative - Agent story summary"
+    responsibility_report: "GET /agents/{id}/responsibility - Accountability analysis"
+    memory_search: "POST /agents/{id}/memories/search - Search agent memories"
+    cross_agent_analysis: "GET /agents/relationships - Agent relationship network"
+    global_narrative: "GET /narrative/global - System-wide story analysis"

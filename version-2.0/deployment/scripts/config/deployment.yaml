@@ -1,0 +1,338 @@
+# Global Deployment Configuration for Alchemist Smart Deployment System
+# This file contains environment-specific settings and deployment policies
+
+version: "1.0"
+metadata:
+  created: "2025-01-03"
+  description: "Alchemist Smart Deployment Configuration"
+  author: "Alchemist Platform Team"
+
+# Default configuration values
+defaults:
+  project_id: "alchemist-e69bb"
+  region: "us-central1"
+  timeout: "3600s"
+  health_check_timeout: 30
+  health_check_retries: 3
+  deployment_timeout: 3600
+  parallel_deployment_limit: 5
+  detection_method: "auto"  # auto, git, fingerprint
+
+# Environment-specific configurations
+environments:
+  development:
+    project_id: "alchemist-dev"
+    region: "us-central1"
+    settings:
+      rollback_on_failure: true
+      create_backup_before_deployment: true
+      skip_health_checks: false
+      parallel_deployment: true
+      max_parallel_deployments: 3
+      deployment_timeout: 1800
+      min_instances_override: 0
+      max_instances_override: 2
+      concurrency_override: 10
+    apis_to_enable:
+      - "run.googleapis.com"
+      - "cloudbuild.googleapis.com"
+      - "firestore.googleapis.com"
+      - "secretmanager.googleapis.com"
+    notifications:
+      slack_webhook: ""
+      email_alerts: []
+
+  staging:
+    project_id: "alchemist-staging"
+    region: "us-central1"
+    settings:
+      rollback_on_failure: true
+      create_backup_before_deployment: true
+      skip_health_checks: false
+      parallel_deployment: true
+      max_parallel_deployments: 4
+      deployment_timeout: 2400
+      min_instances_override: 0
+      max_instances_override: 3
+      concurrency_override: 50
+      post_deployment_monitoring: 300  # 5 minutes
+    apis_to_enable:
+      - "run.googleapis.com"
+      - "cloudbuild.googleapis.com"
+      - "firestore.googleapis.com"
+      - "secretmanager.googleapis.com"
+      - "storage.googleapis.com"
+    notifications:
+      slack_webhook: "${SLACK_WEBHOOK_STAGING}"
+      email_alerts:
+        - "staging-alerts@alchemist.ai"
+
+  production:
+    project_id: "alchemist-e69bb"
+    region: "us-central1"
+    settings:
+      rollback_on_failure: true
+      create_backup_before_deployment: true
+      skip_health_checks: false
+      parallel_deployment: false  # Sequential for production safety
+      max_parallel_deployments: 2
+      deployment_timeout: 3600
+      require_confirmation: true
+      post_deployment_monitoring: 600  # 10 minutes
+      canary_deployment: false
+      blue_green_deployment: false
+    apis_to_enable:
+      - "run.googleapis.com"
+      - "cloudbuild.googleapis.com"
+      - "firestore.googleapis.com"
+      - "secretmanager.googleapis.com"
+      - "storage.googleapis.com"
+      - "artifactregistry.googleapis.com"
+      - "firebase.googleapis.com"
+    notifications:
+      slack_webhook: "${SLACK_WEBHOOK_PRODUCTION}"
+      email_alerts:
+        - "production-alerts@alchemist.ai"
+        - "ops-team@alchemist.ai"
+      pagerduty_integration: true
+
+# Deployment policies
+policies:
+  # Change detection policies
+  change_detection:
+    git_based:
+      ignore_patterns:
+        - "*.md"
+        - "*.txt"
+        - ".gitignore"
+        - "README*"
+        - "CHANGELOG*"
+        - "LICENSE*"
+        - ".github/*"
+        - "docs/*"
+      include_shared_changes: true
+      
+    fingerprint_based:
+      ignore_patterns:
+        - "*.log"
+        - "*.tmp"
+        - "*.cache"
+        - ".DS_Store"
+        - "node_modules/*"
+        - "__pycache__/*"
+        - "*.pyc"
+      hash_algorithm: "md5"
+      deep_scan: true
+
+  # Deployment safety policies
+  safety:
+    critical_services:
+      - "agent-engine"
+      - "knowledge-vault"
+      - "agent-bridge"
+    
+    deployment_windows:
+      production:
+        allowed_days: ["monday", "tuesday", "wednesday", "thursday"]
+        allowed_hours: ["09:00", "17:00"]  # 9 AM to 5 PM
+        timezone: "America/New_York"
+        blackout_dates:
+          - "2025-12-25"  # Christmas
+          - "2025-01-01"  # New Year
+      
+      staging:
+        allowed_days: ["monday", "tuesday", "wednesday", "thursday", "friday"]
+        allowed_hours: ["08:00", "18:00"]
+        timezone: "America/New_York"
+    
+    approval_required:
+      production:
+        services: ["agent-engine", "knowledge-vault", "billing-service"]
+        approvers:
+          - "ops-lead@alchemist.ai"
+          - "tech-lead@alchemist.ai"
+      
+      staging:
+        services: []
+        approvers: []
+
+  # Rollback policies
+  rollback:
+    automatic:
+      enabled: true
+      health_check_failures_threshold: 3
+      response_time_threshold_ms: 5000
+      error_rate_threshold_percent: 5
+      monitoring_duration_seconds: 300
+    
+    manual:
+      approval_required: true
+      notification_required: true
+      rollback_window_hours: 24
+
+  # Backup and retention policies
+  backup:
+    deployment_state:
+      enabled: true
+      retention_days: 30
+      max_backups: 50
+    
+    service_snapshots:
+      enabled: true
+      retention_days: 7
+      max_snapshots_per_service: 10
+      auto_create_before_deployment: true
+
+# Integration configurations
+integrations:
+  slack:
+    enabled: true
+    default_channel: "#deployments"
+    mention_on_failure: true
+    mention_users:
+      - "@ops-team"
+      - "@tech-lead"
+  
+  email:
+    enabled: true
+    smtp_server: "smtp.gmail.com"
+    smtp_port: 587
+    from_address: "noreply@alchemist.ai"
+  
+  monitoring:
+    prometheus:
+      enabled: false
+      endpoint: ""
+    
+    datadog:
+      enabled: false
+      api_key: ""
+    
+    custom_webhooks:
+      deployment_started: "${WEBHOOK_DEPLOYMENT_STARTED}"
+      deployment_completed: "${WEBHOOK_DEPLOYMENT_COMPLETED}"
+      deployment_failed: "${WEBHOOK_DEPLOYMENT_FAILED}"
+
+# Resource management
+resources:
+  build:
+    default_timeout: "1800s"
+    default_machine_type: "e2-standard-4"
+    default_disk_size: "100GB"
+    
+  cloud_run:
+    default_memory: "1Gi"
+    default_cpu: 1
+    default_max_instances: 10
+    default_min_instances: 0
+    default_concurrency: 80
+    default_timeout: 900
+    
+    # Environment-specific overrides
+    environment_overrides:
+      development:
+        default_max_instances: 2
+        default_min_instances: 0
+        default_concurrency: 10
+      
+      staging:
+        default_max_instances: 5
+        default_min_instances: 0
+        default_concurrency: 50
+      
+      production:
+        default_max_instances: 20
+        default_min_instances: 1
+        default_concurrency: 100
+
+# Security configurations
+security:
+  secrets:
+    required_secrets:
+      - "openai-api-key"
+    
+    optional_secrets:
+      - "stripe-secret-key"
+      - "whatsapp-access-token"
+      - "banking-api-key"
+    
+    secret_rotation:
+      enabled: false
+      rotation_schedule_days: 90
+  
+  iam:
+    service_account_format: "${PROJECT_ID}@appspot.gserviceaccount.com"
+    required_roles:
+      - "roles/run.developer"
+      - "roles/cloudbuild.builds.builder"
+      - "roles/secretmanager.secretAccessor"
+      - "roles/storage.objectAdmin"
+  
+  network:
+    allow_unauthenticated: true  # For public APIs
+    cors_origins:
+      development: "*"
+      staging: "https://staging.alchemist.ai"
+      production: "https://alchemist.ai"
+
+# Monitoring and alerting
+monitoring:
+  health_checks:
+    enabled: true
+    default_path: "/health"
+    default_timeout: 30
+    default_retries: 3
+    failure_threshold: 3
+    success_threshold: 2
+  
+  metrics:
+    collection_enabled: true
+    custom_metrics:
+      - "deployment_duration"
+      - "service_health_score"
+      - "deployment_success_rate"
+      - "rollback_frequency"
+  
+  alerting:
+    deployment_failure:
+      enabled: true
+      severity: "high"
+      channels: ["slack", "email"]
+    
+    service_unhealthy:
+      enabled: true
+      severity: "medium"
+      channels: ["slack"]
+    
+    long_deployment:
+      enabled: true
+      threshold_minutes: 30
+      severity: "low"
+      channels: ["slack"]
+
+# Cleanup and maintenance
+cleanup:
+  old_revisions:
+    enabled: true
+    retention_count: 5
+    cleanup_schedule: "0 2 * * *"  # Daily at 2 AM
+  
+  unused_images:
+    enabled: true
+    retention_days: 7
+    cleanup_schedule: "0 3 * * 0"  # Weekly on Sunday at 3 AM
+  
+  logs:
+    retention_days: 30
+    compression_enabled: true
+
+# Feature flags
+features:
+  parallel_deployment: true
+  canary_deployment: false
+  blue_green_deployment: false
+  automatic_rollback: true
+  health_monitoring: true
+  performance_monitoring: false
+  cost_optimization: true
+  advanced_analytics: false
